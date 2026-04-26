@@ -1,3 +1,8 @@
+import { writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { PDFDocument } from 'pdf-lib';
+import { chromium } from 'playwright';
+
 import type {
   ExportResult,
   PreviewInfo,
@@ -7,6 +12,7 @@ import type {
   StandardSummary,
 } from '../../domain/standard';
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
+import { EXPORTS_DIR } from '../../shared/fs';
 import { createStandardId, parseStandardId } from '../../shared/id';
 
 interface BzNewSearchRow {
@@ -96,23 +102,124 @@ export class BzZhengguiAdapter implements SourceAdapter {
   async detectPreview(id: string): Promise<PreviewInfo> {
     const detail = await this.getStandardDetail(id);
     const hasPdf = detail.moreInfo?.hasPdf === true || detail.moreInfo?.isPdf === '1';
+    const standardNo = detail.standardNumber;
+
+    if (!hasPdf || !standardNo) {
+      return {
+        standardId: id,
+        pageUrls: [],
+        previewUrl: undefined,
+        meta: { hasPdf: false, note: 'No preview available for this standard' },
+      };
+    }
+
+    const totalPages = await this.detectPageCount(id, standardNo);
+
+    const pageUrls = Array.from({ length: totalPages }, (_, index) =>
+      `${BZ_NEW_BASE}/api/gxist-standard/standardstd/read-image?no=${encodeURIComponent(standardNo)}&page=${index}`,
+    );
 
     return {
       standardId: id,
-      pageUrls: [],
-      previewUrl: hasPdf ? `${BZ_NEW_BASE}/api/gxist-standard/standardstd/detail?id=${detail.sourceId}` : undefined,
-      downloadUrl: undefined,
-      captchaRequired: false,
+      totalPages,
+      pageUrls,
+      fileType: 'jpeg',
+      previewUrl: `${BZ_NEW_BASE}/standard/details/?id=${detail.sourceId}`,
       meta: {
         hasPdf,
+        standardNo,
         sourceId: detail.sourceId,
-        note: hasPdf ? 'PDF available via standard detail page (login may be required)' : 'No PDF preview available',
+        readImageBase: `${BZ_NEW_BASE}/api/gxist-standard/standardstd/read-image`,
       },
     };
   }
 
   async exportStandard(id: string): Promise<ExportResult> {
-    throw new BadRequestError('bz export: PDF download requires login authentication on the new platform');
+    const detail = await this.getStandardDetail(id);
+    const preview = await this.detectPreview(id);
+
+    if (!preview.totalPages || preview.pageUrls.length === 0) {
+      throw new BadRequestError('bz export: no preview pages available');
+    }
+
+    const pdfDoc = await PDFDocument.create();
+
+    for (const pageUrl of preview.pageUrls) {
+      const response = await fetch(pageUrl);
+      if (!response.ok) {
+        throw new UpstreamError(`Failed to download preview page: ${pageUrl}`, {
+          status: response.status,
+        });
+      }
+
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      const image = await pdfDoc.embedJpg(bytes);
+      const page = pdfDoc.addPage([image.width, image.height]);
+      page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
+    }
+
+    const fileName = buildBzFileName(detail.standardNumber, detail.title);
+    const filePath = path.join(EXPORTS_DIR, fileName);
+    await writeFile(filePath, await pdfDoc.save());
+
+    return {
+      standardId: id,
+      filePath,
+      fileName,
+      totalPages: preview.totalPages,
+    };
+  }
+
+  private async detectPageCount(id: string, standardNo: string): Promise<number> {
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const page = await browser.newPage({ viewport: { width: 1360, height: 900 } });
+      const detailUrl = `${BZ_NEW_BASE}/standard/details/?id=${encodeURIComponent(parseStandardId(id).sourceId)}`;
+
+      await page.goto(detailUrl, { waitUntil: 'networkidle', timeout: 60000 });
+
+      const paginationText = await page.locator('.el-pagination__total').first().textContent().catch(() => null);
+      if (paginationText) {
+        const match = paginationText.match(/(\d+)/);
+        if (match) {
+          return parseInt(match[1], 10);
+        }
+      }
+
+      return await this.probePageCount(standardNo);
+    } finally {
+      await browser.close();
+    }
+  }
+
+  private async probePageCount(standardNo: string): Promise<number> {
+    let low = 0;
+    let high = 512;
+
+    while (low < high - 1) {
+      const mid = Math.floor((low + high) / 2);
+      const contentLength = await this.getPageContentLength(standardNo, mid);
+      const nextLength = await this.getPageContentLength(standardNo, mid + 1);
+
+      if (contentLength < 5000 || contentLength === nextLength) {
+        high = mid;
+      } else {
+        low = mid + 1;
+      }
+    }
+
+    return high;
+  }
+
+  private async getPageContentLength(standardNo: string, pageNum: number): Promise<number> {
+    try {
+      const url = `${BZ_NEW_BASE}/api/gxist-standard/standardstd/read-image?no=${encodeURIComponent(standardNo)}&page=${pageNum}`;
+      const response = await fetch(url, { method: 'HEAD' });
+      const length = response.headers.get('content-length');
+      return length ? parseInt(length, 10) : 0;
+    } catch {
+      return 0;
+    }
   }
 
   private mapSearchRow(row: BzNewSearchRow): StandardSummary {
@@ -162,4 +269,11 @@ export class BzZhengguiAdapter implements SourceAdapter {
       meta: row as Record<string, unknown>,
     };
   }
+}
+
+function buildBzFileName(standardNumber: string, title: string): string {
+  const num = standardNumber.replace(/[\\/:*?"<>|]/g, '_').replace(/\//g, '_').trim();
+  const name = title.replace(/[\\/:*?"<>|]/g, '_').trim();
+  const joined = [num, name].filter(Boolean).join(' ');
+  return `${joined || 'standard'}.pdf`;
 }

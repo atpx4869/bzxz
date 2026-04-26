@@ -6,7 +6,7 @@
 
 | 源 | 代号 | 搜索 | 详情 | 导出方式 |
 |---|---|---|---|---|
-| bz.gxzl.org.cn | `bz` | JSON API | JSON API | 认证PDF下载 |
+| bz.gxzl.org.cn | `bz` | JSON API | JSON API | 分页JPEG合成PDF (read-image) |
 | std.samr.gov.cn + c.gb688.cn | `gbw` | JSON API | HTML解析 | ddddocr验证码 → PDF下载 |
 
 ## 目录结构
