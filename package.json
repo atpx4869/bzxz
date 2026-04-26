@@ -5,8 +5,8 @@
   "main": "dist/src/index.js",
   "scripts": {
     "dev": "tsx src/index.ts",
-    "inspect:source": "tsx scripts/sources/bz-zhenggui/inspect-source.ts",
-    "inspect:detail": "tsx scripts/sources/bz-zhenggui/inspect-detail.ts",
+    "inspect:source": "tsx scripts/sources/bz-gxzl/inspect-source.ts",
+    "inspect:detail": "tsx scripts/sources/bz-gxzl/inspect-source.ts",
     "inspect:gbw:source": "tsx scripts/sources/gbw/inspect-source.ts",
     "inspect:gbw:detail": "tsx scripts/sources/gbw/inspect-detail.ts",
     "inspect:gbw:openstd": "tsx scripts/sources/gbw/inspect-openstd.ts",

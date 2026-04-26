@@ -1,17 +1,23 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildExportFileName } from './bz-zhenggui-adapter';
+import { BzZhengguiAdapter } from './bz-zhenggui-adapter';
 
-describe('BzZhengguiAdapter export naming', () => {
-  it('uses standard number and title for export file names', async () => {
-    expect(buildExportFileName('GB/T 3324-2017', '木家具通用技术条件')).toBe(
-      'GB_T 3324-2017 木家具通用技术条件.pdf',
-    );
-  });
+describe('BzZhengguiAdapter (new platform)', () => {
+  it('searches for 3325-2024 on new platform', async () => {
+    const adapter = new BzZhengguiAdapter();
+    const results = await adapter.searchStandards({ query: '3325-2024' });
 
-  it('replaces illegal filename characters', () => {
-    expect(buildExportFileName('GB/T 3324-2017', '木家具:通用/技术?条件')).toBe(
-      'GB_T 3324-2017 木家具_通用_技术_条件.pdf',
-    );
-  });
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0]?.id.startsWith('bz:')).toBe(true);
+    expect(results[0]?.standardNumber).toBe('GB/T 3325-2024');
+  }, 30000);
+
+  it('gets detail for a search result', async () => {
+    const adapter = new BzZhengguiAdapter();
+    const results = await adapter.searchStandards({ query: '3325-2024' });
+    const detail = await adapter.getStandardDetail(results[0].id);
+
+    expect(detail.title).toBeTruthy();
+    expect(detail.standardNumber).toBe('GB/T 3325-2024');
+  }, 30000);
 });
