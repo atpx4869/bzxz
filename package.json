@@ -4,7 +4,7 @@
   "description": "",
   "main": "dist/src/index.js",
   "scripts": {
-    "dev": "NODE_TLS_REJECT_UNAUTHORIZED=0 tsx src/index.ts",
+    "dev": "tsx src/index.ts",
 
     "inspect:gbw:source": "tsx scripts/sources/gbw/inspect-source.ts",
     "inspect:gbw:detail": "tsx scripts/sources/gbw/inspect-detail.ts",
@@ -12,8 +12,11 @@
     "inspect:gbw:showgb": "tsx scripts/sources/gbw/inspect-showgb.ts",
     "register:bot": "tsx scripts/register-bot.ts",
     "register:login": "tsx scripts/register-bot.ts --login",
+    "capture:order": "tsx scripts/capture-order-request.ts",
+    "start": "node dist/src/index.js",
     "build": "tsc -p tsconfig.json",
-    "test": "NODE_TLS_REJECT_UNAUTHORIZED=0 vitest run"
+    "test": "vitest run",
+    "test:dev": "vitest"
   },
   "keywords": [],
   "author": "",

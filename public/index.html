@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bzxz · 标准检索</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;1,8..60,400&family=DM+Mono:ital,wght@0,400;0,500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg:        oklch(16% 0.015 250);
+  --bg-hero:   oklch(18% 0.020 250);
+  --surface:   oklch(20% 0.012 250);
+  --surface-h: oklch(24% 0.015 250);
+  --border:    oklch(28% 0.010 250);
+  --text:      oklch(90% 0.005 250);
+  --text-2:    oklch(72% 0.010 250);
+  --text-3:    oklch(52% 0.015 250);
+  --accent:    oklch(68% 0.18 230);
+  --accent-h:  oklch(74% 0.20 230);
+  --accent-g:  oklch(68% 0.10 230);
+  --success:   oklch(68% 0.16 158);
+  --danger:    oklch(58% 0.20 25);
+  --warning:   oklch(68% 0.14 85);
+  --radius-sm: 6px;
+  --radius:    10px;
+  --radius-lg: 16px;
+  --ease-out:  cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+html { background: var(--bg); color: var(--text); font: 400 15px/1.6 'DM Sans', -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+
+body { min-height: 100vh; }
+
+/* ── Hero gradient background ── */
+.hero {
+  position: relative;
+  padding: 64px 24px 48px;
+  background: var(--bg-hero);
+  overflow: hidden;
+}
+.hero::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size: 48px 48px;
+  animation: gridShift 20s linear infinite;
+}
+@keyframes gridShift {
+  0% { background-position: 0 0; }
+  100% { background-position: 48px 48px; }
+}
+.hero::after {
+  content: '';
+  position: absolute;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: radial-gradient(ellipse 60% 60% at 50% 0%, oklch(68% 0.18 230 / 0.06) 0%, transparent 70%);
+  animation: auraPulse 8s ease-in-out infinite alternate;
+}
+@keyframes auraPulse {
+  0% { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+.hero-inner { position: relative; z-index: 1; max-width: 960px; margin: 0 auto; }
+
+.hero h1 {
+  font: 500 32px/1.2 'DM Sans', sans-serif;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+  color: var(--text);
+}
+.hero p {
+  color: var(--text-2);
+  font-size: 15px;
+  margin-bottom: 32px;
+}
+
+/* ── Search bar ── */
+.search-row {
+  display: flex; gap: 10px; align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 6px 6px 18px;
+  transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
+}
+.search-row:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px oklch(68% 0.18 230 / 0.12);
+}
+.search-row input {
+  flex: 1; background: none; border: none; outline: none;
+  color: var(--text); font: 400 15px 'DM Sans', sans-serif;
+  padding: 10px 0;
+}
+.search-row input::placeholder { color: var(--text-3); }
+
+.source-tags { display: flex; gap: 6px; margin-right: 6px; }
+.source-tag {
+  padding: 5px 12px; border-radius: var(--radius-sm);
+  font-size: 12px; font-weight: 500; cursor: pointer;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  background: transparent;
+  transition: all 0.15s var(--ease-out);
+  user-select: none;
+}
+.source-tag.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.source-tag:hover:not(.active) { border-color: var(--accent-g); color: var(--text); }
+
+.btn {
+  padding: 10px 22px; border-radius: var(--radius-sm);
+  font: 500 14px 'DM Sans', sans-serif; cursor: pointer;
+  border: none; transition: all 0.15s var(--ease-out);
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-h); transform: translateY(-1px); box-shadow: 0 4px 16px oklch(68% 0.18 230 / 0.25); }
+.btn-ghost { background: transparent; color: var(--text-2); border: 1px solid var(--border); }
+.btn-ghost:hover { border-color: var(--text-2); color: var(--text); }
+.btn-sm { padding: 6px 14px; font-size: 12px; }
+
+/* ── Main content ── */
+.main { max-width: 960px; margin: 0 auto; padding: 0 24px 80px; }
+
+/* Summary */
+.summary { margin: 32px 0 20px; color: var(--text-2); font-size: 13px; }
+
+/* Table */
+.table-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.table-wrap table { width: 100%; border-collapse: collapse; }
+.table-wrap th {
+  text-align: left; padding: 10px 16px;
+  font-size: 11px; font-weight: 500; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--text-3);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.table-wrap td { padding: 14px 16px; border-bottom: 1px solid var(--border); font-size: 14px; }
+.table-wrap tr:last-child td { border-bottom: none; }
+.table-wrap tbody tr {
+  transition: background 0.12s var(--ease-out);
+}
+.table-wrap tbody tr:hover { background: var(--surface-h); }
+
+.check-col { width: 36px; text-align: center; }
+.check-col input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+
+.std-no { font: 400 13px 'DM Mono', monospace; color: var(--accent); white-space: nowrap; }
+.std-title { font-weight: 500; color: var(--text); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.status-dot.current { background: var(--success); }
+.status-dot.expired { background: var(--danger); }
+.status-dot.upcoming { background: var(--accent); }
+
+.source-badge {
+  display: inline-block; padding: 2px 8px; border-radius: var(--radius-sm);
+  font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em;
+  background: oklch(68% 0.18 230 / 0.1); color: var(--accent);
+}
+
+.row-actions { display: flex; gap: 6px; }
+.row-actions button {
+  padding: 4px 10px; border-radius: var(--radius-sm);
+  font-size: 12px; cursor: pointer; border: none;
+  background: var(--surface-h); color: var(--text-2);
+  transition: all 0.12s var(--ease-out);
+}
+.row-actions button:hover { background: var(--accent); color: #fff; }
+
+/* Empty */
+.empty { padding: 64px 24px; text-align: center; color: var(--text-3); }
+.empty p:first-child { font-size: 28px; margin-bottom: 12px; }
+
+/* Toolbar */
+.toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.toolbar-left { display: flex; gap: 8px; align-items: center; }
+.badge-count { font-size: 12px; color: var(--text-3); background: var(--surface); padding: 4px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+
+/* ── Log panel ── */
+.log-panel {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+  background: oklch(18% 0.015 250 / 0.95);
+  backdrop-filter: blur(24px);
+  border-top: 1px solid var(--border);
+  transition: transform 0.3s var(--ease-out);
+}
+.log-panel.collapsed { transform: translateY(calc(100% - 42px)); }
+.log-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 24px; cursor: pointer; user-select: none;
+  font-size: 13px; font-weight: 500;
+}
+.log-header:hover { background: var(--surface); }
+.log-body { max-height: 200px; overflow-y: auto; padding: 0 24px 12px; }
+.log-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 0; border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.log-item:last-child { border: none; }
+.log-time { color: var(--text-3); font: 400 12px 'DM Mono', monospace; min-width: 52px; }
+.log-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-status { font-weight: 500; min-width: 48px; text-align: right; }
+.log-status.success { color: var(--success); }
+.log-status.fail { color: var(--danger); }
+.log-status.pending { color: var(--warning); }
+
+/* ── Progress bar ── */
+.progress-wrap { margin: 0 24px 12px; display: none; }
+.progress-wrap.visible { display: block; }
+.progress-track { height: 3px; background: var(--surface); border-radius: 2px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s var(--ease-out); width: 0%; }
+
+/* ── Detail modal ── */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,0.5); display: none;
+  align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 32px;
+  max-width: 560px; width: calc(100% - 48px); max-height: 80vh; overflow-y: auto;
+  position: relative;
+}
+.modal-close {
+  position: absolute; top: 16px; right: 16px;
+  background: none; border: none; cursor: pointer;
+  color: var(--text-3); font-size: 20px; line-height: 1;
+}
+.modal-close:hover { color: var(--text); }
+.modal h3 { font: 500 20px 'DM Sans', sans-serif; margin-bottom: 16px; color: var(--accent); }
+.modal .field { margin-bottom: 12px; }
+.modal .field-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3); margin-bottom: 2px; }
+.modal .field-value { font-size: 14px; color: var(--text); }
+
+/* ── Loading spinner ── */
+.spinner {
+  display: inline-block; width: 16px; height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  vertical-align: middle; margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ── Count-up animation for numbers ── */
+@keyframes countIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.count-anim { animation: countIn 0.4s var(--ease-spring); }
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <div class="hero-inner">
+    <h1>标准检索</h1>
+    <p>多源搜索 · 批量下载 · 自动化工作流</p>
+    <div class="search-row">
+      <input type="text" id="searchInput" placeholder="输入标准号或关键词…" autofocus>
+      <div class="source-tags">
+        <span class="source-tag active" data-source="bz">BZ</span>
+        <span class="source-tag active" data-source="gbw">GBW</span>
+      </div>
+      <button class="btn btn-primary" id="searchBtn">搜索</button>
+    </div>
+  </div>
+</section>
+
+<main class="main">
+  <div id="summary" class="summary"></div>
+
+  <div class="toolbar" id="toolbar" style="display:none">
+    <div class="toolbar-left">
+      <span class="badge-count" id="selectedCount">已选 0</span>
+      <button class="btn btn-sm btn-primary" id="downloadSelected" disabled>下载选中</button>
+      <button class="btn btn-sm btn-ghost" id="selectAll">全选</button>
+    </div>
+  </div>
+
+  <div id="results"></div>
+</main>
+
+<div class="log-panel collapsed" id="logPanel">
+  <div class="log-header" id="logToggle">
+    <span id="logTitle">📋 下载日志</span>
+    <span id="logChevron" style="font-size:12px">▲</span>
+  </div>
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+  </div>
+  <div class="log-body" id="logBody"></div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modalContent">
+    <button class="modal-close" id="modalClose">&times;</button>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+const API = '';
+
+// ── State ──
+let results = [];
+let selectedSources = new Set(['bz', 'gbw']);
+let selectedIds = new Set();
+let logEntries = [];
+let downloadQueue = [];
+let isDownloading = false;
+
+// ── Source tags ──
+document.querySelectorAll('.source-tag').forEach(tag => {
+  tag.addEventListener('click', () => {
+    const src = tag.dataset.source;
+    if (selectedSources.has(src)) { selectedSources.delete(src); tag.classList.remove('active'); }
+    else { selectedSources.add(src); tag.classList.add('active'); }
+  });
+});
+
+// ── Search ──
+async function doSearch() {
+  const q = document.getElementById('searchInput').value.trim();
+  if (!q) return;
+
+  document.getElementById('searchBtn').innerHTML = '<span class="spinner"></span>搜索中';
+  document.getElementById('searchBtn').disabled = true;
+  results = [];
+  selectedIds.clear();
+  updateToolbar();
+
+  const allResults = [];
+  for (const src of selectedSources) {
+    try {
+      const res = await fetch(`${API}/api/standards/search?q=${encodeURIComponent(q)}&source=${src}`);
+      const data = await res.json();
+      allResults.push(...(data.items || []).map(i => ({ ...i, _source: src })));
+    } catch (e) { addLog(`搜索 ${src} 失败: ${e.message}`, 'fail'); }
+  }
+
+  results = allResults;
+  document.getElementById('searchBtn').innerHTML = '搜索';
+  document.getElementById('searchBtn').disabled = false;
+
+  if (results.length === 0) {
+    document.getElementById('results').innerHTML = `<div class="empty"><p>—</p><p>未找到相关标准</p><p style="font-size:13px;color:var(--text-3)">尝试更换关键词或数据源</p></div>`;
+    document.getElementById('summary').innerHTML = '';
+    document.getElementById('toolbar').style.display = 'none';
+  } else {
+    const summaryText = results.length === 1 ? '找到 1 条结果' : `找到 ${results.length} 条结果`;
+    document.getElementById('summary').innerHTML = `<span class="count-anim">${summaryText}</span>`;
+    document.getElementById('toolbar').style.display = 'flex';
+    renderResults();
+  }
+}
+
+document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+document.getElementById('searchBtn').addEventListener('click', doSearch);
+
+// ── Render table ──
+function renderResults() {
+  const tbody = results.map((r, i) => `
+    <tr>
+      <td class="check-col"><input type="checkbox" data-idx="${i}" ${selectedIds.has(r.id) ? 'checked' : ''}></td>
+      <td><span class="std-no">${escapeHtml(r.standardNumber)}</span></td>
+      <td><span class="std-title" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</span></td>
+      <td>${statusBadge(r.status)}</td>
+      <td>${r.publishDate || '—'}</td>
+      <td><span class="source-badge">${r._source.toUpperCase()}</span></td>
+      <td><div class="row-actions">
+        <button onclick="showDetail('${r.id}')">详情</button>
+        <button onclick="downloadOne('${r.id}')">下载</button>
+      </div></td>
+    </tr>
+  `).join('');
+
+  document.getElementById('results').innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th class="check-col"><input type="checkbox" id="checkAll"></th>
+          <th>标准号</th><th>名称</th><th>状态</th><th>发布日期</th><th>来源</th><th style="width:120px">操作</th>
+        </tr></thead>
+        <tbody>${tbody}</tbody>
+      </table>
+    </div>`;
+
+  // Checkbox events
+  document.getElementById('checkAll').addEventListener('change', e => {
+    results.forEach((r, i) => {
+      const cb = document.querySelector(`input[data-idx="${i}"]`);
+      if (cb) { cb.checked = e.target.checked; e.target.checked ? selectedIds.add(r.id) : selectedIds.delete(r.id); }
+    });
+    updateToolbar();
+  });
+  document.querySelectorAll('input[data-idx]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const r = results[parseInt(cb.dataset.idx)];
+      cb.checked ? selectedIds.add(r.id) : selectedIds.delete(r.id);
+      document.getElementById('checkAll').checked = selectedIds.size === results.length;
+      updateToolbar();
+    });
+  });
+}
+
+function statusBadge(s) {
+  if (!s) return '—';
+  const cls = s.includes('废止') ? 'expired' : s.includes('实施') ? 'upcoming' : s.includes('现行') ? 'current' : '';
+  return `<span class="status-dot ${cls}"></span>${escapeHtml(s)}`;
+}
+
+// ── Toolbar ──
+function updateToolbar() {
+  document.getElementById('selectedCount').textContent = `已选 ${selectedIds.size}`;
+  document.getElementById('downloadSelected').disabled = selectedIds.size === 0 || isDownloading;
+  document.getElementById('checkAll').checked = selectedIds.size === results.length && results.length > 0;
+}
+document.getElementById('selectAll').addEventListener('click', () => {
+  const all = selectedIds.size === results.length;
+  results.forEach(r => all ? selectedIds.delete(r.id) : selectedIds.add(r.id));
+  document.getElementById('checkAll').checked = !all;
+  renderResults();
+  updateToolbar();
+});
+
+// ── Download ──
+async function downloadOne(id) {
+  const r = results.find(r => r.id === id);
+  if (!r) return;
+  addLog(`${r.standardNumber} 开始下载`, 'pending');
+  try {
+    const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/export`, { method: 'POST' });
+    const task = await res.json();
+    addLog(`${r.standardNumber} 已加入队列 (${task.id})`, 'pending');
+    // Poll task
+    for (let i = 0; i < 30; i++) {
+      await sleep(2000);
+      const tr = await fetch(`${API}/api/tasks/${task.id}`);
+      const td = await tr.json();
+      if (td.status === 'success') {
+        addLog(`${r.standardNumber} 下载完成`, 'success');
+        return;
+      }
+      if (td.status === 'failed') {
+        addLog(`${r.standardNumber} 下载失败: ${td.errorMessage || '未知错误'}`, 'fail');
+        return;
+      }
+    }
+    addLog(`${r.standardNumber} 超时`, 'fail');
+  } catch (e) {
+    addLog(`${r.standardNumber} 请求失败: ${e.message}`, 'fail');
+  }
+}
+
+document.getElementById('downloadSelected').addEventListener('click', async () => {
+  if (isDownloading) return;
+  isDownloading = true;
+  document.getElementById('downloadSelected').disabled = true;
+  const progress = document.getElementById('progressWrap');
+  const fill = document.getElementById('progressFill');
+  progress.classList.add('visible');
+  const ids = [...selectedIds];
+  updateToolbar();
+
+  for (let i = 0; i < ids.length; i++) {
+    fill.style.width = `${((i) / ids.length) * 100}%`;
+    await downloadOne(ids[i]);
+    fill.style.width = `${((i + 1) / ids.length) * 100}%`;
+  }
+
+  fill.style.width = '100%';
+  setTimeout(() => { progress.classList.remove('visible'); fill.style.width = '0%'; }, 1500);
+  isDownloading = false;
+  updateToolbar();
+});
+
+// ── Detail modal ──
+async function showDetail(id) {
+  try {
+    const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}`);
+    const d = await res.json();
+    const fields = [
+      ['标准号', d.standardNumber], ['名称', d.title], ['状态', d.status],
+      ['发布日期', d.publishDate], ['实施日期', d.implementDate], ['来源', d.source],
+      ['类型', d.standardType],
+    ];
+    document.getElementById('modalBody').innerHTML = `<h3>${escapeHtml(d.standardNumber)}</h3>` +
+      fields.filter(f => f[1]).map(f => `<div class="field"><div class="field-label">${f[0]}</div><div class="field-value">${escapeHtml(String(f[1]))}</div></div>`).join('') +
+      `<button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="downloadOne('${d.id}')">下载此标准</button>`;
+    document.getElementById('modalOverlay').classList.add('open');
+  } catch (e) { addLog(`获取详情失败: ${e.message}`, 'fail'); }
+}
+document.getElementById('modalClose').addEventListener('click', () => document.getElementById('modalOverlay').classList.remove('open'));
+document.getElementById('modalOverlay').addEventListener('click', e => { if (e.target === document.getElementById('modalOverlay')) document.getElementById('modalOverlay').classList.remove('open'); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') document.getElementById('modalOverlay').classList.remove('open'); });
+
+// ── Log ──
+function addLog(msg, status) {
+  const now = new Date();
+  const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  logEntries.unshift({ time, msg, status });
+  renderLogs();
+}
+function renderLogs() {
+  document.getElementById('logBody').innerHTML = logEntries.slice(0, 50).map(l =>
+    `<div class="log-item"><span class="log-time">${l.time}</span><span class="log-text">${escapeHtml(l.msg)}</span><span class="log-status ${l.status}">${l.status === 'success' ? '✅' : l.status === 'fail' ? '❌' : '⏳'}</span></div>`
+  ).join('');
+  document.getElementById('logTitle').textContent = `📋 下载日志 (${logEntries.length})`;
+}
+document.getElementById('logToggle').addEventListener('click', () => {
+  const panel = document.getElementById('logPanel');
+  panel.classList.toggle('collapsed');
+  document.getElementById('logChevron').textContent = panel.classList.contains('collapsed') ? '▲' : '▼';
+});
+
+// ── Utils ──
+function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+</script>
+</body>
+</html>
