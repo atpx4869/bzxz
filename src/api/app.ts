@@ -1,6 +1,7 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import path from 'node:path';
+import { existsSync } from 'node:fs';
 
 import { StandardService } from '../services/standard-service';
 import { ExportTaskService } from '../services/export-task-service';
@@ -18,6 +19,16 @@ export function createApp() {
 
   app.use(express.json());
   app.use(express.static(path.join(process.cwd(), 'public')));
+
+  // Serve exported files for browser download
+  app.get('/api/downloads/:filename', (req, res) => {
+    const filePath = path.join(process.cwd(), 'data', 'exports', req.params.filename);
+    if (!existsSync(filePath)) {
+      res.status(404).json({ code: 'NOT_FOUND', message: 'File not found' });
+      return;
+    }
+    res.download(filePath);
+  });
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, sources: sourceRegistry.list() });

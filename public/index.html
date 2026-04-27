@@ -556,7 +556,9 @@ async function downloadOne(id) {
     // gbw auto-download returns result directly
     if (dlMethod === 'auto-download') {
       if (data.status === 'downloaded') {
-        addLog(`${r.standardNumber} ✅ ${data.meta?.fileName || data.fileName || '完成'}`, 'success');
+        const fname = data.meta?.fileName || data.fileName || '';
+        addLog(`${r.standardNumber} ✅ ${fname || '完成'}`, 'success');
+        if (fname) triggerDownload(fname);
         return;
       }
       if (data.status === 'failed') {
@@ -573,7 +575,12 @@ async function downloadOne(id) {
       await sleep(2000);
       const tr = await fetch(`${API}/api/tasks/${data.id}`);
       const td = await tr.json();
-      if (td.status === 'success') { addLog(`${r.standardNumber} ✅ ${td.fileName || '完成'}`, 'success'); return; }
+      if (td.status === 'success') {
+        const fname = td.fileName || '';
+        addLog(`${r.standardNumber} ✅ ${fname || '完成'}`, 'success');
+        if (fname) triggerDownload(fname);
+        return;
+      }
       if (td.status === 'failed') { addLog(`${r.standardNumber} ❌ ${td.errorMessage || ''}`, 'fail'); return; }
     }
     addLog(`${r.standardNumber} ⏰ 超时`, 'fail');
@@ -693,6 +700,15 @@ document.getElementById('logToggle').addEventListener('click', () => {
 // ── Utils ──
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function triggerDownload(fileName) {
+  const a = document.createElement('a');
+  a.href = `${API}/api/downloads/${encodeURIComponent(fileName)}`;
+  a.download = fileName;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => document.body.removeChild(a), 1000);
+}
 </script>
 </body>
 </html>
