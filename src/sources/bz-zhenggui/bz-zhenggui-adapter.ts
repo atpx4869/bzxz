@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { PDFDocument } from 'pdf-lib';
-import { chromium } from 'playwright';
+import { chromium, type Browser } from 'playwright';
 
 import type {
   ExportResult,
@@ -141,10 +141,16 @@ export class BzZhengguiAdapter implements SourceAdapter {
 
   async exportStandard(id: string): Promise<ExportResult> {
     const detail = await this.getStandardDetail(id);
-    const preview = await this.detectPreview(id);
+    let preview: PreviewInfo;
+    for (let retry = 0; retry < 3; retry++) {
+      preview = await this.detectPreview(id);
+      if (preview.totalPages && preview.totalPages > 0 && preview.pageUrls.length > 0) break;
+      if (retry < 2) await new Promise(r => setTimeout(r, 3000));
+    }
+    preview = preview!;
 
     if (!preview.totalPages || preview.pageUrls.length === 0) {
-      throw new BadRequestError('bz export: no preview pages available');
+      throw new BadRequestError(`bz export: no preview pages available for ${detail.standardNumber}`);
     }
 
     const pdfDoc = await PDFDocument.create();
@@ -175,10 +181,20 @@ export class BzZhengguiAdapter implements SourceAdapter {
     };
   }
 
+  private browserPromise: Promise<Browser> | null = null;
+
+  private async getBrowser(): Promise<Browser> {
+    if (!this.browserPromise) {
+      this.browserPromise = chromium.launch({ headless: true });
+    }
+    return this.browserPromise;
+  }
+
   private async detectPageCount(id: string, standardNo: string): Promise<number> {
-    const browser = await chromium.launch({ headless: true });
+    const browser = await this.getBrowser();
+    let page;
     try {
-      const page = await browser.newPage({ viewport: { width: 1360, height: 900 } });
+      page = await browser.newPage({ viewport: { width: 1360, height: 900 } });
       const detailUrl = `${BZ_NEW_BASE}/standard/details/?id=${encodeURIComponent(parseStandardId(id).sourceId)}`;
 
       await page.goto(detailUrl, { waitUntil: 'networkidle', timeout: 60000 });
@@ -193,7 +209,7 @@ export class BzZhengguiAdapter implements SourceAdapter {
 
       return await this.probePageCount(standardNo);
     } finally {
-      await browser.close();
+      await page!.close();
     }
   }
 
