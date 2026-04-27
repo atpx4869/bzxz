@@ -177,6 +177,19 @@ body { min-height: 100vh; }
 .status-indicator.expired .dot { background: var(--danger); }
 .status-indicator.upcoming .dot { background: var(--accent); }
 
+.result-card.no-text { opacity: 0.55; }
+.result-card.no-text:hover { opacity: 0.8; }
+.has-text-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 100px;
+  font-size: 11px; font-weight: 500;
+  background: oklch(68% 0.16 158 / 0.1); color: var(--success);
+}
+.no-text-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 100px;
+  font-size: 11px; font-weight: 500;
+  background: oklch(50% 0.05 250 / 0.1); color: var(--text-3);
+}
+
 /* Empty */
 .empty { padding: 64px 24px; text-align: center; color: var(--text-3); }
 .empty p:first-child { font-size: 28px; margin-bottom: 12px; }
@@ -386,8 +399,9 @@ async function doSearch() {
       addLog(`搜索 ${outcome.src} 失败: ${outcome.error}`, 'fail');
     }
 
-    // Merge + deduplicate by standardNumber
+    // Merge + deduplicate by standardNumber, then sort
     results = dedupeResults(receivedResults);
+    results.sort(sortByStatus);
     document.getElementById('summary').innerHTML = `<span class="count-anim">找到 ${results.length} 条结果 (${receivedCount}/${sources.length} 源)</span>`;
     document.getElementById('toolbar').style.display = results.length > 0 ? 'flex' : 'none';
     if (results.length > 0) renderResults();
@@ -424,6 +438,22 @@ function dedupeResults(items) {
   return [...map.values()];
 }
 
+function sortByStatus(a, b) {
+  const pa = statusPriority(a.status);
+  const pb = statusPriority(b.status);
+  if (pa !== pb) return pa - pb;
+  // Within same status, those with text first
+  if (a.previewAvailable !== b.previewAvailable) return a.previewAvailable ? -1 : 1;
+  return 0;
+}
+function statusPriority(s) {
+  if (!s) return 3;
+  if (s.includes('现行')) return 0;
+  if (s.includes('即将实施')) return 1;
+  if (s.includes('废止')) return 4;
+  return 2;
+}
+
 function getDownloadSource(item) {
   for (const src of downloadPriority) {
     if (item.sources && item.sources.includes(src)) return src;
@@ -439,13 +469,15 @@ function renderResults() {
   const cards = results.map((r, i) => {
     const srcBadges = (r.sources || [r._source]).map(s => `<span class="source-badge source-${s}">${s.toUpperCase()}</span>`).join(' ');
     const sCls = statusClass(r.status);
+    const hasText = r.previewAvailable;
     return `
-    <div class="result-card">
+    <div class="result-card${hasText ? '' : ' no-text'}">
       <div class="check-col"><input type="checkbox" data-idx="${i}" ${selectedIds.has(r.id) ? 'checked' : ''}></div>
       <div class="card-body">
         <div class="card-title-row">
           <span class="card-number">${escapeHtml(r.standardNumber)}</span>
           ${r.status ? `<span class="status-indicator ${sCls}"><span class="dot"></span>${escapeHtml(r.status)}</span>` : ''}
+          ${!hasText ? '<span class="no-text-badge">无文本</span>' : '<span class="has-text-badge">有文本</span>'}
         </div>
         <div class="card-title">${escapeHtml(r.title || '—')}</div>
         <div class="card-meta">
@@ -457,7 +489,7 @@ function renderResults() {
       </div>
       <div class="card-actions">
         <button onclick="showDetail('${r.id}')">详情</button>
-        <button onclick="downloadOne('${r.id}')">下载</button>
+        <button onclick="downloadOne('${r.id}')" ${hasText ? '' : 'disabled'}>下载</button>
       </div>
     </div>`;
   }).join('');
