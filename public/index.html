@@ -317,6 +317,15 @@ body { min-height: 100vh; }
   color: var(--text-3); font-size: 24px; z-index: 310;
 }
 .preview-close:hover { color: var(--text); }
+.preview-sources { display: flex; gap: 6px; }
+.preview-src-tab {
+  padding: 4px 12px; border-radius: var(--radius-sm);
+  font-size: 12px; font-weight: 500; cursor: pointer;
+  border: 1px solid var(--border); background: transparent; color: var(--text-2);
+  transition: all 0.12s var(--ease-out);
+}
+.preview-src-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.preview-src-tab:hover:not(.active) { border-color: var(--accent-g); color: var(--text); }
 </style>
 </head>
 <body>
@@ -365,14 +374,21 @@ body { min-height: 100vh; }
 <div class="preview-overlay" id="previewOverlay">
   <button class="preview-close" id="previewClose">&times;</button>
   <div class="preview-toolbar" id="previewBar">
+    <div class="preview-sources" id="previewSources"></div>
+    <span style="flex:1"></span>
     <button id="prevPage" onclick="navigatePage(-1)">◄ 上一页</button>
     <span class="page-info" id="pageInfo">—</span>
     <button id="nextPage" onclick="navigatePage(1)">下一页 ►</button>
     <input type="number" class="page-jump" id="pageJump" min="1" placeholder="页">
     <button onclick="goToPage()">跳转</button>
+    <button onclick="openSettings()" style="margin-left:8px" title="预览优先级">⚙</button>
   </div>
   <div class="preview-body" id="previewBody">
-    <img id="previewImg" src="" alt="标准预览">
+    <img id="previewImg" src="" alt="标准预览" style="display:none">
+    <iframe id="previewPdf" src="" style="display:none;width:100%;height:100%;border:none"></iframe>
+    <div id="previewLoading" style="display:none;text-align:center;color:var(--text-2)">
+      <span class="spinner"></span> 加载预览中…
+    </div>
   </div>
 </div>
   <div class="modal" id="modalContent">
@@ -538,7 +554,7 @@ function renderResults() {
       </div>
       <div class="card-actions">
         <button onclick="showDetail('${r.id}')">详情</button>
-        <button onclick="openPreview('${r.id}')" ${(r._source === 'bz' || r.sources?.includes('bz')) && hasText ? '' : 'disabled'}>预览</button>
+        <button onclick="openPreview('${r.id}')">预览</button>
         <button onclick="downloadOne('${r.id}')" ${hasText ? '' : 'disabled'}>下载</button>
       </div>
     </div>`;
@@ -677,7 +693,7 @@ document.getElementById('downloadSelected').addEventListener('click', async () =
 
 // ── Settings panel ──
 function openSettings() {
-  const items = downloadPriority.map((s, i) => `
+  const dlItems = downloadPriority.map((s, i) => `
     <div class="priority-row" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
       <span style="color:var(--text-3);font-size:12px;min-width:20px">${i + 1}.</span>
       <span class="source-badge source-${s}">${s.toUpperCase()}</span>
@@ -686,12 +702,31 @@ function openSettings() {
       <button onclick="movePriority(${i}, 1)" ${i === downloadPriority.length - 1 ? 'disabled' : ''} style="background:none;border:none;color:var(--text-3);cursor:pointer;font-size:16px">▼</button>
     </div>`).join('');
 
+  const pvItems = previewPriority.map((s, i) => `
+    <div class="priority-row" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <span style="color:var(--text-3);font-size:12px;min-width:20px">${i + 1}.</span>
+      <span class="source-badge source-${s}">${s.toUpperCase()}</span>
+      <span style="flex:1;font-size:13px;color:var(--text-2)">${i === 0 ? '首选预览源' : ''}</span>
+      <button onclick="movePreviewPriority(${i}, -1)" ${i === 0 ? 'disabled' : ''} style="background:none;border:none;color:var(--text-3);cursor:pointer;font-size:16px">▲</button>
+      <button onclick="movePreviewPriority(${i}, 1)" ${i === previewPriority.length - 1 ? 'disabled' : ''} style="background:none;border:none;color:var(--text-3);cursor:pointer;font-size:16px">▼</button>
+    </div>`).join('');
+
   document.getElementById('modalBody').innerHTML = `
     <h3>下载优先级</h3>
-    <p style="font-size:13px;color:var(--text-3);margin-bottom:16px">拖拽排序，排第一的源优先用于下载</p>
-    ${items}
+    <p style="font-size:13px;color:var(--text-3);margin-bottom:16px">排第一的源优先用于下载</p>
+    ${dlItems}
+    <h3 style="margin-top:24px">预览优先级</h3>
+    <p style="font-size:13px;color:var(--text-3);margin-bottom:16px">排第一的源优先用于预览</p>
+    ${pvItems}
     <button class="btn btn-primary btn-sm" style="margin-top:16px" onclick="document.getElementById('modalOverlay').classList.remove('open')">关闭</button>`;
   document.getElementById('modalOverlay').classList.add('open');
+}
+function movePreviewPriority(idx, dir) {
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= previewPriority.length) return;
+  [previewPriority[idx], previewPriority[newIdx]] = [previewPriority[newIdx], previewPriority[idx]];
+  localStorage.setItem('bzxz_preview_priority', JSON.stringify(previewPriority));
+  openSettings();
 }
 
 function movePriority(idx, dir) {
@@ -748,19 +783,105 @@ document.getElementById('logToggle').addEventListener('click', () => {
 });
 
 // ── Preview ──
-let previewData = null; // { id, pageUrls[], totalPages, currentPage }
+const PREVIEW_DEFAULT = ['bz', 'gbw'];
+let previewPriority = JSON.parse(localStorage.getItem('bzxz_preview_priority') || JSON.stringify(PREVIEW_DEFAULT));
+const previewCache = new Map(); // id -> { source: { type:'image'|'pdf', data } }
 
 async function openPreview(id) {
+  const r = results.find(r => r.id === id);
+  if (!r) return;
+  if (!previewCache.has(id)) previewCache.set(id, {});
+
+  // Determine available sources
+  const sources = (r.sources || [r._source]).filter(s => previewPriority.includes(s));
+  if (sources.length === 0) { addLog('无可预览源', 'fail'); return; }
+
+  // Pick first available
+  let pickSrc = null;
+  for (const s of previewPriority) { if (sources.includes(s)) { pickSrc = s; break; } }
+  if (!pickSrc) pickSrc = sources[0];
+
+  // Show modal
+  document.getElementById('previewOverlay').classList.add('open');
+  document.getElementById('previewLoading').style.display = 'block';
+  document.getElementById('previewImg').style.display = 'none';
+  document.getElementById('previewPdf').style.display = 'none';
+  document.getElementById('previewBar').style.display = 'none';
+
+  // Render source tabs
+  document.getElementById('previewSources').innerHTML = sources.map(s =>
+    `<span class="preview-src-tab ${s === pickSrc ? 'active' : ''}" onclick="switchPreviewSource('${id}','${s}')">${s.toUpperCase()}</span>`
+  ).join('');
+
+  await loadPreviewSource(id, pickSrc);
+}
+
+async function switchPreviewSource(id, src) {
+  document.querySelectorAll('.preview-src-tab').forEach(t => {
+    t.classList.toggle('active', t.textContent === src.toUpperCase());
+  });
+  document.getElementById('previewLoading').style.display = 'block';
+  document.getElementById('previewImg').style.display = 'none';
+  document.getElementById('previewPdf').style.display = 'none';
+  document.getElementById('previewBar').style.display = 'none';
+  await loadPreviewSource(id, src);
+}
+
+async function loadPreviewSource(id, src) {
+  const cache = previewCache.get(id) || {};
+  let data = cache[src];
+
+  if (!data) {
+    if (src === 'bz') {
+      data = await loadBzPreview(id);
+    } else if (src === 'gbw') {
+      data = await loadGbwPreview(id);
+    }
+    if (data) {
+      if (!previewCache.has(id)) previewCache.set(id, {});
+      previewCache.get(id)[src] = data;
+    }
+  }
+
+  document.getElementById('previewLoading').style.display = 'none';
+
+  if (!data) {
+    addLog(`${src.toUpperCase()} 预览加载失败`, 'fail');
+    return;
+  }
+
+  if (data.type === 'image') {
+    previewData = data;
+    document.getElementById('previewImg').style.display = 'block';
+    document.getElementById('previewBar').style.display = 'flex';
+    document.getElementById('pageJump').max = previewData.totalPages;
+    showCurrentPage();
+  } else if (data.type === 'pdf') {
+    previewData = null;
+    document.getElementById('previewPdf').src = data.url;
+    document.getElementById('previewPdf').style.display = 'block';
+  }
+}
+
+async function loadBzPreview(id) {
   try {
     const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/preview/detect`, { method: 'POST' });
     const d = await res.json();
-    if (!d.pageUrls || d.pageUrls.length === 0) { addLog('无预览页', 'fail'); return; }
+    if (!d.pageUrls || d.pageUrls.length === 0) return null;
+    return { type: 'image', id, pageUrls: d.pageUrls, totalPages: d.totalPages || d.pageUrls.length, currentPage: 0 };
+  } catch { return null; }
+}
 
-    previewData = { id, pageUrls: d.pageUrls, totalPages: d.totalPages || d.pageUrls.length, currentPage: 0 };
-    document.getElementById('pageJump').max = previewData.totalPages;
-    showCurrentPage();
-    document.getElementById('previewOverlay').classList.add('open');
-  } catch (e) { addLog(`预览加载失败: ${e.message}`, 'fail'); }
+async function loadGbwPreview(id) {
+  try {
+    const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/auto-download`, { method: 'POST' });
+    const d = await res.json();
+    const fname = d.meta?.fileName || d.fileName || '';
+    if (d.status === 'downloaded' && fname) {
+      return { type: 'pdf', url: `${API}/api/downloads/${encodeURIComponent(fname)}` };
+    }
+    return null;
+  } catch { return null; }
 }
 
 function showCurrentPage() {
