@@ -127,56 +127,55 @@ body { min-height: 100vh; }
 .btn-sm { padding: 6px 14px; font-size: 12px; }
 
 /* ── Main content ── */
-.main { max-width: 960px; margin: 0 auto; padding: 0 24px 80px; }
+.main { max-width: 1200px; margin: 0 auto; padding: 0 32px 80px; }
 
 /* Summary */
 .summary { margin: 32px 0 20px; color: var(--text-2); font-size: 13px; }
 
-/* Table */
-.table-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-.table-wrap table { width: 100%; border-collapse: collapse; }
-.table-wrap th {
-  text-align: left; padding: 10px 16px;
-  font-size: 11px; font-weight: 500; text-transform: uppercase;
-  letter-spacing: 0.05em; color: var(--text-3);
-  border-bottom: 1px solid var(--border);
-  white-space: nowrap;
+/* ── Result cards ── */
+.result-card {
+  display: flex; align-items: center; gap: 16px;
+  padding: 20px 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  background: var(--surface);
+  transition: border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
 }
-.table-wrap td { padding: 14px 16px; border-bottom: 1px solid var(--border); font-size: 14px; }
-.table-wrap tr:last-child td { border-bottom: none; }
-.table-wrap tbody tr {
-  transition: background 0.12s var(--ease-out);
+.result-card:hover {
+  border-color: oklch(40% 0.01 250);
+  box-shadow: 0 2px 16px rgba(0,0,0,0.15);
 }
-.table-wrap tbody tr:hover { background: var(--surface-h); }
-
-.check-col { width: 36px; text-align: center; }
-.check-col input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
-
-.std-no { font: 400 13px 'DM Mono', monospace; color: var(--accent); white-space: nowrap; }
-.std-title { font-weight: 500; color: var(--text); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
-.status-dot.current { background: var(--success); }
-.status-dot.expired { background: var(--danger); }
-.status-dot.upcoming { background: var(--accent); }
-
-.source-badge {
-  display: inline-block; padding: 2px 8px; border-radius: var(--radius-sm);
-  font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em;
-  background: oklch(68% 0.18 230 / 0.1); color: var(--accent);
-}
-.source-badge.source-bz { background: oklch(68% 0.18 230 / 0.1); color: oklch(68% 0.18 230); }
-.source-badge.source-gbw { background: oklch(68% 0.16 158 / 0.1); color: oklch(68% 0.16 158); }
-.source-badge.source-by { background: oklch(68% 0.14 85 / 0.1); color: oklch(68% 0.14 85); }
-
-.row-actions { display: flex; gap: 6px; }
-.row-actions button {
-  padding: 4px 10px; border-radius: var(--radius-sm);
+.result-card .check-col { flex: 0 0 32px; }
+.result-card .check-col input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+.result-card .card-body { flex: 1; min-width: 0; }
+.result-card .card-title-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.result-card .card-number { font: 500 14px 'DM Mono', monospace; color: var(--accent); white-space: nowrap; }
+.result-card .card-title { font-size: 15px; font-weight: 500; color: var(--text); line-height: 1.4; }
+.result-card .card-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; }
+.result-card .card-meta-item { font-size: 13px; color: var(--text-2); white-space: nowrap; }
+.result-card .card-meta-label { color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.result-card .card-actions { flex: 0 0 auto; display: flex; gap: 6px; }
+.result-card .card-actions button {
+  padding: 6px 14px; border-radius: var(--radius-sm);
   font-size: 12px; cursor: pointer; border: none;
   background: var(--surface-h); color: var(--text-2);
   transition: all 0.12s var(--ease-out);
 }
-.row-actions button:hover { background: var(--accent); color: #fff; }
+.result-card .card-actions button:hover { background: var(--accent); color: #fff; }
+
+.status-indicator {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 100px;
+  font-size: 12px; font-weight: 500;
+}
+.status-indicator.current { background: oklch(68% 0.16 158 / 0.1); color: var(--success); }
+.status-indicator.expired { background: oklch(58% 0.20 25 / 0.1); color: var(--danger); }
+.status-indicator.upcoming { background: oklch(68% 0.18 230 / 0.1); color: var(--accent); }
+.status-indicator .dot { width: 6px; height: 6px; border-radius: 50%; }
+.status-indicator.current .dot { background: var(--success); }
+.status-indicator.expired .dot { background: var(--danger); }
+.status-indicator.upcoming .dot { background: var(--accent); }
 
 /* Empty */
 .empty { padding: 64px 24px; text-align: center; color: var(--text-3); }
@@ -435,58 +434,57 @@ function getDownloadSource(item) {
 document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
 document.getElementById('searchBtn').addEventListener('click', doSearch);
 
-// ── Render table ──
+// ── Render cards ──
 function renderResults() {
-  const tbody = results.map((r, i) => {
+  const cards = results.map((r, i) => {
     const srcBadges = (r.sources || [r._source]).map(s => `<span class="source-badge source-${s}">${s.toUpperCase()}</span>`).join(' ');
-    const dlSrc = getDownloadSource(r);
+    const sCls = statusClass(r.status);
     return `
-    <tr>
-      <td class="check-col"><input type="checkbox" data-idx="${i}" ${selectedIds.has(r.id) ? 'checked' : ''}></td>
-      <td><span class="std-no">${escapeHtml(r.standardNumber)}</span></td>
-      <td><span class="std-title" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</span></td>
-      <td>${statusBadge(r.status)}</td>
-      <td>${r.publishDate || '—'}</td>
-      <td>${srcBadges}</td>
-      <td><div class="row-actions">
+    <div class="result-card">
+      <div class="check-col"><input type="checkbox" data-idx="${i}" ${selectedIds.has(r.id) ? 'checked' : ''}></div>
+      <div class="card-body">
+        <div class="card-title-row">
+          <span class="card-number">${escapeHtml(r.standardNumber)}</span>
+          ${r.status ? `<span class="status-indicator ${sCls}"><span class="dot"></span>${escapeHtml(r.status)}</span>` : ''}
+        </div>
+        <div class="card-title">${escapeHtml(r.title || '—')}</div>
+        <div class="card-meta">
+          <span class="card-meta-item"><span class="card-meta-label">发布</span> ${r.publishDate || '—'}</span>
+          <span class="card-meta-item"><span class="card-meta-label">实施</span> ${r.implementDate || '—'}</span>
+          <span class="card-meta-item">${srcBadges}</span>
+          ${r.standardType ? `<span class="card-meta-item">${escapeHtml(r.standardType)}</span>` : ''}
+        </div>
+      </div>
+      <div class="card-actions">
         <button onclick="showDetail('${r.id}')">详情</button>
-        <button onclick="downloadOne('${r.id}')" title="优先源: ${dlSrc.toUpperCase()}">下载</button>
-      </div></td>
-    </tr>`;
+        <button onclick="downloadOne('${r.id}')">下载</button>
+      </div>
+    </div>`;
   }).join('');
 
-  document.getElementById('results').innerHTML = `
-    <div class="table-wrap">
-      <table>
-        <thead><tr>
-          <th class="check-col"><input type="checkbox" id="checkAll"></th>
-          <th>标准号</th><th>名称</th><th>状态</th><th>发布日期</th><th>来源</th><th style="width:120px">操作</th>
-        </tr></thead>
-        <tbody>${tbody}</tbody>
-      </table>
-    </div>`;
+  document.getElementById('results').innerHTML = cards;
 
-  document.getElementById('checkAll').addEventListener('change', e => {
-    results.forEach((r, i) => {
-      const cb = document.querySelector(`input[data-idx="${i}"]`);
-      if (cb) { cb.checked = e.target.checked; e.target.checked ? selectedIds.add(r.id) : selectedIds.delete(r.id); }
-    });
-    updateToolbar();
-  });
   document.querySelectorAll('input[data-idx]').forEach(cb => {
     cb.addEventListener('change', () => {
       const r = results[parseInt(cb.dataset.idx)];
       cb.checked ? selectedIds.add(r.id) : selectedIds.delete(r.id);
-      document.getElementById('checkAll').checked = selectedIds.size === results.length;
       updateToolbar();
     });
   });
 }
 
+function statusClass(s) {
+  if (!s) return '';
+  if (s.includes('废止')) return 'expired';
+  if (s.includes('实施')) return 'upcoming';
+  if (s.includes('现行')) return 'current';
+  return '';
+}
+
 function statusBadge(s) {
   if (!s) return '—';
-  const cls = s.includes('废止') ? 'expired' : s.includes('实施') ? 'upcoming' : s.includes('现行') ? 'current' : '';
-  return `<span class="status-dot ${cls}"></span>${escapeHtml(s)}`;
+  const cls = statusClass(s);
+  return `<span class="status-indicator ${cls}"><span class="dot"></span>${escapeHtml(s)}</span>`;
 }
 
 // ── Toolbar ──
@@ -494,13 +492,10 @@ function updateToolbar() {
   document.getElementById('selectedCount').textContent = `已选 ${selectedIds.size}`;
   const dlBtn = document.getElementById('downloadSelected');
   if (dlBtn) dlBtn.disabled = selectedIds.size === 0 || isDownloading;
-  const ca = document.getElementById('checkAll');
-  if (ca) ca.checked = results.length > 0 && selectedIds.size === results.length;
 }
 document.getElementById('selectAll').addEventListener('click', () => {
-  const all = selectedIds.size === results.length;
+  const all = selectedIds.size === results.length && results.length > 0;
   results.forEach(r => all ? selectedIds.delete(r.id) : selectedIds.add(r.id));
-  document.getElementById('checkAll').checked = !all;
   renderResults();
   updateToolbar();
 });
