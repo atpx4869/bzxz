@@ -15,8 +15,10 @@
 ```text
 ├── docs/sources/          # 各源实现文档
 ├── scripts/
-│   ├── ocr_ddddocr.py     # ddddocr Python 桥接
-│   └── sources/           # 各源勘察脚本
+│   ├── ocr_ddddocr.py       # ddddocr Python 桥接
+│   ├── register-bot.ts       # bz注册机
+│   ├── sync.sh               # 代码同步脚本
+│   └── sources/              # 各源勘察脚本
 ├── public/
 │   └── gbw-captcha.html   # gbw验证码交互页
 ├── src/
@@ -123,3 +125,55 @@ auto-download
 npm test
 npm run build
 ```
+
+## bz 注册机（账号池）
+
+批量注册 `bz.gxzl.org.cn` 个人账号，每号 15 次/月下载额度。
+
+```bash
+# 注册5个账号（仅注册）
+npm run register:bot -- 5
+
+# 注册3个账号 + 登录获取 JWT token
+npm run register:login -- 3
+```
+
+账号池存储在 `data/accounts.json`（已 gitignore），字段：
+
+| 字段 | 说明 |
+|------|------|
+| `username` / `password` | 登录凭据 |
+| `realName` / `phone` | 注册信息 |
+| `accessToken` | JWT bearer token（`--login` 后填充） |
+| `refreshToken` | 刷新 token |
+| `registeredAt` / `loggedInAt` | 时间戳 |
+
+技术细节见 `scripts/register-bot-readme.md`。
+
+## bz 直接 PDF 下载（进行中）
+
+通过账号 token 可直接下载完整 PDF，跳过当前分页 JPEG → PDF 合成的流程。
+
+**已可用的端点：**
+
+```
+GET /api/gxist-standard/standardOrder/download?id=<order_id>&Blade-Auth=bearer%20<token>
+→ 直接返回 PDF（已验证，8.3MB for GB/T 17657-2022）
+```
+
+**待解决：**
+
+创建下载订单时 `POST /api/gxist-order/order/save` 返回 `400 "商品类型不正确"`，需找到正确的请求体格式。
+
+**下一步：** 在 `bzuser.gxzl.org.cn` 标准详情页点击"下载PDF"，浏览器 DevTools 抓包即可捕获订单创建的完整请求。
+
+详见 `scripts/register-bot-readme.md` 中的完整 API 清单和平台架构。
+
+## 同步脚本
+
+```bash
+bash scripts/sync.sh              # 默认 timestamp message
+bash scripts/sync.sh "fix: xxx"   # 自定义 message
+```
+
+一键 `pull → add → commit → push`。
