@@ -537,22 +537,64 @@ async function downloadOne(id) {
   const r = results.find(r => r.id === id);
   if (!r) return;
   const dlSrc = getDownloadSource(r);
+  const dlMethod = dlSrc === 'gbw' ? 'auto-download' : 'export';
 
   addLog(`${r.standardNumber} [${dlSrc.toUpperCase()}] 开始下载`, 'pending');
   try {
-    const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/export`, { method: 'POST' });
-    if (!res.ok) { addLog(`${r.standardNumber} 导出失败: HTTP ${res.status}`, 'fail'); return; }
-    const task = await res.json();
+    const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/${dlMethod}`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) {
+      const errMsg = data.message || data.error || `HTTP ${res.status}`;
+      if (errMsg.includes('captcha') || data.code === 'UPSTREAM_ERROR') {
+        addLog(`${r.standardNumber} ${dlSrc.toUpperCase()}下载需要验证码，使用备选源重试`, 'fail');
+        return tryFallbackDownload(id, r, dlSrc);
+      }
+      addLog(`${r.standardNumber} 下载失败: ${errMsg}`, 'fail');
+      return;
+    }
+
+    // gbw auto-download returns result directly
+    if (dlMethod === 'auto-download') {
+      if (data.status === 'downloaded') {
+        addLog(`${r.standardNumber} ✅ ${data.meta?.fileName || data.fileName || '完成'}`, 'success');
+        return;
+      }
+      if (data.status === 'failed') {
+        addLog(`${r.standardNumber} ❌ 验证码识别失败，使用备选源重试`, 'fail');
+        return tryFallbackDownload(id, r, dlSrc);
+      }
+      addLog(`${r.standardNumber} ⏳ 状态: ${data.status}`, 'pending');
+      return;
+    }
+
+    // bz export returns a task, poll it
     addLog(`${r.standardNumber} [${dlSrc.toUpperCase()}] 队列中`, 'pending');
     for (let i = 0; i < 45; i++) {
       await sleep(2000);
-      const tr = await fetch(`${API}/api/tasks/${task.id}`);
+      const tr = await fetch(`${API}/api/tasks/${data.id}`);
       const td = await tr.json();
       if (td.status === 'success') { addLog(`${r.standardNumber} ✅ ${td.fileName || '完成'}`, 'success'); return; }
       if (td.status === 'failed') { addLog(`${r.standardNumber} ❌ ${td.errorMessage || ''}`, 'fail'); return; }
     }
     addLog(`${r.standardNumber} ⏰ 超时`, 'fail');
   } catch (e) { addLog(`${r.standardNumber} 失败: ${e.message}`, 'fail'); }
+}
+
+async function tryFallbackDownload(id, r, failedSrc) {
+  // Find next priority source that is different from the failed one
+  for (const src of downloadPriority) {
+    if (src === failedSrc) continue;
+    if (!r.sources || !r.sources.includes(src)) continue;
+    addLog(`${r.standardNumber} 回退到 ${src.toUpperCase()} 源重试`, 'pending');
+    const altR = { ...r, _source: src, sources: r.sources };
+    // Temporarily override priority
+    const orig = downloadPriority;
+    downloadPriority = [src, ...orig.filter(s => s !== src)];
+    await downloadOne(id);
+    downloadPriority = orig;
+    return;
+  }
+  addLog(`${r.standardNumber} 所有源均下载失败`, 'fail');
 }
 
 document.getElementById('downloadSelected').addEventListener('click', async () => {
