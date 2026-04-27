@@ -280,6 +280,43 @@ body { min-height: 100vh; }
   to { opacity: 1; transform: translateY(0); }
 }
 .count-anim { animation: countIn 0.4s var(--ease-spring); }
+
+/* ── Preview modal ── */
+.preview-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(0,0,0,0.9); display: none;
+  flex-direction: column;
+}
+.preview-overlay.open { display: flex; }
+.preview-toolbar {
+  display: flex; align-items: center; justify-content: center; gap: 16px;
+  padding: 12px 24px; background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.preview-toolbar .page-info { color: var(--text-2); font-size: 14px; min-width: 120px; text-align: center; }
+.preview-toolbar .page-jump { width: 48px; text-align: center; padding: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-size: 13px; }
+.preview-toolbar button {
+  padding: 6px 16px; border-radius: var(--radius-sm);
+  font-size: 13px; cursor: pointer; border: none;
+  background: var(--surface-h); color: var(--text-2);
+}
+.preview-toolbar button:hover { background: var(--accent); color: #fff; }
+.preview-toolbar button:disabled { opacity: 0.3; cursor: default; background: var(--surface-h); color: var(--text-3); }
+.preview-body {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  padding: 24px; overflow: hidden;
+}
+.preview-body img {
+  max-width: 100%; max-height: 100%; object-fit: contain;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  transition: opacity 0.15s;
+}
+.preview-close {
+  position: absolute; top: 12px; right: 16px;
+  background: none; border: none; cursor: pointer;
+  color: var(--text-3); font-size: 24px; z-index: 310;
+}
+.preview-close:hover { color: var(--text); }
 </style>
 </head>
 <body>
@@ -325,7 +362,19 @@ body { min-height: 100vh; }
   <div class="log-body" id="logBody"></div>
 </div>
 
-<div class="modal-overlay" id="modalOverlay">
+<div class="preview-overlay" id="previewOverlay">
+  <button class="preview-close" id="previewClose">&times;</button>
+  <div class="preview-toolbar" id="previewBar">
+    <button id="prevPage" onclick="navigatePage(-1)">◄ 上一页</button>
+    <span class="page-info" id="pageInfo">—</span>
+    <button id="nextPage" onclick="navigatePage(1)">下一页 ►</button>
+    <input type="number" class="page-jump" id="pageJump" min="1" placeholder="页">
+    <button onclick="goToPage()">跳转</button>
+  </div>
+  <div class="preview-body" id="previewBody">
+    <img id="previewImg" src="" alt="标准预览">
+  </div>
+</div>
   <div class="modal" id="modalContent">
     <button class="modal-close" id="modalClose">&times;</button>
     <div id="modalBody"></div>
@@ -489,6 +538,7 @@ function renderResults() {
       </div>
       <div class="card-actions">
         <button onclick="showDetail('${r.id}')">详情</button>
+        <button onclick="openPreview('${r.id}')" ${(r._source === 'bz' || r.sources?.includes('bz')) && hasText ? '' : 'disabled'}>预览</button>
         <button onclick="downloadOne('${r.id}')" ${hasText ? '' : 'disabled'}>下载</button>
       </div>
     </div>`;
@@ -695,6 +745,68 @@ document.getElementById('logToggle').addEventListener('click', () => {
   const panel = document.getElementById('logPanel');
   panel.classList.toggle('collapsed');
   document.getElementById('logChevron').textContent = panel.classList.contains('collapsed') ? '▲' : '▼';
+});
+
+// ── Preview ──
+let previewData = null; // { id, pageUrls[], totalPages, currentPage }
+
+async function openPreview(id) {
+  try {
+    const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/preview/detect`, { method: 'POST' });
+    const d = await res.json();
+    if (!d.pageUrls || d.pageUrls.length === 0) { addLog('无预览页', 'fail'); return; }
+
+    previewData = { id, pageUrls: d.pageUrls, totalPages: d.totalPages || d.pageUrls.length, currentPage: 0 };
+    document.getElementById('pageJump').max = previewData.totalPages;
+    showCurrentPage();
+    document.getElementById('previewOverlay').classList.add('open');
+  } catch (e) { addLog(`预览加载失败: ${e.message}`, 'fail'); }
+}
+
+function showCurrentPage() {
+  if (!previewData) return;
+  const p = previewData;
+  document.getElementById('previewImg').src = p.pageUrls[p.currentPage];
+  document.getElementById('pageInfo').textContent = `第 ${p.currentPage + 1} / ${p.totalPages} 页`;
+  document.getElementById('pageJump').value = p.currentPage + 1;
+  document.getElementById('prevPage').disabled = p.currentPage <= 0;
+  document.getElementById('nextPage').disabled = p.currentPage >= p.totalPages - 1;
+  // Preload next page
+  if (p.currentPage + 1 < p.totalPages) {
+    new Image().src = p.pageUrls[p.currentPage + 1];
+  }
+}
+
+function navigatePage(dir) {
+  if (!previewData) return;
+  const next = previewData.currentPage + dir;
+  if (next < 0 || next >= previewData.totalPages) return;
+  previewData.currentPage = next;
+  showCurrentPage();
+}
+
+function goToPage() {
+  const val = parseInt(document.getElementById('pageJump').value, 10);
+  if (!previewData || !val || val < 1 || val > previewData.totalPages) return;
+  previewData.currentPage = val - 1;
+  showCurrentPage();
+}
+
+document.getElementById('previewClose').addEventListener('click', () => {
+  document.getElementById('previewOverlay').classList.remove('open');
+  document.getElementById('previewImg').src = '';
+  previewData = null;
+});
+document.getElementById('previewOverlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('previewOverlay')) {
+    document.getElementById('previewClose').click();
+  }
+});
+document.addEventListener('keydown', e => {
+  if (!previewData) return;
+  if (e.key === 'Escape') document.getElementById('previewClose').click();
+  if (e.key === 'ArrowLeft') navigatePage(-1);
+  if (e.key === 'ArrowRight') navigatePage(1);
 });
 
 // ── Utils ──
