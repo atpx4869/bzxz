@@ -109,6 +109,9 @@ export class BzZhengguiAdapter implements SourceAdapter {
         standardId: id,
         pageUrls: [],
         previewUrl: undefined,
+        downloadUrl: undefined,
+        captchaRequired: false,
+        fileType: undefined,
         meta: { hasPdf: false, note: 'No preview available for this standard' },
       };
     }
@@ -125,6 +128,8 @@ export class BzZhengguiAdapter implements SourceAdapter {
       pageUrls,
       fileType: 'jpeg',
       previewUrl: `${BZ_NEW_BASE}/standard/details/?id=${detail.sourceId}`,
+      downloadUrl: undefined,
+      captchaRequired: false,
       meta: {
         hasPdf,
         standardNo,

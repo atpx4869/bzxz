@@ -125,9 +125,9 @@ export class GbwAdapter implements SourceAdapter {
       abolishedDate: null,
       previewAvailable: Boolean(hcno),
       detailUrl: detailUrl.toString(),
-      contentText: bodyText,
+      contentText: englishTitle || '',
       moreInfo: {
-        englishTitle,
+        enName: englishTitle || undefined,
         fields: fieldMap,
         hcno,
         openstdDetailUrl: hcno ? `${GBW_OPENSTD_BASE}/bzgk/std/newGbInfo?hcno=${hcno}` : null,

@@ -4,8 +4,6 @@
 
 示例：
 
-- `sources/bz-zhenggui/inspect-source.ts`
-- `sources/bz-zhenggui/inspect-detail.ts`
 - `sources/gbw/inspect-source.ts`
 - `sources/gbw/inspect-detail.ts`
 - `sources/gbw/inspect-openstd.ts`

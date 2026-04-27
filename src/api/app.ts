@@ -27,7 +27,7 @@ export function createApp() {
     try {
       const querySchema = z.object({
         q: z.string().trim().min(1, 'q is required'),
-        source: z.enum(['bz', 'gbw']).optional(),
+        source: z.enum(['bz', 'gbw', 'by']).optional(),
       });
 
       const { q, source } = querySchema.parse(req.query);
@@ -140,7 +140,7 @@ export function createApp() {
         throw new BadRequestError(`Unsupported download session source: ${source}`);
       }
 
-      const adapter = sourceRegistry.get('gbw');
+      const adapter = sourceRegistry.get(source as 'gbw');
       if (!adapter.getDownloadSession) {
         throw new BadRequestError('Source gbw does not support download session lookup');
       }

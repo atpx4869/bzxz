@@ -1,4 +1,4 @@
-export type SourceName = 'bz' | 'gbw';
+export type SourceName = 'bz' | 'gbw' | 'by';
 
 export interface StandardSummary {
   id: string;
@@ -17,7 +17,6 @@ export interface StandardSummary {
 }
 
 export interface StandardDetail extends StandardSummary {
-  breadcrumbs?: string[];
   contentText?: string;
   moreInfo?: Record<string, unknown>;
 }
@@ -40,7 +39,7 @@ export interface ExportResult {
   standardId: string;
   filePath: string;
   fileName: string;
-  totalPages: number;
+  totalPages?: number;
 }
 
 export interface ExportTask {

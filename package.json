@@ -4,15 +4,14 @@
   "description": "",
   "main": "dist/src/index.js",
   "scripts": {
-    "dev": "tsx src/index.ts",
-    "inspect:source": "tsx scripts/sources/bz-gxzl/inspect-source.ts",
-    "inspect:detail": "tsx scripts/sources/bz-gxzl/inspect-source.ts",
+    "dev": "NODE_TLS_REJECT_UNAUTHORIZED=0 tsx src/index.ts",
+
     "inspect:gbw:source": "tsx scripts/sources/gbw/inspect-source.ts",
     "inspect:gbw:detail": "tsx scripts/sources/gbw/inspect-detail.ts",
     "inspect:gbw:openstd": "tsx scripts/sources/gbw/inspect-openstd.ts",
     "inspect:gbw:showgb": "tsx scripts/sources/gbw/inspect-showgb.ts",
     "build": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "NODE_TLS_REJECT_UNAUTHORIZED=0 vitest run"
   },
   "keywords": [],
   "author": "",

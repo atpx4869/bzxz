@@ -8,7 +8,7 @@ describe('createApp', () => {
     const response = await request(createApp()).get('/api/health');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true, sources: ['bz', 'gbw'] });
+    expect(response.body).toEqual({ ok: true, sources: ['bz', 'gbw', 'by'] });
   });
 
   it('validates search query', async () => {

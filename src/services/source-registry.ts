@@ -2,6 +2,7 @@ import type { SourceAdapter, SourceName } from '../domain/standard';
 import { BadRequestError } from '../shared/errors';
 import { BzZhengguiAdapter } from '../sources/bz-zhenggui/bz-zhenggui-adapter';
 import { GbwAdapter } from '../sources/gbw/gbw-adapter';
+import { ByAdapter } from '../sources/by/by-adapter';
 
 export class SourceRegistry {
   private readonly adapters: Record<SourceName, SourceAdapter>;
@@ -10,6 +11,7 @@ export class SourceRegistry {
     this.adapters = {
       bz: new BzZhengguiAdapter(),
       gbw: new GbwAdapter(),
+      by: new ByAdapter(),
     };
   }
 

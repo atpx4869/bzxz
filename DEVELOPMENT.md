@@ -28,6 +28,8 @@ src/
 └── sources/
     ├── bz-zhenggui/               # bz源实现
     │   └── bz-zhenggui-adapter.ts
+    ├── by/                        # by源实现
+    │   └── by-adapter.ts
     ├── gbw/                       # gbw源实现
     │   ├── gbw-adapter.ts
     │   └── gbw-download-session-store.ts
@@ -41,7 +43,7 @@ src/
 
 ```ts
 interface SourceAdapter {
-  source: 'bz' | 'gbw';
+  source: 'bz' | 'gbw' | 'by';
   searchStandards(input): Promise<StandardSummary[]>;
   getStandardDetail(id): Promise<StandardDetail>;
   detectPreview(id): Promise<PreviewInfo>;
@@ -65,7 +67,7 @@ interface SourceAdapter {
 | 依赖 | 用途 |
 |------|------|
 | express | API 框架 |
-| playwright | bz源的 SPA 页面驱动 |
+| playwright | bz源预览分页检测 + gbw下载页 |
 | cheerio | gbw详情页 HTML 解析 |
 | sharp + tesseract.js | 验证码 OCR（回退方案） |
 | ddddocr (Python) | 验证码 OCR（首选，需python环境） |
@@ -77,8 +79,6 @@ interface SourceAdapter {
 npm run dev              # 开发启动（tsx 热更新）
 npm run build            # 编译
 npm test                 # 运行测试
-npm run inspect:source   # bz源搜索勘察
-npm run inspect:detail   # bz源详情勘察
 npm run inspect:gbw:source   # gbw源搜索勘察
 npm run inspect:gbw:detail   # gbw源详情勘察
 npm run inspect:gbw:showgb   # gbw下载页勘察
@@ -90,15 +90,16 @@ npm run inspect:gbw:showgb   # gbw下载页勘察
 # health
 curl.exe "http://localhost:3000/api/health"
 
-# 搜索(bz)
-curl.exe "http://localhost:3000/api/standards/search?q=3324-2017&source=bz"
-
-# 搜索(gbw)
+# 搜索
+curl.exe "http://localhost:3000/api/standards/search?q=3324-2024&source=bz"
 curl.exe "http://localhost:3000/api/standards/search?q=3324-2024&source=gbw"
 
 # 详情
 curl.exe "http://localhost:3000/api/standards/bz:443847"
 curl.exe "http://localhost:3000/api/standards/gbw:25940C3CEF158A9AE06397BE0A0A525A"
+
+# 导出
+curl.exe -X POST "http://localhost:3000/api/standards/bz:443847/export"
 
 # gbw自动下载
 Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/standards/gbw:{id}/auto-download"
@@ -110,7 +111,7 @@ Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/standards/gbw:{id
 
 ## 注意事项
 
-- bz源需要 Playwright 驱动浏览器，耗时较长
+- bz源搜索/详情走 REST API，仅分页数探测用到 Playwright
 - gbw自动下载依赖 Python 的 ddddocr，识别失败会自动回退 tesseract.js
 - 任务状态为内存存储，服务重启丢失（导出文件保留）
 - Windows 下 curl 是 PowerShell 别名，使用 `-Method Post` 代替 `-X POST`
