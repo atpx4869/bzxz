@@ -1,5 +1,6 @@
 dist/
 data/exports/
+data/accounts.json
 node_modules/
 *.log
 eng.traineddata
