@@ -849,6 +849,7 @@ async function loadPreviewSource(id, src) {
 
   if (!data) {
     addLog(`${src.toUpperCase()} 预览加载失败`, 'fail');
+    document.getElementById('previewOverlay').classList.remove('open');
     return;
   }
 
@@ -880,10 +881,11 @@ async function loadGbwPreview(id) {
     const d = await res.json();
     const fname = d.meta?.fileName || d.fileName || '';
     if (d.status === 'downloaded' && fname) {
-      return { type: 'pdf', url: `${API}/api/downloads/${encodeURIComponent(fname)}` };
+      return { type: 'pdf', url: `${API}/api/downloads/${encodeURIComponent(fname)}?inline=1` };
     }
+    addLog(`GBW预览失败: ${d.status || '未知'}`, 'fail');
     return null;
-  } catch { return null; }
+  } catch (e) { addLog(`GBW预览异常: ${e.message}`, 'fail'); return null; }
 }
 
 function showCurrentPage() {

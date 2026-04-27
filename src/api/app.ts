@@ -27,7 +27,11 @@ export function createApp() {
       res.status(404).json({ code: 'NOT_FOUND', message: 'File not found' });
       return;
     }
-    res.download(filePath);
+    if (req.query.inline === '1') {
+      res.sendFile(filePath);
+    } else {
+      res.download(filePath);
+    }
   });
 
   app.get('/api/health', (_req, res) => {
