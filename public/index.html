@@ -165,6 +165,9 @@ body { min-height: 100vh; }
   font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em;
   background: oklch(68% 0.18 230 / 0.1); color: var(--accent);
 }
+.source-badge.source-bz { background: oklch(68% 0.18 230 / 0.1); color: oklch(68% 0.18 230); }
+.source-badge.source-gbw { background: oklch(68% 0.16 158 / 0.1); color: oklch(68% 0.16 158); }
+.source-badge.source-by { background: oklch(68% 0.14 85 / 0.1); color: oklch(68% 0.14 85); }
 
 .row-actions { display: flex; gap: 6px; }
 .row-actions button {
@@ -280,6 +283,7 @@ body { min-height: 100vh; }
         <span class="source-tag active" data-source="gbw">GBW</span>
       </div>
       <button class="btn btn-primary" id="searchBtn">搜索</button>
+      <button class="btn btn-ghost btn-sm" onclick="openSettings()" title="下载优先级设置" style="padding:8px 10px;font-size:14px">⚙</button>
     </div>
   </div>
 </section>
@@ -319,24 +323,31 @@ body { min-height: 100vh; }
 <script>
 const API = '';
 
+// ── Settings (localStorage persisted) ──
+const DEFAULT_PRIORITY = ['gbw', 'bz'];
+let downloadPriority = JSON.parse(localStorage.getItem('bzxz_priority') || JSON.stringify(DEFAULT_PRIORITY));
+
+function savePriority() { localStorage.setItem('bzxz_priority', JSON.stringify(downloadPriority)); }
+
 // ── State ──
 let results = [];
-let selectedSources = new Set(['bz', 'gbw']);
+let selectedSources = new Set(downloadPriority);
 let selectedIds = new Set();
 let logEntries = [];
-let downloadQueue = [];
 let isDownloading = false;
+let searchAborted = false;
 
-// ── Source tags ──
+// ── Init source tags from config ──
 document.querySelectorAll('.source-tag').forEach(tag => {
+  const src = tag.dataset.source;
+  if (selectedSources.has(src)) tag.classList.add('active'); else tag.classList.remove('active');
   tag.addEventListener('click', () => {
-    const src = tag.dataset.source;
     if (selectedSources.has(src)) { selectedSources.delete(src); tag.classList.remove('active'); }
     else { selectedSources.add(src); tag.classList.add('active'); }
   });
 });
 
-// ── Search ──
+// ── Search with parallel fetch ──
 async function doSearch() {
   const q = document.getElementById('searchInput').value.trim();
   if (!q) return;
@@ -346,36 +357,79 @@ async function doSearch() {
   results = [];
   selectedIds.clear();
   updateToolbar();
+  searchAborted = false;
 
-  const allResults = [];
-  for (const src of selectedSources) {
-    try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 15000);
-      const res = await fetch(`${API}/api/standards/search?q=${encodeURIComponent(q)}&source=${src}`, { signal: ctrl.signal });
-      clearTimeout(timer);
-      const data = await res.json();
-      allResults.push(...(data.items || []).map(i => ({ ...i, _source: src })));
-    } catch (e) {
-      const msg = e.name === 'AbortError' ? `搜索 ${src} 超时（15s）` : `搜索 ${src} 失败: ${e.message}`;
-      addLog(msg, 'fail');
+  // Build search promises for all selected sources
+  const sources = [...selectedSources];
+  const promises = sources.map(src => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+    return fetch(`${API}/api/standards/search?q=${encodeURIComponent(q)}&source=${src}`, { signal: ctrl.signal })
+      .then(r => r.json())
+      .then(data => ({ ok: true, src, items: (data.items || []).map(i => ({ ...i, _source: src })) }))
+      .catch(e => ({ ok: false, src, error: e.name === 'AbortError' ? '超时' : e.message }))
+      .finally(() => clearTimeout(timer));
+  });
+
+  // Receive results incrementally
+  let receivedCount = 0;
+  const receivedResults = [];
+
+  for (const p of promises) {
+    const outcome = await p;
+    receivedCount++;
+    if (searchAborted) break;
+
+    if (outcome.ok) {
+      receivedResults.push(...outcome.items);
+      addLog(`搜索 ${outcome.src} 完成 (+${outcome.items.length} 条)`, 'success');
+    } else {
+      addLog(`搜索 ${outcome.src} 失败: ${outcome.error}`, 'fail');
     }
+
+    // Merge + deduplicate by standardNumber
+    results = dedupeResults(receivedResults);
+    document.getElementById('summary').innerHTML = `<span class="count-anim">找到 ${results.length} 条结果 (${receivedCount}/${sources.length} 源)</span>`;
+    document.getElementById('toolbar').style.display = results.length > 0 ? 'flex' : 'none';
+    if (results.length > 0) renderResults();
+    updateToolbar();
   }
 
-  results = allResults;
   document.getElementById('searchBtn').innerHTML = '搜索';
   document.getElementById('searchBtn').disabled = false;
 
-  if (results.length === 0) {
+  if (results.length === 0 && !searchAborted) {
     document.getElementById('results').innerHTML = `<div class="empty"><p>—</p><p>未找到相关标准</p><p style="font-size:13px;color:var(--text-3)">尝试更换关键词或数据源</p></div>`;
-    document.getElementById('summary').innerHTML = '';
     document.getElementById('toolbar').style.display = 'none';
-  } else {
-    const summaryText = results.length === 1 ? '找到 1 条结果' : `找到 ${results.length} 条结果`;
-    document.getElementById('summary').innerHTML = `<span class="count-anim">${summaryText}</span>`;
-    document.getElementById('toolbar').style.display = 'flex';
-    renderResults();
   }
+}
+
+function dedupeResults(items) {
+  const map = new Map();
+  for (const item of items) {
+    const key = item.standardNumber.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+    if (map.has(key)) {
+      const existing = map.get(key);
+      if (!existing.sources.includes(item._source)) {
+        existing.sources.push(item._source);
+        existing._multiSource = existing.sources.join('+');
+      }
+      // Keep the result with more fields filled
+      if (!existing.title && item.title) existing.title = item.title;
+      if (!existing.publishDate && item.publishDate) existing.publishDate = item.publishDate;
+      if (!existing.implementDate && item.implementDate) existing.implementDate = item.implementDate;
+    } else {
+      map.set(key, { ...item, sources: [item._source], _multiSource: item._source });
+    }
+  }
+  return [...map.values()];
+}
+
+function getDownloadSource(item) {
+  for (const src of downloadPriority) {
+    if (item.sources && item.sources.includes(src)) return src;
+  }
+  return item._source || item.sources?.[0] || '';
 }
 
 document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
@@ -383,20 +437,23 @@ document.getElementById('searchBtn').addEventListener('click', doSearch);
 
 // ── Render table ──
 function renderResults() {
-  const tbody = results.map((r, i) => `
+  const tbody = results.map((r, i) => {
+    const srcBadges = (r.sources || [r._source]).map(s => `<span class="source-badge source-${s}">${s.toUpperCase()}</span>`).join(' ');
+    const dlSrc = getDownloadSource(r);
+    return `
     <tr>
       <td class="check-col"><input type="checkbox" data-idx="${i}" ${selectedIds.has(r.id) ? 'checked' : ''}></td>
       <td><span class="std-no">${escapeHtml(r.standardNumber)}</span></td>
       <td><span class="std-title" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</span></td>
       <td>${statusBadge(r.status)}</td>
       <td>${r.publishDate || '—'}</td>
-      <td><span class="source-badge">${r._source.toUpperCase()}</span></td>
+      <td>${srcBadges}</td>
       <td><div class="row-actions">
         <button onclick="showDetail('${r.id}')">详情</button>
-        <button onclick="downloadOne('${r.id}')">下载</button>
+        <button onclick="downloadOne('${r.id}')" title="优先源: ${dlSrc.toUpperCase()}">下载</button>
       </div></td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 
   document.getElementById('results').innerHTML = `
     <div class="table-wrap">
@@ -409,7 +466,6 @@ function renderResults() {
       </table>
     </div>`;
 
-  // Checkbox events
   document.getElementById('checkAll').addEventListener('change', e => {
     results.forEach((r, i) => {
       const cb = document.querySelector(`input[data-idx="${i}"]`);
@@ -436,8 +492,10 @@ function statusBadge(s) {
 // ── Toolbar ──
 function updateToolbar() {
   document.getElementById('selectedCount').textContent = `已选 ${selectedIds.size}`;
-  document.getElementById('downloadSelected').disabled = selectedIds.size === 0 || isDownloading;
-  document.getElementById('checkAll').checked = selectedIds.size === results.length && results.length > 0;
+  const dlBtn = document.getElementById('downloadSelected');
+  if (dlBtn) dlBtn.disabled = selectedIds.size === 0 || isDownloading;
+  const ca = document.getElementById('checkAll');
+  if (ca) ca.checked = results.length > 0 && selectedIds.size === results.length;
 }
 document.getElementById('selectAll').addEventListener('click', () => {
   const all = selectedIds.size === results.length;
@@ -447,33 +505,27 @@ document.getElementById('selectAll').addEventListener('click', () => {
   updateToolbar();
 });
 
-// ── Download ──
+// ── Download with priority ──
 async function downloadOne(id) {
   const r = results.find(r => r.id === id);
   if (!r) return;
-  addLog(`${r.standardNumber} 开始下载`, 'pending');
+  const dlSrc = getDownloadSource(r);
+
+  addLog(`${r.standardNumber} [${dlSrc.toUpperCase()}] 开始下载`, 'pending');
   try {
     const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/export`, { method: 'POST' });
+    if (!res.ok) { addLog(`${r.standardNumber} 导出失败: HTTP ${res.status}`, 'fail'); return; }
     const task = await res.json();
-    addLog(`${r.standardNumber} 已加入队列 (${task.id})`, 'pending');
-    // Poll task
-    for (let i = 0; i < 30; i++) {
+    addLog(`${r.standardNumber} [${dlSrc.toUpperCase()}] 队列中`, 'pending');
+    for (let i = 0; i < 45; i++) {
       await sleep(2000);
       const tr = await fetch(`${API}/api/tasks/${task.id}`);
       const td = await tr.json();
-      if (td.status === 'success') {
-        addLog(`${r.standardNumber} 下载完成`, 'success');
-        return;
-      }
-      if (td.status === 'failed') {
-        addLog(`${r.standardNumber} 下载失败: ${td.errorMessage || '未知错误'}`, 'fail');
-        return;
-      }
+      if (td.status === 'success') { addLog(`${r.standardNumber} ✅ ${td.fileName || '完成'}`, 'success'); return; }
+      if (td.status === 'failed') { addLog(`${r.standardNumber} ❌ ${td.errorMessage || ''}`, 'fail'); return; }
     }
-    addLog(`${r.standardNumber} 超时`, 'fail');
-  } catch (e) {
-    addLog(`${r.standardNumber} 请求失败: ${e.message}`, 'fail');
-  }
+    addLog(`${r.standardNumber} ⏰ 超时`, 'fail');
+  } catch (e) { addLog(`${r.standardNumber} 失败: ${e.message}`, 'fail'); }
 }
 
 document.getElementById('downloadSelected').addEventListener('click', async () => {
@@ -491,12 +543,38 @@ document.getElementById('downloadSelected').addEventListener('click', async () =
     await downloadOne(ids[i]);
     fill.style.width = `${((i + 1) / ids.length) * 100}%`;
   }
-
   fill.style.width = '100%';
   setTimeout(() => { progress.classList.remove('visible'); fill.style.width = '0%'; }, 1500);
   isDownloading = false;
   updateToolbar();
 });
+
+// ── Settings panel ──
+function openSettings() {
+  const items = downloadPriority.map((s, i) => `
+    <div class="priority-row" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <span style="color:var(--text-3);font-size:12px;min-width:20px">${i + 1}.</span>
+      <span class="source-badge source-${s}">${s.toUpperCase()}</span>
+      <span style="flex:1;font-size:13px;color:var(--text-2)">${i === 0 ? '首选下载源' : ''}</span>
+      <button onclick="movePriority(${i}, -1)" ${i === 0 ? 'disabled' : ''} style="background:none;border:none;color:var(--text-3);cursor:pointer;font-size:16px">▲</button>
+      <button onclick="movePriority(${i}, 1)" ${i === downloadPriority.length - 1 ? 'disabled' : ''} style="background:none;border:none;color:var(--text-3);cursor:pointer;font-size:16px">▼</button>
+    </div>`).join('');
+
+  document.getElementById('modalBody').innerHTML = `
+    <h3>下载优先级</h3>
+    <p style="font-size:13px;color:var(--text-3);margin-bottom:16px">拖拽排序，排第一的源优先用于下载</p>
+    ${items}
+    <button class="btn btn-primary btn-sm" style="margin-top:16px" onclick="document.getElementById('modalOverlay').classList.remove('open')">关闭</button>`;
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function movePriority(idx, dir) {
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= downloadPriority.length) return;
+  [downloadPriority[idx], downloadPriority[newIdx]] = [downloadPriority[newIdx], downloadPriority[idx]];
+  savePriority();
+  openSettings();
+}
 
 // ── Detail modal ──
 async function showDetail(id) {
@@ -506,14 +584,17 @@ async function showDetail(id) {
     const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}`, { signal: ctrl.signal });
     clearTimeout(timer);
     const d = await res.json();
+    const sources = (d.moreInfo?.sources || d.sources || [d._source || d.source]).filter(Boolean);
+    const srcBadges = sources.map(s => `<span class="source-badge source-${s}">${String(s).toUpperCase()}</span>`).join(' ');
     const fields = [
       ['标准号', d.standardNumber], ['名称', d.title], ['状态', d.status],
-      ['发布日期', d.publishDate], ['实施日期', d.implementDate], ['来源', d.source],
+      ['发布日期', d.publishDate], ['实施日期', d.implementDate], ['来源', srcBadges],
       ['类型', d.standardType],
     ];
     document.getElementById('modalBody').innerHTML = `<h3>${escapeHtml(d.standardNumber)}</h3>` +
-      fields.filter(f => f[1]).map(f => `<div class="field"><div class="field-label">${f[0]}</div><div class="field-value">${escapeHtml(String(f[1]))}</div></div>`).join('') +
-      `<button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="downloadOne('${d.id}')">下载此标准</button>`;
+      fields.filter(f => f[1]).map(f => `<div class="field"><div class="field-label">${f[0]}</div><div class="field-value">${f[1]}</div></div>`).join('') +
+      `<button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="downloadOne('${d.id}')">下载此标准</button>
+       <button class="btn btn-ghost btn-sm" style="margin-top:12px;margin-left:6px" onclick="document.getElementById('modalOverlay').classList.remove('open')">关闭</button>`;
     document.getElementById('modalOverlay').classList.add('open');
   } catch (e) { addLog(`获取详情失败: ${e.message}`, 'fail'); }
 }
