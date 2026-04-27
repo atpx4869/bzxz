@@ -794,28 +794,56 @@ async function openPreview(id) {
   if (!r) return;
   if (!previewCache.has(id)) previewCache.set(id, {});
 
-  // Determine available sources
   const sources = (r.sources || [r._source]).filter(s => previewPriority.includes(s));
   if (sources.length === 0) { addLog('无可预览源', 'fail'); return; }
 
-  // Pick first available
   let pickSrc = null;
   for (const s of previewPriority) { if (sources.includes(s)) { pickSrc = s; break; } }
   if (!pickSrc) pickSrc = sources[0];
 
-  // Show modal
-  document.getElementById('previewOverlay').classList.add('open');
-  document.getElementById('previewLoading').style.display = 'block';
-  document.getElementById('previewImg').style.display = 'none';
-  document.getElementById('previewPdf').style.display = 'none';
-  document.getElementById('previewBar').style.display = 'none';
-
-  // Render source tabs
+  // Show modal after data is ready
   document.getElementById('previewSources').innerHTML = sources.map(s =>
     `<span class="preview-src-tab ${s === pickSrc ? 'active' : ''}" onclick="switchPreviewSource('${id}','${s}')">${s.toUpperCase()}</span>`
   ).join('');
 
-  await loadPreviewSource(id, pickSrc);
+  const data = await loadPreviewSourceDirect(id, pickSrc);
+  if (!data) return;
+
+  document.getElementById('previewOverlay').classList.add('open');
+  renderPreviewData(data);
+}
+
+async function loadPreviewSourceDirect(id, src) {
+  const cache = previewCache.get(id) || {};
+  if (cache[src]) return cache[src];
+
+  let data = null;
+  if (src === 'bz') data = await loadBzPreview(id);
+  else if (src === 'gbw') data = await loadGbwPreview(id);
+
+  if (data) {
+    if (!previewCache.has(id)) previewCache.set(id, {});
+    previewCache.get(id)[src] = data;
+  }
+  return data;
+}
+
+function renderPreviewData(data) {
+  document.getElementById('previewLoading').style.display = 'none';
+  if (data.type === 'image') {
+    previewData = data;
+    document.getElementById('previewImg').style.display = 'block';
+    document.getElementById('previewPdf').style.display = 'none';
+    document.getElementById('previewBar').style.display = 'flex';
+    document.getElementById('pageJump').max = previewData.totalPages;
+    showCurrentPage();
+  } else if (data.type === 'pdf') {
+    previewData = null;
+    document.getElementById('previewImg').style.display = 'none';
+    document.getElementById('previewPdf').src = data.url;
+    document.getElementById('previewPdf').style.display = 'block';
+    document.getElementById('previewBar').style.display = 'none';
+  }
 }
 
 async function switchPreviewSource(id, src) {
@@ -826,44 +854,10 @@ async function switchPreviewSource(id, src) {
   document.getElementById('previewImg').style.display = 'none';
   document.getElementById('previewPdf').style.display = 'none';
   document.getElementById('previewBar').style.display = 'none';
-  await loadPreviewSource(id, src);
-}
 
-async function loadPreviewSource(id, src) {
-  const cache = previewCache.get(id) || {};
-  let data = cache[src];
-
-  if (!data) {
-    if (src === 'bz') {
-      data = await loadBzPreview(id);
-    } else if (src === 'gbw') {
-      data = await loadGbwPreview(id);
-    }
-    if (data) {
-      if (!previewCache.has(id)) previewCache.set(id, {});
-      previewCache.get(id)[src] = data;
-    }
-  }
-
-  document.getElementById('previewLoading').style.display = 'none';
-
-  if (!data) {
-    addLog(`${src.toUpperCase()} 预览加载失败`, 'fail');
-    document.getElementById('previewOverlay').classList.remove('open');
-    return;
-  }
-
-  if (data.type === 'image') {
-    previewData = data;
-    document.getElementById('previewImg').style.display = 'block';
-    document.getElementById('previewBar').style.display = 'flex';
-    document.getElementById('pageJump').max = previewData.totalPages;
-    showCurrentPage();
-  } else if (data.type === 'pdf') {
-    previewData = null;
-    document.getElementById('previewPdf').src = data.url;
-    document.getElementById('previewPdf').style.display = 'block';
-  }
+  const data = await loadPreviewSourceDirect(id, src);
+  if (!data) { addLog(`${src.toUpperCase()} 预览失败`, 'fail'); return; }
+  renderPreviewData(data);
 }
 
 async function loadBzPreview(id) {
