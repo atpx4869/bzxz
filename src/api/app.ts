@@ -2,15 +2,34 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { z } from 'zod';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
+import multer from 'multer';
+import XLSX from 'xlsx';
 
 import { StandardService } from '../services/standard-service';
+import { StandardResolver } from '../services/standard-resolver';
 import { ExportTaskService } from '../services/export-task-service';
 import { ExportTaskStore } from '../services/export-task-store';
 import { SourceRegistry } from '../services/source-registry';
 import { AppError, BadRequestError, NotFoundError } from '../shared/errors';
-import { parseStandardId } from '../shared/id';
+import { parseStandardId, VALID_SOURCES } from '../shared/id';
 import type { SourceName } from '../domain/standard';
-import { GbwAdapter } from '../sources/gbw/gbw-adapter';
+
+const SOURCES = [...VALID_SOURCES] as SourceName[];
+const sourceEnum = z.enum(SOURCES as [string, ...string[]]);
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (['.xlsx', '.xls', '.csv'].includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new BadRequestError('仅支持 .xlsx / .xls / .csv 格式'));
+    }
+  },
+});
 
 export function createApp() {
   const app = express();
@@ -22,7 +41,12 @@ export function createApp() {
 
   // Serve exported files for browser download
   app.get('/api/downloads/:filename', (req, res) => {
-    const filePath = path.join(process.cwd(), 'data', 'exports', req.params.filename);
+    const exportsDir = path.resolve(process.cwd(), 'data', 'exports');
+    const filePath = path.resolve(exportsDir, req.params.filename);
+    if (!filePath.startsWith(exportsDir + path.sep)) {
+      res.status(400).json({ code: 'BAD_REQUEST', message: 'Invalid filename' });
+      return;
+    }
     if (!existsSync(filePath)) {
       res.status(404).json({ code: 'NOT_FOUND', message: 'File not found' });
       return;
@@ -41,8 +65,8 @@ export function createApp() {
   app.get('/api/standards/search', async (req, res, next) => {
     try {
       const querySchema = z.object({
-        q: z.string().trim().min(1, 'q is required'),
-        source: z.enum(['bz', 'gbw', 'by']).optional(),
+        q: z.string().trim().min(1, 'q is required').max(500),
+        source: sourceEnum.optional(),
       });
 
       const { q, source } = querySchema.parse(req.query);
@@ -60,6 +84,23 @@ export function createApp() {
           source: selectedSource,
         },
       });
+    } catch (error) {
+      next(normalizeError(error));
+    }
+  });
+
+  app.post('/api/standards/resolve', async (req, res, next) => {
+    try {
+      const bodySchema = z.object({
+        lines: z.array(z.string().trim()).min(1, 'lines is required').max(200),
+        sources: z.array(sourceEnum).min(1).optional(),
+      });
+
+      const { lines, sources } = bodySchema.parse(req.body);
+      const selectedSources = (sources ?? sourceRegistry.list()) as SourceName[];
+      const resolver = new StandardResolver(sourceRegistry);
+      const result = await resolver.resolve(lines, selectedSources);
+      res.json(result);
     } catch (error) {
       next(normalizeError(error));
     }
@@ -118,11 +159,11 @@ export function createApp() {
     try {
       const parsed = parseStandardId(req.params.id);
       const adapter = sourceRegistry.get(parsed.source);
-      if (!(adapter as GbwAdapter).autoDownload) {
+      if (!adapter.autoDownload) {
         throw new BadRequestError(`Source ${parsed.source} does not support auto-download`);
       }
 
-      const result = await (adapter as GbwAdapter).autoDownload(req.params.id, 5);
+      const result = await adapter.autoDownload(req.params.id, 5);
       res.json(result);
     } catch (error) {
       next(normalizeError(error));
@@ -167,6 +208,96 @@ export function createApp() {
     }
   });
 
+  app.post('/api/standards/complete', upload.single('file'), async (req, res, next) => {
+    try {
+      if (!req.file) {
+        throw new BadRequestError('请上传文件');
+      }
+
+      const bodySchema = z.object({
+        sources: z.array(sourceEnum).min(1).optional(),
+      });
+      const { sources } = bodySchema.parse(req.body.sources ? { sources: JSON.parse(req.body.sources) } : {});
+
+      // Parse workbook
+      const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      if (!sheetName) throw new BadRequestError('表格为空或格式无法识别');
+      const sheet = workbook.Sheets[sheetName];
+      const rows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+      // Extract column A, skip header row if it looks like a header
+      const lines: string[] = [];
+      let startRow = 0;
+      const firstVal = String(rows[0]?.[0] ?? '').trim();
+      if (firstVal && !/[A-Z]{2,}/i.test(firstVal)) {
+        startRow = 1; // Skip header row
+      }
+      for (let i = startRow; i < rows.length; i++) {
+        const val = String(rows[i]?.[0] ?? '').trim();
+        if (val) lines.push(val);
+      }
+
+      if (lines.length === 0) throw new BadRequestError('未在A列找到有效的标准号');
+
+      // Resolve
+      const selectedSources = (sources ?? sourceRegistry.list()) as SourceName[];
+      const resolver = new StandardResolver(sourceRegistry);
+      const { resolved, unmatched } = await resolver.resolve(lines, selectedSources);
+
+      // Build lookup map
+      const lookup = new Map<string, (typeof resolved)[0]>();
+      for (const r of resolved) {
+        const key = r.input.trim();
+        if (!lookup.has(key)) lookup.set(key, r);
+      }
+
+      // Build output sheet
+      const outRows: string[][] = [];
+      // Header
+      outRows.push(['用户提供', '标准号', '标准名称', '状态', '来源', '备注']);
+      for (let i = startRow; i < rows.length; i++) {
+        const original = String(rows[i]?.[0] ?? '').trim();
+        if (!original) continue;
+        const match = lookup.get(original);
+        if (match) {
+          outRows.push([original, match.standardNumber, match.title, match.status ?? '', match.source, '']);
+        } else {
+          const unmatchReason = unmatched.find(u => u.input === original)?.reason ?? '未匹配';
+          outRows.push([original, '', '', '', '', unmatchReason]);
+        }
+      }
+
+      // Write output file
+      const outWorkbook = XLSX.utils.book_new();
+      const outSheet = XLSX.utils.aoa_to_sheet(outRows);
+      // Set column widths
+      outSheet['!cols'] = [
+        { wch: 25 }, { wch: 28 }, { wch: 50 }, { wch: 12 }, { wch: 10 }, { wch: 30 },
+      ];
+      XLSX.utils.book_append_sheet(outWorkbook, outSheet, '标准补全结果');
+
+      const exportsDir = path.resolve(process.cwd(), 'data', 'exports');
+      await mkdir(exportsDir, { recursive: true });
+      const outFileName = `标准补全_${Date.now()}.xlsx`;
+      const outPath = path.resolve(exportsDir, outFileName);
+      const buf = XLSX.write(outWorkbook, { type: 'buffer', bookType: 'xlsx' });
+      await writeFile(outPath, buf);
+
+      res.json({
+        fileName: outFileName,
+        downloadUrl: `/api/downloads/${encodeURIComponent(outFileName)}`,
+        summary: {
+          total: lines.length,
+          resolved: resolved.length,
+          unmatched: unmatched.length,
+        },
+      });
+    } catch (error) {
+      next(normalizeError(error));
+    }
+  });
+
   app.get('/api/tasks/:taskId', async (req, res, next) => {
     try {
       const task = exportTaskStore.get(req.params.taskId);
@@ -180,6 +311,14 @@ export function createApp() {
   });
 
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    // Multer errors
+    const multerCodes = new Set(['LIMIT_FILE_SIZE', 'LIMIT_UNEXPECTED_FILE', 'LIMIT_FILE_COUNT', 'LIMIT_FIELD_KEY', 'LIMIT_FIELD_VALUE', 'LIMIT_FIELD_COUNT', 'LIMIT_PART_COUNT']);
+    if (multerCodes.has((error as any)?.code)) {
+      const msg = (error as any)?.code === 'LIMIT_FILE_SIZE' ? '文件大小不能超过 10MB' : (error as any).message || '上传错误';
+      res.status(400).json({ code: 'BAD_REQUEST', message: msg });
+      return;
+    }
+    // AppError instances
     if (error instanceof AppError) {
       res.status(error.statusCode).json({
         code: error.code,

@@ -11,6 +11,6 @@
     "rootDir": ".",
     "types": ["node"]
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*.ts", "electron/**/*.ts"],
+  "exclude": ["node_modules", "dist", "release"]
 }

@@ -1,7 +1,10 @@
 import type { ExportResult, ExportTask } from '../domain/standard';
 
+const TTL_MS = 60 * 60 * 1000; // 1 hour
+
 export class ExportTaskStore {
   private readonly tasks = new Map<string, ExportTask>();
+  private _cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
   create(standardId: string): ExportTask {
     const now = new Date().toISOString();
@@ -14,6 +17,7 @@ export class ExportTaskStore {
     };
 
     this.tasks.set(task.id, task);
+    this.ensureCleanup();
     return task;
   }
 
@@ -52,5 +56,21 @@ export class ExportTaskStore {
       ...partial,
       updatedAt: new Date().toISOString(),
     });
+  }
+
+  private ensureCleanup(): void {
+    if (this._cleanupTimer) return;
+    this._cleanupTimer = setInterval(() => {
+      const cutoff = Date.now() - TTL_MS;
+      for (const [id, task] of this.tasks) {
+        if (new Date(task.createdAt).getTime() < cutoff) {
+          this.tasks.delete(id);
+        }
+      }
+      if (this.tasks.size === 0 && this._cleanupTimer) {
+        clearInterval(this._cleanupTimer);
+        this._cleanupTimer = null;
+      }
+    }, 600_000); // every 10 min
   }
 }

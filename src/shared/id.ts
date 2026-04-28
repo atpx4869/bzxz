@@ -1,23 +1,32 @@
+import type { SourceName } from '../domain/standard';
 import { BadRequestError } from './errors';
 
+export const VALID_SOURCES: ReadonlySet<string> = new Set<SourceName>(['bz', 'gbw', 'by', 'bzvip']);
+
 export interface ParsedStandardId {
-  source: 'bz' | 'gbw' | 'by';
+  source: SourceName;
   sourceId: string;
 }
 
-export function createStandardId(source: 'bz' | 'gbw' | 'by', sourceId: string): string {
-  return `${source}:${sourceId}`;
+export function createStandardId(source: SourceName, sourceId: string | number): string {
+  const sid = String(sourceId ?? '');
+  if (!sid || sid.includes(':')) {
+    throw new BadRequestError(`Invalid sourceId: "${sid}"`);
+  }
+  return `${source}:${sid}`;
 }
 
 export function parseStandardId(id: string): ParsedStandardId {
-  const [source, sourceId] = id.split(':');
+  const colonIndex = id.indexOf(':');
+  if (colonIndex === -1) {
+    throw new BadRequestError(`Unsupported standard id: ${id}`);
+  }
+  const source = id.slice(0, colonIndex);
+  const sourceId = id.slice(colonIndex + 1);
 
-  if ((source !== 'bz' && source !== 'gbw' && source !== 'by') || !sourceId) {
+  if (!VALID_SOURCES.has(source) || !sourceId) {
     throw new BadRequestError(`Unsupported standard id: ${id}`);
   }
 
-  return {
-    source,
-    sourceId,
-  };
+  return { source: source as SourceName, sourceId };
 }

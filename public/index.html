@@ -33,72 +33,141 @@
 }
 
 html { background: var(--bg); color: var(--text); font: 400 15px/1.6 'DM Sans', -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
-
 body { min-height: 100vh; }
 
-/* ── Hero gradient background ── */
-.hero {
+/* ── Left Dock ── */
+.dock {
+  position: fixed; left: 16px; top: 50%; transform: translateY(-50%);
+  z-index: 300; display: flex; flex-direction: column; gap: 4px;
+  background: oklch(18% 0.015 250 / 0.78);
+  backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid oklch(30% 0.015 250 / 0.5);
+  border-radius: var(--radius-lg);
+  padding: 8px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.35), 0 0 0 0.5px oklch(50% 0.02 250 / 0.15) inset;
+  transition: box-shadow 0.4s var(--ease-out);
+}
+.dock:hover { box-shadow: 0 12px 48px rgba(0,0,0,0.45), 0 0 0 0.5px oklch(60% 0.03 250 / 0.2) inset; }
+.dock-btn {
   position: relative;
-  padding: 64px 24px 48px;
-  background: var(--bg-hero);
+  display: flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px;
+  border: none; border-radius: var(--radius);
+  background: transparent; color: var(--text-3);
+  cursor: pointer; font-size: 18px;
+  transition: all 0.2s var(--ease-out);
+}
+.dock-btn:hover { background: var(--surface-h); color: var(--text); transform: scale(1.06); }
+.dock-btn.active { background: var(--accent); color: #fff; box-shadow: 0 4px 12px oklch(68% 0.18 230 / 0.3); }
+.dock-btn .dock-tooltip {
+  position: absolute; left: 56px; top: 50%; transform: translateY(-50%);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 6px 14px;
+  font-size: 12px; font-weight: 500; color: var(--text);
+  white-space: nowrap; pointer-events: none;
+  opacity: 0; transition: opacity 0.15s var(--ease-out);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+}
+.dock-btn:hover .dock-tooltip { opacity: 1; }
+.dock-sep { height: 1px; background: var(--border); margin: 4px 8px; }
+
+/* ── Floating workspace panel ── */
+.float-panel {
+  position: fixed; z-index: 250;
+  width: 520px; max-height: 78vh;
+  background: oklch(18% 0.018 250 / 0.92);
+  backdrop-filter: blur(28px) saturate(1.6);
+  border: 1px solid oklch(34% 0.015 250 / 0.6);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 60px rgba(0,0,0,0.5), 0 0 0 0.5px oklch(50% 0.03 250 / 0.12) inset;
+  display: none; flex-direction: column;
+  animation: panelIn 0.25s var(--ease-spring);
   overflow: hidden;
 }
+.float-panel.open { display: flex; }
+.float-panel.minimized { max-height: none; }
+@keyframes panelIn {
+  from { opacity: 0; transform: translate(-16px, 8px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+.float-panel-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  cursor: grab;
+  user-select: none;
+  border-bottom: 1px solid var(--border);
+  background: oklch(20% 0.015 250 / 0.6);
+  flex-shrink: 0;
+}
+.float-panel-header:active { cursor: grabbing; }
+.float-panel-header .panel-accent {
+  width: 4px; height: 20px; border-radius: 2px; flex-shrink: 0;
+}
+.float-panel-header .panel-icon { font-size: 15px; flex-shrink: 0; }
+.float-panel-header .panel-title {
+  flex: 1; font-size: 13px; font-weight: 600; color: var(--text);
+  letter-spacing: 0.01em;
+}
+.float-panel-header .panel-btn {
+  width: 28px; height: 28px; border: none; border-radius: var(--radius-sm);
+  background: transparent; color: var(--text-3); cursor: pointer;
+  font-size: 13px; display: flex; align-items: center; justify-content: center;
+  transition: all 0.12s var(--ease-out);
+  flex-shrink: 0;
+}
+.float-panel-header .panel-btn:hover { background: var(--surface-h); color: var(--text); }
+.float-panel-header .panel-btn.close:hover { background: oklch(58% 0.20 25 / 0.15); color: var(--danger); }
+.float-panel-body {
+  padding: 16px; overflow-y: auto; flex: 1;
+}
+.float-panel-body::-webkit-scrollbar { width: 4px; }
+.float-panel-body::-webkit-scrollbar-track { background: transparent; }
+.float-panel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* Accent colors per panel */
+.accent-batch { background: oklch(68% 0.18 230); }
+.accent-complete { background: oklch(68% 0.16 158); }
+.accent-settings { background: oklch(68% 0.14 85); }
+
+/* ── Hero ── */
+.hero {
+  position: relative; padding: 64px 24px 48px;
+  background: var(--bg-hero); overflow: hidden;
+}
 .hero::before {
-  content: '';
-  position: absolute; inset: 0;
+  content: ''; position: absolute; inset: 0;
   background-image:
     linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
   background-size: 48px 48px;
   animation: gridShift 20s linear infinite;
 }
-@keyframes gridShift {
-  0% { background-position: 0 0; }
-  100% { background-position: 48px 48px; }
-}
+@keyframes gridShift { 0% { background-position: 0 0; } 100% { background-position: 48px 48px; } }
 .hero::after {
-  content: '';
-  position: absolute;
-  top: -50%; left: -50%;
-  width: 200%; height: 200%;
+  content: ''; position: absolute;
+  top: -50%; left: -50%; width: 200%; height: 200%;
   background: radial-gradient(ellipse 60% 60% at 50% 0%, oklch(68% 0.18 230 / 0.06) 0%, transparent 70%);
   animation: auraPulse 8s ease-in-out infinite alternate;
 }
-@keyframes auraPulse {
-  0% { opacity: 0.4; }
-  100% { opacity: 1; }
-}
-.hero-inner { position: relative; z-index: 1; max-width: 960px; margin: 0 auto; }
-
+@keyframes auraPulse { 0% { opacity: 0.4; } 100% { opacity: 1; } }
+.hero-inner { position: relative; z-index: 1; max-width: 720px; margin: 0 auto; }
 .hero h1 {
   font: 500 32px/1.2 'DM Sans', sans-serif;
-  letter-spacing: -0.02em;
-  margin-bottom: 8px;
-  color: var(--text);
+  letter-spacing: -0.02em; margin-bottom: 8px; color: var(--text);
 }
-.hero p {
-  color: var(--text-2);
-  font-size: 15px;
-  margin-bottom: 32px;
-}
+.hero p { color: var(--text-2); font-size: 15px; margin-bottom: 32px; }
 
-/* ── Search bar ── */
+/* Search bar */
 .search-row {
   display: flex; gap: 10px; align-items: center;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 6px 6px 6px 18px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 6px 6px 6px 18px;
   transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
 }
-.search-row:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px oklch(68% 0.18 230 / 0.12);
-}
+.search-row:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px oklch(68% 0.18 230 / 0.12); }
 .search-row input {
   flex: 1; background: none; border: none; outline: none;
-  color: var(--text); font: 400 15px 'DM Sans', sans-serif;
-  padding: 10px 0;
+  color: var(--text); font: 400 15px 'DM Sans', sans-serif; padding: 10px 0;
 }
 .search-row input::placeholder { color: var(--text-3); }
 
@@ -106,11 +175,8 @@ body { min-height: 100vh; }
 .source-tag {
   padding: 5px 12px; border-radius: var(--radius-sm);
   font-size: 12px; font-weight: 500; cursor: pointer;
-  border: 1px solid var(--border);
-  color: var(--text-2);
-  background: transparent;
-  transition: all 0.15s var(--ease-out);
-  user-select: none;
+  border: 1px solid var(--border); color: var(--text-2);
+  background: transparent; transition: all 0.15s var(--ease-out); user-select: none;
 }
 .source-tag.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .source-tag:hover:not(.active) { border-color: var(--accent-g); color: var(--text); }
@@ -127,25 +193,18 @@ body { min-height: 100vh; }
 .btn-sm { padding: 6px 14px; font-size: 12px; }
 
 /* ── Main content ── */
-.main { max-width: 1200px; margin: 0 auto; padding: 0 32px 80px; }
-
-/* Summary */
+.main { max-width: 960px; margin: 0 auto; padding: 0 32px 80px; }
 .summary { margin: 32px 0 20px; color: var(--text-2); font-size: 13px; }
 
-/* ── Result cards ── */
+/* Result cards */
 .result-card {
   display: flex; align-items: center; gap: 16px;
-  padding: 20px 24px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  margin-bottom: 8px;
+  padding: 20px 24px; border: 1px solid var(--border);
+  border-radius: var(--radius); margin-bottom: 8px;
   background: var(--surface);
   transition: border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
 }
-.result-card:hover {
-  border-color: oklch(40% 0.01 250);
-  box-shadow: 0 2px 16px rgba(0,0,0,0.15);
-}
+.result-card:hover { border-color: oklch(40% 0.01 250); box-shadow: 0 2px 16px rgba(0,0,0,0.15); }
 .result-card .check-col { flex: 0 0 32px; }
 .result-card .check-col input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
 .result-card .card-body { flex: 1; min-width: 0; }
@@ -157,17 +216,15 @@ body { min-height: 100vh; }
 .result-card .card-meta-label { color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
 .result-card .card-actions { flex: 0 0 auto; display: flex; gap: 6px; }
 .result-card .card-actions button {
-  padding: 6px 14px; border-radius: var(--radius-sm);
-  font-size: 12px; cursor: pointer; border: none;
-  background: var(--surface-h); color: var(--text-2);
+  padding: 6px 14px; border-radius: var(--radius-sm); font-size: 12px;
+  cursor: pointer; border: none; background: var(--surface-h); color: var(--text-2);
   transition: all 0.12s var(--ease-out);
 }
 .result-card .card-actions button:hover { background: var(--accent); color: #fff; }
 
 .status-indicator {
   display: inline-flex; align-items: center; gap: 5px;
-  padding: 3px 10px; border-radius: 100px;
-  font-size: 12px; font-weight: 500;
+  padding: 3px 10px; border-radius: 100px; font-size: 12px; font-weight: 500;
 }
 .status-indicator.current { background: oklch(68% 0.16 158 / 0.1); color: var(--success); }
 .status-indicator.expired { background: oklch(58% 0.20 25 / 0.1); color: var(--danger); }
@@ -179,22 +236,12 @@ body { min-height: 100vh; }
 
 .result-card.no-text { opacity: 0.55; }
 .result-card.no-text:hover { opacity: 0.8; }
-.has-text-badge {
-  display: inline-block; padding: 2px 8px; border-radius: 100px;
-  font-size: 11px; font-weight: 500;
-  background: oklch(68% 0.16 158 / 0.1); color: var(--success);
-}
-.no-text-badge {
-  display: inline-block; padding: 2px 8px; border-radius: 100px;
-  font-size: 11px; font-weight: 500;
-  background: oklch(50% 0.05 250 / 0.1); color: var(--text-3);
-}
+.has-text-badge { display: inline-block; padding: 2px 8px; border-radius: 100px; font-size: 11px; font-weight: 500; background: oklch(68% 0.16 158 / 0.1); color: var(--success); }
+.no-text-badge  { display: inline-block; padding: 2px 8px; border-radius: 100px; font-size: 11px; font-weight: 500; background: oklch(50% 0.05 250 / 0.1); color: var(--text-3); }
 
-/* Empty */
 .empty { padding: 64px 24px; text-align: center; color: var(--text-3); }
 .empty p:first-child { font-size: 28px; margin-bottom: 12px; }
 
-/* Toolbar */
 .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .toolbar-left { display: flex; gap: 8px; align-items: center; }
 .badge-count { font-size: 12px; color: var(--text-3); background: var(--surface); padding: 4px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
@@ -202,24 +249,15 @@ body { min-height: 100vh; }
 /* ── Log panel ── */
 .log-panel {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
-  background: oklch(18% 0.015 250 / 0.95);
-  backdrop-filter: blur(24px);
+  background: oklch(18% 0.015 250 / 0.95); backdrop-filter: blur(24px);
   border-top: 1px solid var(--border);
   transition: transform 0.3s var(--ease-out);
 }
 .log-panel.collapsed { transform: translateY(calc(100% - 42px)); }
-.log-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 24px; cursor: pointer; user-select: none;
-  font-size: 13px; font-weight: 500;
-}
+.log-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 24px; cursor: pointer; user-select: none; font-size: 13px; font-weight: 500; }
 .log-header:hover { background: var(--surface); }
 .log-body { max-height: 200px; overflow-y: auto; padding: 0 24px 12px; }
-.log-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 0; border-bottom: 1px solid var(--border);
-  font-size: 13px;
-}
+.log-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
 .log-item:last-child { border: none; }
 .log-time { color: var(--text-3); font: 400 12px 'DM Mono', monospace; min-width: 52px; }
 .log-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -228,15 +266,14 @@ body { min-height: 100vh; }
 .log-status.fail { color: var(--danger); }
 .log-status.pending { color: var(--warning); }
 
-/* ── Progress bar ── */
 .progress-wrap { margin: 0 24px 12px; display: none; }
 .progress-wrap.visible { display: block; }
 .progress-track { height: 3px; background: var(--surface); border-radius: 2px; overflow: hidden; }
 .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s var(--ease-out); width: 0%; }
 
-/* ── Detail modal ── */
+/* ── Modal ── */
 .modal-overlay {
-  position: fixed; inset: 0; z-index: 200;
+  position: fixed; inset: 0; z-index: 400;
   background: rgba(0,0,0,0.5); display: none;
   align-items: center; justify-content: center;
 }
@@ -247,73 +284,186 @@ body { min-height: 100vh; }
   max-width: 560px; width: calc(100% - 48px); max-height: 80vh; overflow-y: auto;
   position: relative;
 }
-.modal-close {
-  position: absolute; top: 16px; right: 16px;
-  background: none; border: none; cursor: pointer;
-  color: var(--text-3); font-size: 20px; line-height: 1;
-}
+.modal-close { position: absolute; top: 16px; right: 16px; background: none; border: none; cursor: pointer; color: var(--text-3); font-size: 20px; line-height: 1; }
 .modal-close:hover { color: var(--text); }
 .modal h3 { font: 500 20px 'DM Sans', sans-serif; margin-bottom: 16px; color: var(--accent); }
 .modal .field { margin-bottom: 12px; }
 .modal .field-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3); margin-bottom: 2px; }
 .modal .field-value { font-size: 14px; color: var(--text); }
 
-/* ── Loading spinner ── */
+/* ── Spinner ── */
 .spinner {
   display: inline-block; width: 16px; height: 16px;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin 0.6s linear infinite;
   vertical-align: middle; margin-right: 6px;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── Scrollbar ── */
+/* Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-/* ── Count-up animation for numbers ── */
-@keyframes countIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+@keyframes countIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 .count-anim { animation: countIn 0.4s var(--ease-spring); }
+
+/* Toggle switch */
+.toggle-switch { display: inline-block; cursor: pointer; position: relative; }
+.toggle-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.toggle-track { display: block; width: 44px; height: 24px; background: var(--border); border-radius: 12px; position: relative; transition: background 0.2s var(--ease-out); }
+.toggle-switch input:checked + .toggle-track { background: var(--accent); }
+.toggle-thumb { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: #fff; border-radius: 50%; transition: transform 0.2s var(--ease-spring); }
+.toggle-switch input:checked + .toggle-track .toggle-thumb { transform: translateX(20px); }
+
+.setting-section .field-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3); }
+.setting-row:hover { background: var(--surface-h); margin: 0 -12px; padding-left: 12px; padding-right: 12px; border-radius: var(--radius-sm); }
+
+/* Sortable drag */
+.sortable-ghost { opacity: 0.3; }
+.sortable-drag { opacity: 0.8; }
+.drag-handle { cursor: grab; color: var(--text-3); padding: 0 4px; user-select: none; }
+.drag-handle:active { cursor: grabbing; }
+
+/* Batch result cards inside panel */
+.batch-result-card {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); margin-bottom: 4px;
+  background: oklch(22% 0.015 250 / 0.5); font-size: 13px;
+}
+.batch-result-card .card-num { font: 500 12px 'DM Mono', monospace; color: var(--accent); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.batch-result-card .card-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.batch-result-card .card-src { font-size: 10px; color: var(--text-3); padding: 2px 6px; background: var(--surface-h); border-radius: var(--radius-sm); flex-shrink: 0; }
+.batch-result-card.unmatched .card-num { color: var(--text-3); }
+.batch-result-card.unmatched .card-title { color: var(--text-3); font-style: italic; }
+
+.batch-textarea {
+  width: 100%; min-height: 140px; padding: 14px 16px;
+  background: oklch(22% 0.015 250 / 0.6); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text);
+  font: 400 13px/1.8 'DM Mono', monospace;
+  resize: vertical; outline: none;
+  transition: border-color 0.2s var(--ease-out);
+}
+.batch-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px oklch(68% 0.18 230 / 0.12); }
+.batch-textarea::placeholder { color: var(--text-3); }
+.batch-actions { display: flex; gap: 8px; margin-top: 12px; align-items: center; flex-wrap: wrap; }
+.batch-summary { margin-top: 12px; font-size: 13px; color: var(--text-2); }
 </style>
 </head>
 <body>
 
+<!-- Left Dock -->
+<nav class="dock" id="dock">
+  <button class="dock-btn active" id="dockSearch" onclick="activatePanel(null)" title="搜索">
+    <span>🔍</span><span class="dock-tooltip">搜索标准</span>
+  </button>
+  <div class="dock-sep"></div>
+  <button class="dock-btn" id="dockBatch" onclick="togglePanel('batch')" title="批量下载">
+    <span>📦</span><span class="dock-tooltip">批量下载</span>
+  </button>
+  <button class="dock-btn" id="dockComplete" onclick="togglePanel('complete')" title="标准补全">
+    <span>📋</span><span class="dock-tooltip">标准补全</span>
+  </button>
+  <div class="dock-sep"></div>
+  <button class="dock-btn" id="dockSettings" onclick="togglePanel('settings')" title="设置">
+    <span>⚙</span><span class="dock-tooltip">下载设置</span>
+  </button>
+</nav>
+
 <section class="hero">
   <div class="hero-inner">
     <h1>标准检索</h1>
-    <p>多源搜索 · 批量下载 · 自动化工作流</p>
-    <div class="search-row">
+    <p>多源搜索 · 批量下载 · 标准补全</p>
+    <div class="search-row" id="searchRow">
       <input type="text" id="searchInput" placeholder="输入标准号或关键词…" autofocus>
       <div class="source-tags">
         <span class="source-tag active" data-source="bz">BZ</span>
         <span class="source-tag active" data-source="gbw">GBW</span>
+        <span class="source-tag active" data-source="by">BY</span>
+        <span class="source-tag active" data-source="bzvip">BZVIP</span>
       </div>
       <button class="btn btn-primary" id="searchBtn">搜索</button>
-      <button class="btn btn-ghost btn-sm" onclick="openSettings()" title="下载优先级设置" style="padding:8px 10px;font-size:14px">⚙</button>
     </div>
   </div>
 </section>
 
 <main class="main">
   <div id="summary" class="summary"></div>
-
   <div class="toolbar" id="toolbar" style="display:none">
     <div class="toolbar-left">
       <span class="badge-count" id="selectedCount">已选 0</span>
       <button class="btn btn-sm btn-primary" id="downloadSelected" disabled>下载选中</button>
+      <button class="btn btn-sm btn-ghost" id="stopDownload" style="display:none;color:var(--danger);border-color:var(--danger)">停止</button>
       <button class="btn btn-sm btn-ghost" id="selectAll">全选</button>
     </div>
   </div>
-
   <div id="results"></div>
 </main>
 
+<!-- Floating panel: Batch download -->
+<div class="float-panel" id="floatBatch" style="top:80px;left:calc(50% - 260px + 40px)">
+  <div class="float-panel-header" id="floatBatchHeader">
+    <div class="panel-accent accent-batch"></div>
+    <span class="panel-icon">📦</span>
+    <span class="panel-title">批量下载</span>
+    <button class="panel-btn" onclick="minimizePanel('batch')" title="最小化">─</button>
+    <button class="panel-btn close" onclick="closePanel('batch')" title="关闭">&times;</button>
+  </div>
+  <div class="float-panel-body" id="floatBatchBody">
+    <textarea class="batch-textarea" id="batchInput" placeholder="粘贴标准号，每行一个&#10;例如：&#10;GB/T 1.1&#10;GB/T 12345-2020&#10;YY/T 0287&#10;DB44/T 1234"></textarea>
+    <div class="batch-actions">
+      <button class="btn btn-primary btn-sm" id="batchResolveBtn" onclick="doBatchResolve()">解析标准号</button>
+      <span style="font-size:11px;color:var(--text-3)" id="batchSourceHint">级联顺序：BZVIP → GBW → BY → BZ（超时 15s）</span>
+    </div>
+    <div class="batch-summary" id="batchSummary"></div>
+    <div id="batchResults"></div>
+    <div class="progress-wrap" id="batchProgressWrap">
+      <div class="progress-track"><div class="progress-fill" id="batchProgressFill"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Floating panel: Spreadsheet completion -->
+<div class="float-panel" id="floatComplete" style="top:100px;left:calc(50% - 260px + 60px)">
+  <div class="float-panel-header" id="floatCompleteHeader">
+    <div class="panel-accent accent-complete"></div>
+    <span class="panel-icon">📋</span>
+    <span class="panel-title">标准补全</span>
+    <button class="panel-btn" onclick="minimizePanel('complete')" title="最小化">─</button>
+    <button class="panel-btn close" onclick="closePanel('complete')" title="关闭">&times;</button>
+  </div>
+  <div class="float-panel-body">
+    <div style="font-size:13px;color:var(--text-2);margin-bottom:16px;line-height:1.6">上传 Excel 或 CSV 文件，程序自动识别 <strong style="color:var(--accent)">A 列</strong> 标准号，输出 <strong style="color:var(--accent)">B 列</strong>（完整标准号）和 <strong style="color:var(--accent)">C 列</strong>（标准名称）。</div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <label class="btn btn-ghost btn-sm" style="cursor:pointer;position:relative">
+        📁 选择文件
+        <input type="file" id="completeFileInput" accept=".xlsx,.xls,.csv" style="position:absolute;opacity:0;width:0;height:0" onchange="onCompleteFileSelected()">
+      </label>
+      <span id="completeFileName" style="font-size:13px;color:var(--text-3)">未选择文件</span>
+      <button class="btn btn-primary btn-sm" id="completeUploadBtn" disabled onclick="doComplete()">上传并补全</button>
+    </div>
+    <div class="batch-summary" id="completeSummary"></div>
+    <div id="completeDownload" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<!-- Floating panel: Settings -->
+<div class="float-panel" id="floatSettings" style="top:120px;left:calc(50% - 260px + 80px)">
+  <div class="float-panel-header" id="floatSettingsHeader">
+    <div class="panel-accent accent-settings"></div>
+    <span class="panel-icon">⚙</span>
+    <span class="panel-title">下载设置</span>
+    <button class="panel-btn" onclick="minimizePanel('settings')" title="最小化">─</button>
+    <button class="panel-btn close" onclick="closePanel('settings')" title="关闭">&times;</button>
+  </div>
+  <div class="float-panel-body" id="settingsBody">
+    <span class="spinner"></span>加载中
+  </div>
+</div>
+
+<!-- Log panel -->
 <div class="log-panel collapsed" id="logPanel">
   <div class="log-header" id="logToggle">
     <span id="logTitle">📋 下载日志</span>
@@ -325,6 +475,7 @@ body { min-height: 100vh; }
   <div class="log-body" id="logBody"></div>
 </div>
 
+<!-- Modal overlay -->
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal" id="modalContent">
     <button class="modal-close" id="modalClose">&times;</button>
@@ -335,21 +486,150 @@ body { min-height: 100vh; }
 <script>
 const API = '';
 
-// ── Settings (localStorage persisted) ──
-const DEFAULT_PRIORITY = ['gbw', 'bz'];
-let downloadPriority = JSON.parse(localStorage.getItem('bzxz_priority') || JSON.stringify(DEFAULT_PRIORITY));
+// ── Settings ──
+const ALL_SOURCES = ['gbw', 'bz', 'by', 'bzvip'];
+const DEFAULT_DOWNLOAD_SOURCES = ['gbw', 'bz', 'by', 'bzvip'];
+const DEFAULT_CONCURRENCY = 3;
 
-function savePriority() { localStorage.setItem('bzxz_priority', JSON.stringify(downloadPriority)); }
+const VALID_CONCURRENCY = [1, 2, 3, 4, 5];
+const VALID_TIMEOUTS = [10, 15, 20, 30, 60];
+
+let downloadSources = JSON.parse(localStorage.getItem('bzxz_download_sources') || JSON.stringify(DEFAULT_DOWNLOAD_SOURCES));
+let downloadConcurrency = (v => VALID_CONCURRENCY.includes(v) ? v : DEFAULT_CONCURRENCY)(parseInt(localStorage.getItem('bzxz_concurrency') || ''));
+let downloadPriority = JSON.parse(localStorage.getItem('bzxz_priority') || JSON.stringify(['bzvip', 'gbw', 'by', 'bz']));
+let downloadTimeout = (v => VALID_TIMEOUTS.includes(v) ? v : 15)(parseInt(localStorage.getItem('bzxz_timeout') || ''));
+let downloadMode = localStorage.getItem('bzxz_download_mode') || 'cascade';
+if (!['cascade', 'race'].includes(downloadMode)) downloadMode = 'cascade';
+let panelPositions = JSON.parse(localStorage.getItem('bzxz_panel_positions') || '{}');
+
+function saveSettings() {
+  localStorage.setItem('bzxz_download_sources', JSON.stringify(downloadSources));
+  localStorage.setItem('bzxz_concurrency', String(downloadConcurrency));
+  localStorage.setItem('bzxz_priority', JSON.stringify(downloadPriority));
+  localStorage.setItem('bzxz_timeout', String(downloadTimeout));
+  localStorage.setItem('bzxz_download_mode', downloadMode);
+}
+function savePanelPositions() {
+  try { localStorage.setItem('bzxz_panel_positions', JSON.stringify(panelPositions)); }
+  catch { /* quota exceeded — non-critical */ }
+}
 
 // ── State ──
 let results = [];
-let selectedSources = new Set(downloadPriority);
+let selectedSources = new Set(ALL_SOURCES);
 let selectedIds = new Set();
 let logEntries = [];
 let isDownloading = false;
 let searchAborted = false;
+let activePanelId = null;
 
-// ── Init source tags from config ──
+// ── Panel management ──
+let activeDrag = null;
+
+function initPanels() {
+  ['batch', 'complete', 'settings'].forEach(id => {
+    const panel = document.getElementById('float' + id.charAt(0).toUpperCase() + id.slice(1));
+    const header = document.getElementById(panel.id + 'Header');
+    if (!panel || !header) return;
+
+    // Restore position
+    if (panelPositions[id]) {
+      const { top, left } = panelPositions[id];
+      panel.style.top = top; panel.style.left = left;
+    }
+
+    // Drag start
+    header.addEventListener('mousedown', e => {
+      if (e.target.closest('.panel-btn')) return;
+      activeDrag = { panel, id, startX: e.clientX, startY: e.clientY, origLeft: panel.offsetLeft, origTop: panel.offsetTop };
+      panel.style.transition = 'none';
+    });
+  });
+
+  // Shared drag move/end (registered once)
+  document.addEventListener('mousemove', e => {
+    if (!activeDrag) return;
+    const { panel, startX, startY, origLeft, origTop } = activeDrag;
+    panel.style.left = Math.max(0, Math.min(window.innerWidth - panel.offsetWidth, origLeft + e.clientX - startX)) + 'px';
+    panel.style.top = Math.max(0, Math.min(window.innerHeight - 60, origTop + e.clientY - startY)) + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!activeDrag) return;
+    const { panel, id } = activeDrag;
+    activeDrag = null;
+    panel.style.transition = '';
+    panelPositions[id] = { top: panel.style.top, left: panel.style.left };
+    savePanelPositions();
+  });
+}
+
+function togglePanel(id) {
+  const panel = document.getElementById('float' + id.charAt(0).toUpperCase() + id.slice(1));
+  if (!panel) return;
+  if (activePanelId === id) {
+    closePanel(id);
+    return;
+  }
+  if (activePanelId) closePanel(activePanelId);
+  openPanel(id);
+}
+
+function openPanel(id) {
+  const panel = document.getElementById('float' + id.charAt(0).toUpperCase() + id.slice(1));
+  if (!panel) return;
+  panel.classList.add('open');
+  panel.classList.remove('minimized');
+  activePanelId = id;
+
+  // Update dock buttons
+  document.querySelectorAll('.dock-btn').forEach(b => b.classList.remove('active'));
+  const dockBtn = document.getElementById('dock' + id.charAt(0).toUpperCase() + id.slice(1));
+  if (dockBtn) dockBtn.classList.add('active');
+
+  // Restore minimized body
+  const body = panel.querySelector('.float-panel-body');
+  if (body) body.style.display = '';
+
+  // Render settings on open
+  if (id === 'settings') renderSettings();
+  if (id === 'batch') updateBatchSourceHint();
+
+  // Bring to front
+  panel.style.zIndex = 260;
+  updatePanelZIndices(id);
+}
+
+function closePanel(id) {
+  const panel = document.getElementById('float' + id.charAt(0).toUpperCase() + id.slice(1));
+  if (!panel) return;
+  panel.classList.remove('open', 'minimized');
+  if (activePanelId === id) activePanelId = null;
+  document.querySelectorAll('.dock-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('dockSearch').classList.add('active');
+}
+
+function minimizePanel(id) {
+  const panel = document.getElementById('float' + id.charAt(0).toUpperCase() + id.slice(1));
+  if (!panel) return;
+  panel.classList.add('minimized');
+  const body = panel.querySelector('.float-panel-body');
+  if (body) body.style.display = 'none';
+}
+
+function activatePanel(id) {
+  if (activePanelId) closePanel(activePanelId);
+  document.querySelectorAll('.dock-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('dockSearch').classList.add('active');
+}
+
+function updatePanelZIndices(topId) {
+  ['batch', 'complete', 'settings'].forEach(id => {
+    const panel = document.getElementById('float' + id.charAt(0).toUpperCase() + id.slice(1));
+    if (panel) panel.style.zIndex = id === topId ? 260 : 250;
+  });
+}
+
+// ── Source tag init ──
 document.querySelectorAll('.source-tag').forEach(tag => {
   const src = tag.dataset.source;
   if (selectedSources.has(src)) tag.classList.add('active'); else tag.classList.remove('active');
@@ -359,58 +639,37 @@ document.querySelectorAll('.source-tag').forEach(tag => {
   });
 });
 
-// ── Search with parallel fetch ──
+// ── Search ──
 async function doSearch() {
   const q = document.getElementById('searchInput').value.trim();
   if (!q) return;
-
   document.getElementById('searchBtn').innerHTML = '<span class="spinner"></span>搜索中';
   document.getElementById('searchBtn').disabled = true;
-  results = [];
-  selectedIds.clear();
-  updateToolbar();
-  searchAborted = false;
+  results = []; selectedIds.clear(); updateToolbar(); searchAborted = false;
 
-  // Build search promises for all selected sources
   const sources = [...selectedSources];
   const promises = sources.map(src => {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 15000);
     return fetch(`${API}/api/standards/search?q=${encodeURIComponent(q)}&source=${src}`, { signal: ctrl.signal })
-      .then(r => r.json())
-      .then(data => ({ ok: true, src, items: (data.items || []).map(i => ({ ...i, _source: src })) }))
+      .then(r => r.json()).then(data => ({ ok: true, src, items: (data.items || []).map(i => ({ ...i, _source: src })) }))
       .catch(e => ({ ok: false, src, error: e.name === 'AbortError' ? '超时' : e.message }))
       .finally(() => clearTimeout(timer));
   });
 
-  // Receive results incrementally
-  let receivedCount = 0;
-  const receivedResults = [];
-
+  let receivedCount = 0; const receivedResults = [];
   for (const p of promises) {
-    const outcome = await p;
-    receivedCount++;
+    const outcome = await p; receivedCount++;
     if (searchAborted) break;
-
-    if (outcome.ok) {
-      receivedResults.push(...outcome.items);
-      addLog(`搜索 ${outcome.src} 完成 (+${outcome.items.length} 条)`, 'success');
-    } else {
-      addLog(`搜索 ${outcome.src} 失败: ${outcome.error}`, 'fail');
-    }
-
-    // Merge + deduplicate by standardNumber, then sort
-    results = dedupeResults(receivedResults);
-    results.sort(sortByStatus);
+    if (outcome.ok) { receivedResults.push(...outcome.items); addLog(`搜索 ${outcome.src} 完成 (+${outcome.items.length} 条)`, 'success'); }
+    else { addLog(`搜索 ${outcome.src} 失败: ${outcome.error}`, 'fail'); }
+    results = dedupeResults(receivedResults); results.sort(sortByStatus);
     document.getElementById('summary').innerHTML = `<span class="count-anim">找到 ${results.length} 条结果 (${receivedCount}/${sources.length} 源)</span>`;
     document.getElementById('toolbar').style.display = results.length > 0 ? 'flex' : 'none';
     if (results.length > 0) renderResults();
     updateToolbar();
   }
-
-  document.getElementById('searchBtn').innerHTML = '搜索';
-  document.getElementById('searchBtn').disabled = false;
-
+  document.getElementById('searchBtn').innerHTML = '搜索'; document.getElementById('searchBtn').disabled = false;
   if (results.length === 0 && !searchAborted) {
     document.getElementById('results').innerHTML = `<div class="empty"><p>—</p><p>未找到相关标准</p><p style="font-size:13px;color:var(--text-3)">尝试更换关键词或数据源</p></div>`;
     document.getElementById('toolbar').style.display = 'none';
@@ -423,42 +682,23 @@ function dedupeResults(items) {
     const key = item.standardNumber.replace(/[^A-Z0-9]/gi, '').toUpperCase();
     if (map.has(key)) {
       const existing = map.get(key);
-      if (!existing.sources.includes(item._source)) {
-        existing.sources.push(item._source);
-        existing._multiSource = existing.sources.join('+');
-      }
-      // Keep the result with more fields filled
+      if (!existing.sources.includes(item._source)) { existing.sources.push(item._source); existing._multiSource = existing.sources.join('+'); }
       if (!existing.title && item.title) existing.title = item.title;
       if (!existing.publishDate && item.publishDate) existing.publishDate = item.publishDate;
       if (!existing.implementDate && item.implementDate) existing.implementDate = item.implementDate;
-    } else {
-      map.set(key, { ...item, sources: [item._source], _multiSource: item._source });
-    }
+    } else { map.set(key, { ...item, sources: [item._source], _multiSource: item._source }); }
   }
   return [...map.values()];
 }
 
 function sortByStatus(a, b) {
-  const pa = statusPriority(a.status);
-  const pb = statusPriority(b.status);
+  const pa = statusPriority(a.status), pb = statusPriority(b.status);
   if (pa !== pb) return pa - pb;
-  // Within same status, those with text first
   if (a.previewAvailable !== b.previewAvailable) return a.previewAvailable ? -1 : 1;
   return 0;
 }
 function statusPriority(s) {
-  if (!s) return 3;
-  if (s.includes('现行')) return 0;
-  if (s.includes('即将实施')) return 1;
-  if (s.includes('废止')) return 4;
-  return 2;
-}
-
-function getDownloadSource(item) {
-  for (const src of downloadPriority) {
-    if (item.sources && item.sources.includes(src)) return src;
-  }
-  return item._source || item.sources?.[0] || '';
+  if (!s) return 3; if (s.includes('现行')) return 0; if (s.includes('即将实施')) return 1; if (s.includes('废止')) return 4; return 2;
 }
 
 document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
@@ -467,9 +707,8 @@ document.getElementById('searchBtn').addEventListener('click', doSearch);
 // ── Render cards ──
 function renderResults() {
   const cards = results.map((r, i) => {
-    const srcBadges = (r.sources || [r._source]).map(s => `<span class="source-badge source-${s}">${s.toUpperCase()}</span>`).join(' ');
-    const sCls = statusClass(r.status);
-    const hasText = r.previewAvailable;
+    const srcBadges = (r.sources || [r._source]).map(s => `<span class="source-badge source-${escapeHtml(String(s))}">${escapeHtml(String(s).toUpperCase())}</span>`).join(' ');
+    const sCls = statusClass(r.status); const hasText = r.previewAvailable;
     return `
     <div class="result-card${hasText ? '' : ' no-text'}">
       <div class="check-col"><input type="checkbox" data-idx="${i}" ${selectedIds.has(r.id) ? 'checked' : ''}></div>
@@ -488,36 +727,33 @@ function renderResults() {
         </div>
       </div>
       <div class="card-actions">
-        <button onclick="showDetail('${r.id}')">详情</button>
-        <button onclick="downloadOne('${r.id}')" ${hasText ? '' : 'disabled'}>下载</button>
+        <button data-action="detail" data-id="${escapeHtml(r.id)}">详情</button>
+        <button data-action="download" data-id="${escapeHtml(r.id)}" ${hasText ? '' : 'disabled'}>下载</button>
       </div>
     </div>`;
   }).join('');
-
   document.getElementById('results').innerHTML = cards;
-
   document.querySelectorAll('input[data-idx]').forEach(cb => {
     cb.addEventListener('change', () => {
-      const r = results[parseInt(cb.dataset.idx)];
+      const idx = parseInt(cb.dataset.idx);
+      const r = results[idx];
+      if (!r) return;
       cb.checked ? selectedIds.add(r.id) : selectedIds.delete(r.id);
       updateToolbar();
     });
   });
 }
 
-function statusClass(s) {
-  if (!s) return '';
-  if (s.includes('废止')) return 'expired';
-  if (s.includes('实施')) return 'upcoming';
-  if (s.includes('现行')) return 'current';
-  return '';
-}
+// Delegated event handler for result card buttons
+document.getElementById('results').addEventListener('click', e => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  if (btn.dataset.action === 'detail') showDetail(id);
+  else if (btn.dataset.action === 'download') downloadOne(id);
+});
 
-function statusBadge(s) {
-  if (!s) return '—';
-  const cls = statusClass(s);
-  return `<span class="status-indicator ${cls}"><span class="dot"></span>${escapeHtml(s)}</span>`;
-}
+function statusClass(s) { if (!s) return ''; if (s.includes('废止')) return 'expired'; if (s.includes('实施')) return 'upcoming'; if (s.includes('现行')) return 'current'; return ''; }
 
 // ── Toolbar ──
 function updateToolbar() {
@@ -528,161 +764,532 @@ function updateToolbar() {
 document.getElementById('selectAll').addEventListener('click', () => {
   const all = selectedIds.size === results.length && results.length > 0;
   results.forEach(r => all ? selectedIds.delete(r.id) : selectedIds.add(r.id));
-  renderResults();
-  updateToolbar();
+  renderResults(); updateToolbar();
 });
 
-// ── Download with priority ──
+// ── Download functions ──
+let downloadAborted = false;
+
 async function downloadOne(id) {
-  const r = results.find(r => r.id === id);
-  if (!r) return;
-  const dlSrc = getDownloadSource(r);
-  const dlMethod = dlSrc === 'gbw' ? 'auto-download' : 'export';
-
-  addLog(`${r.standardNumber} [${dlSrc.toUpperCase()}] 开始下载`, 'pending');
+  const r = results.find(r => r.id === id); if (!r) return;
+  downloadAborted = false;
+  const sources = (r.sources || [r._source]).filter(s => downloadSources.includes(s));
+  if (!sources.length) { addLog(`${r.standardNumber} 无可用下载源`, 'fail'); return; }
+  addLog(`${r.standardNumber} 竞速 [${sources.map(s => s.toUpperCase()).join('+')}]`, 'pending');
   try {
-    const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/${dlMethod}`, { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) {
-      const errMsg = data.message || data.error || `HTTP ${res.status}`;
-      if (errMsg.includes('captcha') || data.code === 'UPSTREAM_ERROR') {
-        addLog(`${r.standardNumber} ${dlSrc.toUpperCase()}下载需要验证码，使用备选源重试`, 'fail');
-        return tryFallbackDownload(id, r, dlSrc);
-      }
-      addLog(`${r.standardNumber} 下载失败: ${errMsg}`, 'fail');
-      return;
-    }
-
-    // gbw auto-download returns result directly
-    if (dlMethod === 'auto-download') {
-      if (data.status === 'downloaded') {
-        const fname = data.meta?.fileName || data.fileName || '';
-        addLog(`${r.standardNumber} ✅ ${fname || '完成'}`, 'success');
-        if (fname) triggerDownload(fname);
-        return;
-      }
-      if (data.status === 'failed') {
-        addLog(`${r.standardNumber} ❌ 验证码识别失败，使用备选源重试`, 'fail');
-        return tryFallbackDownload(id, r, dlSrc);
-      }
-      addLog(`${r.standardNumber} ⏳ 状态: ${data.status}`, 'pending');
-      return;
-    }
-
-    // bz export returns a task, poll it
-    addLog(`${r.standardNumber} [${dlSrc.toUpperCase()}] 队列中`, 'pending');
-    for (let i = 0; i < 45; i++) {
-      await sleep(2000);
-      const tr = await fetch(`${API}/api/tasks/${data.id}`);
-      const td = await tr.json();
-      if (td.status === 'success') {
-        const fname = td.fileName || '';
-        addLog(`${r.standardNumber} ✅ ${fname || '完成'}`, 'success');
-        if (fname) triggerDownload(fname);
-        return;
-      }
-      if (td.status === 'failed') { addLog(`${r.standardNumber} ❌ ${td.errorMessage || ''}`, 'fail'); return; }
-    }
-    addLog(`${r.standardNumber} ⏰ 超时`, 'fail');
-  } catch (e) { addLog(`${r.standardNumber} 失败: ${e.message}`, 'fail'); }
-}
-
-async function tryFallbackDownload(id, r, failedSrc) {
-  // Find next priority source that is different from the failed one
-  for (const src of downloadPriority) {
-    if (src === failedSrc) continue;
-    if (!r.sources || !r.sources.includes(src)) continue;
-    addLog(`${r.standardNumber} 回退到 ${src.toUpperCase()} 源重试`, 'pending');
-    const altR = { ...r, _source: src, sources: r.sources };
-    // Temporarily override priority
-    const orig = downloadPriority;
-    downloadPriority = [src, ...orig.filter(s => s !== src)];
-    await downloadOne(id);
-    downloadPriority = orig;
-    return;
+    const winner = await Promise.any(sources.map(s => raceSource(r.id, s, r.standardNumber)));
+    addLog(`${r.standardNumber} ✅ ${winner.source.toUpperCase()}胜出 ${winner.fileName}`, 'success');
+    if (winner.fileName) triggerDownload(winner.fileName);
+  } catch (e) {
+    const msgs = e instanceof AggregateError ? [...new Set(e.errors.map(err => err.message))].slice(0, 3).join('; ') : (e.message || '未知错误');
+    addLog(`${r.standardNumber} ❌ ${msgs}`, 'fail');
   }
-  addLog(`${r.standardNumber} 所有源均下载失败`, 'fail');
 }
+
+function raceSource(standardId, source, label) {
+  switch (source) {
+    case 'gbw': return downloadGbw(standardId);
+    case 'bz':  return downloadBz(standardId);
+    case 'by':    return downloadBy(standardId);
+    case 'bzvip': return downloadBzVip(standardId);
+    default: return Promise.reject(new Error(`Unknown source ${source}`));
+  }
+}
+
+async function downloadGbw(id) {
+  const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/auto-download`, { method: 'POST' });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`GBW HTTP${res.status}`);
+  if (data.status === 'downloaded') return { source: 'gbw', fileName: data.meta?.fileName || data.fileName || '' };
+  throw new Error(`GBW ${data.status}`);
+}
+
+async function downloadBz(id) {
+  const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/export`, { method: 'POST' });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`BZ HTTP${res.status}`);
+  for (let i = 0; i < 45; i++) {
+    await sleep(2000);
+    const tr = await fetch(`${API}/api/tasks/${data.id}`); const td = await tr.json();
+    if (td.status === 'success') return { source: 'bz', fileName: td.fileName || '' };
+    if (td.status === 'failed') throw new Error(`BZ ${td.errorMessage || '失败'}`);
+  }
+  throw new Error('BZ轮询超时');
+}
+
+async function downloadBy(id) {
+  const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/export`, { method: 'POST' });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`BY HTTP${res.status}`);
+  for (let i = 0; i < 30; i++) {
+    await sleep(1000);
+    const tr = await fetch(`${API}/api/tasks/${data.id}`); const td = await tr.json();
+    if (td.status === 'success') return { source: 'by', fileName: td.fileName || '' };
+    if (td.status === 'failed') throw new Error(`BY ${td.errorMessage || '失败'}`);
+  }
+  throw new Error('BY轮询超时');
+}
+
+async function downloadBzVip(id) {
+  const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/auto-download`, { method: 'POST' });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`BZVIP HTTP${res.status}`);
+  if (data.status === 'downloaded') return { source: 'bzvip', fileName: data.meta?.fileName || data.fileName || '' };
+  throw new Error(`BZVIP ${data.status}`);
+}
+
+function stopAllDownloads() { downloadAborted = true; addLog('⏹ 中止下载', 'fail'); }
 
 document.getElementById('downloadSelected').addEventListener('click', async () => {
   if (isDownloading) return;
-  isDownloading = true;
+  isDownloading = true; downloadAborted = false;
   document.getElementById('downloadSelected').disabled = true;
-  const progress = document.getElementById('progressWrap');
-  const fill = document.getElementById('progressFill');
+  document.getElementById('stopDownload').style.display = 'inline-block';
+  const selected = results.filter(r => selectedIds.has(r.id));
+  const total = selected.length; let completed = 0, success = 0, failed = 0; const wins = {};
+  const t0 = Date.now();
+  const progress = document.getElementById('progressWrap'); const fill = document.getElementById('progressFill');
   progress.classList.add('visible');
-  const ids = [...selectedIds];
-  updateToolbar();
-
-  for (let i = 0; i < ids.length; i++) {
-    fill.style.width = `${((i) / ids.length) * 100}%`;
-    await downloadOne(ids[i]);
-    fill.style.width = `${((i + 1) / ids.length) * 100}%`;
+  const queue = [...selected];
+  async function worker() {
+    while (queue.length > 0 && !downloadAborted) {
+      const item = queue.shift();
+      const sources = (item.sources || [item._source]).filter(s => downloadSources.includes(s));
+      if (!sources.length) { completed++; failed++; continue; }
+      addLog(`${item.standardNumber} 竞速 [${sources.map(s => s.toUpperCase()).join('+')}]`, 'pending');
+      try {
+        const winner = await Promise.any(sources.map(s => raceSource(item.id, s, item.standardNumber)));
+        success++; wins[winner.source] = (wins[winner.source] || 0) + 1;
+        addLog(`${item.standardNumber} ✅ ${winner.source.toUpperCase()}胜出 ${winner.fileName}`, 'success');
+        if (winner.fileName) triggerDownload(winner.fileName);
+      } catch (e) {
+        failed++;
+        const msgs = e instanceof AggregateError ? [...new Set(e.errors.map(err => err.message))].slice(0, 3).join('; ') : (e.message || '未知错误');
+        addLog(`${item.standardNumber} ❌ ${msgs}`, 'fail');
+      }
+      completed++; fill.style.width = `${(completed / total) * 100}%`;
+    }
   }
-  fill.style.width = '100%';
-  setTimeout(() => { progress.classList.remove('visible'); fill.style.width = '0%'; }, 1500);
-  isDownloading = false;
-  updateToolbar();
+  const workers = Array.from({ length: downloadConcurrency }, () => worker());
+  await Promise.all(workers);
+  const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+  const winSummary = Object.entries(wins).map(([k, v]) => `${k.toUpperCase()}:${v}`).join(' ');
+  addLog(`完成 ${success}/${total} · ${elapsed}s · ${winSummary || '无'}`, 'success');
+  setTimeout(() => { progress.classList.remove('visible'); fill.style.width = '0%'; }, 2000);
+  document.getElementById('stopDownload').style.display = 'none'; isDownloading = false; updateToolbar();
 });
+document.getElementById('stopDownload').addEventListener('click', stopAllDownloads);
 
-// ── Settings panel ──
-function openSettings() {
-  const dlItems = downloadPriority.map((s, i) => `
-    <div class="priority-row" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
-      <span style="color:var(--text-3);font-size:12px;min-width:20px">${i + 1}.</span>
-      <span class="source-badge source-${s}">${s.toUpperCase()}</span>
-      <span style="flex:1;font-size:13px;color:var(--text-2)">${i === 0 ? '首选下载源' : ''}</span>
-      <button onclick="movePriority(${i}, -1)" ${i === 0 ? 'disabled' : ''} style="background:none;border:none;color:var(--text-3);cursor:pointer;font-size:16px">▲</button>
-      <button onclick="movePriority(${i}, 1)" ${i === downloadPriority.length - 1 ? 'disabled' : ''} style="background:none;border:none;color:var(--text-3);cursor:pointer;font-size:16px">▼</button>
+// ── Batch download (floating panel) ──
+let batchResolved = [], batchUnmatched = [], batchDownloading = false, batchAborted = false;
+
+function updateBatchSourceHint() {
+  const sources = downloadPriority.filter(s => downloadSources.includes(s));
+  const labels = { bzvip: 'BZVIP', gbw: 'GBW', by: 'BY', bz: 'BZ' };
+  const el = document.getElementById('batchSourceHint');
+  if (downloadMode === 'race') {
+    if (el) el.textContent = `竞速模式：${sources.map(s => labels[s]||s).join(' + ')} 同时发起（超时 ${downloadTimeout}s）`;
+  } else {
+    if (el) el.textContent = `级联顺序：${sources.map(s => labels[s]||s).join(' → ')}（超时 ${downloadTimeout}s）`;
+  }
+}
+
+async function doBatchResolve() {
+  const raw = document.getElementById('batchInput').value;
+  const lines = raw.split(/[\n\r]+/).map(s => s.trim()).filter(Boolean);
+  if (!lines.length) { addLog('请粘贴标准号', 'fail'); return; }
+  document.getElementById('batchResolveBtn').disabled = true;
+  document.getElementById('batchResolveBtn').innerHTML = '<span class="spinner"></span>解析中';
+  document.getElementById('batchSummary').innerHTML = ''; document.getElementById('batchResults').innerHTML = '';
+  batchResolved = []; batchUnmatched = [];
+  try {
+    const sources = downloadPriority.filter(s => downloadSources.includes(s));
+    const res = await fetch(`${API}/api/standards/resolve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lines, sources }) });
+    const data = await res.json();
+    batchResolved = data.resolved || []; batchUnmatched = data.unmatched || [];
+    document.getElementById('batchSummary').innerHTML = `解析完成：<span style="color:var(--success)">匹配 ${batchResolved.length}</span> / <span style="color:var(--danger)">未匹配 ${batchUnmatched.length}</span> / 总计 ${lines.length}`;
+    renderBatchResults();
+    addLog(`批量解析: ${batchResolved.length} 匹配, ${batchUnmatched.length} 未匹配`, 'success');
+  } catch (e) { addLog(`解析失败: ${e.message}`, 'fail'); }
+  document.getElementById('batchResolveBtn').disabled = false;
+  document.getElementById('batchResolveBtn').innerHTML = '解析标准号';
+}
+
+function renderBatchResults() {
+  const resolvedCards = batchResolved.map((r, i) => `
+    <div class="batch-result-card">
+      <input type="checkbox" id="br_${i}" checked style="accent-color:var(--accent);cursor:pointer;flex-shrink:0" onchange="updateBatchToolbar()">
+      <span class="card-num" style="flex:0 0 150px" title="${escapeHtml(r.standardNumber)}">${escapeHtml(r.standardNumber)}</span>
+      <span class="card-title" style="flex:1" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</span>
+      <span class="card-src">${r.source.toUpperCase()}</span>
     </div>`).join('');
+  const unmatchedCards = batchUnmatched.map(u => `
+    <div class="batch-result-card unmatched">
+      <span class="card-num" style="flex:0 0 150px">${escapeHtml(u.input)}</span>
+      <span class="card-title" style="flex:1">${escapeHtml(u.reason)}</span>
+    </div>`).join('');
+  const toolbar = batchResolved.length > 0 ? `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;margin-top:10px">
+      <span class="badge-count" id="batchSelectedCount">已选 ${batchResolved.length}</span>
+      <button class="btn btn-sm btn-primary" id="batchDownloadBtn" onclick="doBatchDownload()">${downloadMode === 'race' ? '竞速下载选中' : '级联下载选中'}</button>
+      <button class="btn btn-sm btn-ghost" id="batchStopBtn" onclick="stopBatchDownload()" style="display:none;color:var(--danger);border-color:var(--danger)">停止</button>
+      <button class="btn btn-sm btn-ghost" onclick="toggleBatchSelect()">全选/取消</button>
+    </div>` : '';
+  document.getElementById('batchResults').innerHTML = toolbar + resolvedCards + unmatchedCards;
+  updateBatchSourceHint();
+}
 
+function toggleBatchSelect() {
+  const checks = document.querySelectorAll('#batchResults input[type="checkbox"]');
+  const allChecked = [...checks].every(c => c.checked);
+  checks.forEach(c => { c.checked = !allChecked; });
+  updateBatchToolbar();
+}
+
+function updateBatchToolbar() {
+  const checks = document.querySelectorAll('#batchResults input[type="checkbox"]:checked');
+  const el = document.getElementById('batchSelectedCount');
+  if (el) el.textContent = `已选 ${checks.length}`;
+}
+
+async function doBatchDownload() {
+  if (downloadMode === 'race') return doRaceDownload();
+  return doCascadeDownload();
+}
+
+async function doCascadeDownload() {
+  if (batchDownloading) return;
+  batchDownloading = true; batchAborted = false;
+  const checks = document.querySelectorAll('#batchResults input[type="checkbox"]:checked');
+  const items = []; checks.forEach((c, i) => { if (c.checked) items.push(batchResolved[i]); });
+  if (!items.length) { batchDownloading = false; return; }
+  document.getElementById('batchDownloadBtn').disabled = true;
+  document.getElementById('batchStopBtn').style.display = 'inline-block';
+  document.getElementById('batchProgressWrap').classList.add('visible');
+  const fill = document.getElementById('batchProgressFill'); fill.style.width = '0%';
+  const sources = downloadPriority.filter(s => downloadSources.includes(s));
+  const total = items.length; let completed = 0, success = 0; const successItems = [], allFailedItems = [];
+  const t0 = Date.now();
+
+  for (let round = 0; round < sources.length; round++) {
+    if (batchAborted) break;
+    const source = sources[round];
+    const remaining = items.filter(it => !successItems.some(s => s.standardId === it.standardId));
+    if (remaining.length === 0) break;
+    addLog(`━━ 第${round + 1}轮: ${source.toUpperCase()} (${remaining.length}条待下载)`, 'pending');
+    const queue = [...remaining];
+    async function worker() {
+      while (queue.length > 0 && !batchAborted) {
+        const item = queue.shift();
+        try {
+          const winner = await raceSourceWithTimeout(item.standardId, source, item.standardNumber, downloadTimeout * 1000);
+          addLog(`${item.standardNumber} ✅ ${source.toUpperCase()} ${winner.fileName}`, 'success');
+          success++; successItems.push(item);
+          if (winner.fileName) triggerDownload(winner.fileName);
+        } catch (e) {
+          addLog(`${item.standardNumber} ⚠ ${source.toUpperCase()} ${(e && e.message) || 'fail'}`, 'fail');
+        }
+        completed++; fill.style.width = `${Math.round((completed / total) * 100)}%`;
+      }
+    }
+    const workers = Array.from({ length: downloadConcurrency }, () => worker());
+    await Promise.all(workers);
+    if (remaining.filter(it => !successItems.some(s => s.standardId === it.standardId)).length === 0) break;
+  }
+  const finalFailed = items.filter(it => !successItems.some(s => s.standardId === it.standardId));
+  finalFailed.forEach(it => { allFailedItems.push(it); addLog(`${it.standardNumber} ❌ 所有源均失败`, 'fail'); });
+  const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+  addLog(`━━ 批量下载完成: ${success}/${total} 成功 (${elapsed}s)`, 'success');
+  showBatchResultModal(successItems, allFailedItems, finalFailed, elapsed);
+  batchDownloading = false;
+  document.getElementById('batchDownloadBtn').disabled = false;
+  document.getElementById('batchStopBtn').style.display = 'none';
+}
+
+async function doRaceDownload() {
+  if (batchDownloading) return;
+  batchDownloading = true; batchAborted = false;
+  const checks = document.querySelectorAll('#batchResults input[type="checkbox"]:checked');
+  const items = []; checks.forEach((c, i) => { if (c.checked) items.push(batchResolved[i]); });
+  if (!items.length) { batchDownloading = false; return; }
+  document.getElementById('batchDownloadBtn').disabled = true;
+  document.getElementById('batchStopBtn').style.display = 'inline-block';
+  document.getElementById('batchProgressWrap').classList.add('visible');
+  const fill = document.getElementById('batchProgressFill'); fill.style.width = '0%';
+  const sources = downloadPriority.filter(s => downloadSources.includes(s));
+  const total = items.length; let completed = 0, success = 0; const successItems = [], allFailedItems = [], wins = {};
+  const t0 = Date.now();
+  const queue = [...items];
+  async function worker() {
+    while (queue.length > 0 && !batchAborted) {
+      const item = queue.shift();
+      const sourceList = (sources.length > 0 ? sources : ['bzvip']).filter(s => downloadSources.includes(s));
+      addLog(`${item.standardNumber} 竞速 [${sourceList.map(s => s.toUpperCase()).join('+')}]`, 'pending');
+      try {
+        const winner = await Promise.any(sourceList.map(s => raceSourceWithTimeout(item.standardId, s, item.standardNumber, downloadTimeout * 1000)));
+        success++; successItems.push(item); wins[winner.source] = (wins[winner.source] || 0) + 1;
+        addLog(`${item.standardNumber} ✅ ${winner.source.toUpperCase()}胜出 ${winner.fileName}`, 'success');
+        if (winner.fileName) triggerDownload(winner.fileName);
+      } catch (e) {
+        allFailedItems.push(item);
+        const msgs = e instanceof AggregateError ? [...new Set(e.errors.map(err => err.message))].slice(0, 3).join('; ') : (e.message || '未知错误');
+        addLog(`${item.standardNumber} ❌ ${msgs}`, 'fail');
+      }
+      completed++; fill.style.width = `${Math.round((completed / total) * 100)}%`;
+    }
+  }
+  const workers = Array.from({ length: downloadConcurrency }, () => worker());
+  await Promise.all(workers);
+  const finalFailed = items.filter(it => !successItems.some(s => s.standardId === it.standardId));
+  const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+  const winSummary = Object.entries(wins).map(([k, v]) => `${k.toUpperCase()}:${v}`).join(' ');
+  addLog(`━━ 竞速完成: ${success}/${total} 成功 [${winSummary}] (${elapsed}s)`, 'success');
+  showBatchResultModal(successItems, allFailedItems, finalFailed, elapsed);
+  batchDownloading = false;
+  document.getElementById('batchDownloadBtn').disabled = false;
+  document.getElementById('batchStopBtn').style.display = 'none';
+}
+
+function stopBatchDownload() { batchAborted = true; addLog('⏹ 中止批量下载', 'fail'); }
+
+function raceSourceWithTimeout(standardId, source, label, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), timeoutMs);
+    const p = raceSource(standardId, source, label);
+    p.then(
+      result => { clearTimeout(timer); resolve(result); },
+      err => { clearTimeout(timer); reject(err); }
+    );
+  });
+}
+
+function showBatchResultModal(successItems, allFailedItems, finalFailed, elapsed) {
+  const total = successItems.length + finalFailed.length;
+  const successRows = successItems.map(it => `
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;border-bottom:1px solid var(--border)">
+      <span style="color:var(--success)">✅</span>
+      <span style="font:500 13px 'DM Mono',monospace;color:var(--accent);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(it.standardNumber)}</span>
+    </div>`).join('');
+  const failRows = finalFailed.map(it => `
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;border-bottom:1px solid var(--border)">
+      <span style="color:var(--danger)">❌</span>
+      <span style="font:500 13px 'DM Mono',monospace;color:var(--text-3);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(it.standardNumber)}</span>
+    </div>`).join('');
   document.getElementById('modalBody').innerHTML = `
-    <h3>下载优先级</h3>
-    <p style="font-size:13px;color:var(--text-3);margin-bottom:16px">排第一的源优先用于下载</p>
-    ${dlItems}
-    <button class="btn btn-primary btn-sm" style="margin-top:16px" onclick="document.getElementById('modalOverlay').classList.remove('open')">关闭</button>`;
+    <h3 style="margin-bottom:16px">📊 批量下载结果</h3>
+    <div style="display:flex;gap:16px;margin-bottom:20px">
+      <div style="flex:1;text-align:center;padding:12px;background:oklch(68% 0.16 158 / 0.08);border-radius:var(--radius-sm)">
+        <div style="font-size:24px;font-weight:600;color:var(--success)">${successItems.length}</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:2px">成功</div>
+      </div>
+      <div style="flex:1;text-align:center;padding:12px;background:oklch(58% 0.20 25 / 0.08);border-radius:var(--radius-sm)">
+        <div style="font-size:24px;font-weight:600;color:var(--danger)">${finalFailed.length}</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:2px">失败</div>
+      </div>
+      <div style="flex:1;text-align:center;padding:12px;background:var(--surface-h);border-radius:var(--radius-sm)">
+        <div style="font-size:24px;font-weight:600;color:var(--text)">${total}</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:2px">总计</div>
+      </div>
+      <div style="flex:1;text-align:center;padding:12px;background:var(--surface-h);border-radius:var(--radius-sm)">
+        <div style="font-size:24px;font-weight:600;color:var(--text-2)">${elapsed}s</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:2px">耗时</div>
+      </div>
+    </div>
+    ${successItems.length > 0 ? `<div style="margin-bottom:8px;font-size:12px;color:var(--success);font-weight:500">成功条目 (${successItems.length})</div><div style="max-height:240px;overflow-y:auto;margin-bottom:16px">${successRows}</div>` : ''}
+    ${finalFailed.length > 0 ? `<div style="margin-bottom:8px;font-size:12px;color:var(--danger);font-weight:500">失败条目 (${finalFailed.length})</div><div style="max-height:200px;overflow-y:auto;margin-bottom:16px">${failRows}</div>` : ''}
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-primary btn-sm" data-action="modal-close">关闭</button>
+    </div>`;
   document.getElementById('modalOverlay').classList.add('open');
 }
-function movePriority(idx, dir) {
-  const newIdx = idx + dir;
-  if (newIdx < 0 || newIdx >= downloadPriority.length) return;
-  [downloadPriority[idx], downloadPriority[newIdx]] = [downloadPriority[newIdx], downloadPriority[idx]];
-  savePriority();
-  openSettings();
+
+// ── Standard completion ──
+function onCompleteFileSelected() {
+  const input = document.getElementById('completeFileInput');
+  const file = input.files?.[0];
+  document.getElementById('completeFileName').textContent = file ? file.name : '未选择文件';
+  document.getElementById('completeUploadBtn').disabled = !file;
+  document.getElementById('completeSummary').innerHTML = '';
+  document.getElementById('completeDownload').innerHTML = '';
+}
+
+async function doComplete() {
+  const input = document.getElementById('completeFileInput');
+  const file = input.files?.[0]; if (!file) return;
+  const btn = document.getElementById('completeUploadBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>处理中';
+  try {
+    const form = new FormData(); form.append('file', file);
+    form.append('sources', JSON.stringify(downloadPriority.filter(s => downloadSources.includes(s))));
+    const res = await fetch(`${API}/api/standards/complete`, { method: 'POST', body: form });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+    document.getElementById('completeSummary').innerHTML = `补全完成：<span style="color:var(--success)">匹配 ${data.summary.resolved}</span> / <span style="color:var(--danger)">未匹配 ${data.summary.unmatched}</span> / 总计 ${data.summary.total}`;
+    const dlUrl = data.downloadUrl;
+    if (dlUrl && !dlUrl.startsWith('/')) throw new Error('Invalid download URL');
+    document.getElementById('completeDownload').innerHTML = `<a class="btn btn-primary btn-sm" href="${escapeHtml(API + dlUrl)}" download="${escapeHtml(data.fileName)}" style="text-decoration:none;display:inline-block">⬇ 下载结果</a>`;
+    addLog(`标准补全: ${data.summary.resolved}/${data.summary.total} 匹配`, 'success');
+  } catch (e) {
+    document.getElementById('completeSummary').innerHTML = `<span style="color:var(--danger)">处理失败: ${escapeHtml(e.message)}</span>`;
+    addLog(`标准补全失败: ${e.message}`, 'fail');
+  }
+  btn.disabled = false; btn.innerHTML = '上传并补全';
+}
+
+// ── Settings (floating panel) ──
+const SETTINGS_LABELS = { gbw: '国标公开系统', bz: '标准在线', by: '内网系统', bzvip: 'BZ官方直链' };
+const SETTINGS_NOTES = { gbw: 'OCR验证码 · 5~15s', bz: '逐页合成PDF · 30~90s', by: '直接PDF · 2~5s（需内网）', bzvip: '账号池 · 2~5s' };
+
+function renderSettings() {
+  const priorityRows = downloadPriority.map((s, i) => {
+    const enabled = downloadSources.includes(s);
+    return `
+    <div class="setting-row" data-priority="${s}" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);opacity:${enabled ? '1' : '0.4'}">
+      <span class="drag-handle">≡</span>
+      <span style="font-size:11px;color:var(--text-3);min-width:16px">${i + 1}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;font-weight:500;color:var(--text)">${SETTINGS_LABELS[s]}</div>
+        <div style="font-size:12px;color:var(--text-3);margin-top:2px">${SETTINGS_NOTES[s]}</div>
+      </div>
+      <span class="source-tag" style="pointer-events:none">${s.toUpperCase()}</span>
+      <label class="toggle-switch" style="flex-shrink:0">
+        <input type="checkbox" ${enabled ? 'checked' : ''} onchange="toggleDownloadSource('${s}', this.checked);renderSettings()">
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      </label>
+    </div>`;
+  }).join('');
+
+  const concurrencyOpts = [1, 2, 3, 4, 5].map(n => {
+    const active = n === downloadConcurrency;
+    return `<button class="btn btn-sm ${active ? 'btn-primary' : 'btn-ghost'}" onclick="setConcurrency(${n});renderSettings()" style="min-width:38px">${n}</button>`;
+  }).join('');
+
+  const timeoutOpts = [10, 15, 20, 30, 60].map(n => {
+    const active = n === downloadTimeout;
+    return `<button class="btn btn-sm ${active ? 'btn-primary' : 'btn-ghost'}" onclick="setTimeoutVal(${n});renderSettings()" style="min-width:38px">${n}s</button>`;
+  }).join('');
+
+  document.getElementById('settingsBody').innerHTML = `
+    <div class="setting-section" style="margin-bottom:20px">
+      <div class="field-label" style="margin-bottom:8px">下载模式</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm ${downloadMode === 'cascade' ? 'btn-primary' : 'btn-ghost'}" onclick="setDownloadMode('cascade');renderSettings()">级联模式</button>
+        <button class="btn btn-sm ${downloadMode === 'race' ? 'btn-primary' : 'btn-ghost'}" onclick="setDownloadMode('race');renderSettings()">竞速模式</button>
+      </div>
+      <div style="font-size:11px;color:var(--text-3);margin-top:6px">${
+        downloadMode === 'cascade' ? '按优先级逐源下载，失败换下一个源。省资源、推荐批量量大场景。' : '所有源同时请求，最快返回的结果胜出。适合少量下载追求速度。'
+      }</div>
+    </div>
+    <div class="setting-section" style="margin-bottom:20px">
+      <div class="field-label" style="margin-bottom:8px">源优先级 · 拖拽调整（级联模式从上到下依次尝试）</div>
+      <div id="priorityList">${priorityRows}</div>
+    </div>
+    <div class="setting-section" style="margin-bottom:20px">
+      <div class="field-label" style="margin-bottom:8px">并发数</div>
+      <div style="display:flex;gap:8px">${concurrencyOpts}</div>
+    </div>
+    <div class="setting-section" style="margin-bottom:20px">
+      <div class="field-label" style="margin-bottom:8px">单条超时</div>
+      <div style="display:flex;gap:8px">${timeoutOpts}</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost btn-sm" onclick="resetSettings();renderSettings()">恢复默认</button>
+    </div>`;
+  initDragSort();
+}
+
+function toggleDownloadSource(source, enabled) {
+  if (enabled) { if (!downloadSources.includes(source)) downloadSources.push(source); }
+  else { downloadSources = downloadSources.filter(s => s !== source); }
+  saveSettings();
+}
+function setConcurrency(n) { downloadConcurrency = n; saveSettings(); }
+function setTimeoutVal(n) { downloadTimeout = n; saveSettings(); }
+function setDownloadMode(mode) { downloadMode = mode; saveSettings(); }
+
+function resetSettings() {
+  downloadSources = [...DEFAULT_DOWNLOAD_SOURCES];
+  downloadConcurrency = DEFAULT_CONCURRENCY;
+  downloadPriority = ['bzvip', 'gbw', 'by', 'bz'];
+  downloadTimeout = 15; downloadMode = 'cascade';
+  saveSettings();
+}
+
+function initDragSort() {
+  const list = document.getElementById('priorityList');
+  if (!list) return;
+  list.querySelectorAll('.setting-row').forEach(row => {
+    row.setAttribute('draggable', 'true');
+    row.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain', row.dataset.priority);
+      row.classList.add('sortable-drag');
+    });
+    row.addEventListener('dragend', () => { row.classList.remove('sortable-drag'); });
+    row.addEventListener('dragover', e => {
+      e.preventDefault();
+      const after = getDragAfter(list, e.clientY);
+      if (after) list.insertBefore(row, after);
+      else list.appendChild(row);
+    });
+    row.addEventListener('drop', e => {
+      e.preventDefault(); row.classList.remove('sortable-drag');
+      const order = [...list.querySelectorAll('.setting-row')].map(r => r.dataset.priority);
+      downloadPriority = order; saveSettings(); renderSettings();
+    });
+  });
+}
+
+function getDragAfter(container, y) {
+  const draggables = [...container.querySelectorAll('.setting-row:not(.sortable-drag)')];
+  return draggables.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > (closest.offset || -Infinity)) return { offset, element: child };
+    return closest;
+  }, { offset: -Infinity }).element;
 }
 
 // ── Detail modal ──
 async function showDetail(id) {
   try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 10000);
+    const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 10000);
     const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}`, { signal: ctrl.signal });
-    clearTimeout(timer);
-    const d = await res.json();
+    clearTimeout(timer); const d = await res.json();
     const sources = (d.moreInfo?.sources || d.sources || [d._source || d.source]).filter(Boolean);
-    const srcBadges = sources.map(s => `<span class="source-badge source-${s}">${String(s).toUpperCase()}</span>`).join(' ');
-    const fields = [
-      ['标准号', d.standardNumber], ['名称', d.title], ['状态', d.status],
-      ['发布日期', d.publishDate], ['实施日期', d.implementDate], ['来源', srcBadges],
-      ['类型', d.standardType],
-    ];
+    const srcBadges = sources.map(s => `<span class="source-badge source-${escapeHtml(String(s))}">${escapeHtml(String(s).toUpperCase())}</span>`).join(' ');
+    const fields = [['标准号', d.standardNumber], ['名称', d.title], ['状态', d.status], ['发布日期', d.publishDate], ['实施日期', d.implementDate], ['来源', srcBadges], ['类型', d.standardType]];
     document.getElementById('modalBody').innerHTML = `<h3>${escapeHtml(d.standardNumber)}</h3>` +
       fields.filter(f => f[1]).map(f => `<div class="field"><div class="field-label">${f[0]}</div><div class="field-value">${f[1]}</div></div>`).join('') +
-      `<button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="downloadOne('${d.id}')">下载此标准</button>
-       <button class="btn btn-ghost btn-sm" style="margin-top:12px;margin-left:6px" onclick="document.getElementById('modalOverlay').classList.remove('open')">关闭</button>`;
+      `<button class="btn btn-primary btn-sm" style="margin-top:12px" data-action="modal-download" data-id="${escapeHtml(d.id)}">下载此标准</button>
+       <button class="btn btn-ghost btn-sm" style="margin-top:12px;margin-left:6px" data-action="modal-close">关闭</button>`;
     document.getElementById('modalOverlay').classList.add('open');
-  } catch (e) { addLog(`获取详情失败: ${e.message}`, 'fail'); }
+  } catch (e) {
+    document.getElementById('modalBody').innerHTML = `<p style="color:var(--danger)">获取详情失败: ${escapeHtml(e.message)}</p>`;
+    document.getElementById('modalOverlay').classList.add('open');
+    addLog(`获取详情失败: ${e.message}`, 'fail');
+  }
 }
 document.getElementById('modalClose').addEventListener('click', () => document.getElementById('modalOverlay').classList.remove('open'));
-document.getElementById('modalOverlay').addEventListener('click', e => { if (e.target === document.getElementById('modalOverlay')) document.getElementById('modalOverlay').classList.remove('open'); });
+document.getElementById('modalOverlay').addEventListener('click', e => {
+  const btn = e.target.closest('[data-action]');
+  if (btn) {
+    if (btn.dataset.action === 'modal-download') downloadOne(btn.dataset.id);
+    else if (btn.dataset.action === 'modal-close') document.getElementById('modalOverlay').classList.remove('open');
+  }
+  if (e.target === document.getElementById('modalOverlay')) document.getElementById('modalOverlay').classList.remove('open');
+});
 document.addEventListener('keydown', e => { if (e.key === 'Escape') document.getElementById('modalOverlay').classList.remove('open'); });
 
 // ── Log ──
+let logRenderScheduled = false;
 function addLog(msg, status) {
   const now = new Date();
   const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   logEntries.unshift({ time, msg, status });
-  renderLogs();
+  if (!logRenderScheduled) {
+    logRenderScheduled = true;
+    requestAnimationFrame(() => { renderLogs(); logRenderScheduled = false; });
+  }
 }
 function renderLogs() {
   document.getElementById('logBody').innerHTML = logEntries.slice(0, 50).map(l =>
@@ -702,12 +1309,13 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 function triggerDownload(fileName) {
   const a = document.createElement('a');
   a.href = `${API}/api/downloads/${encodeURIComponent(fileName)}`;
-  a.download = fileName;
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
+  a.download = fileName; a.style.display = 'none';
+  document.body.appendChild(a); a.click();
   setTimeout(() => document.body.removeChild(a), 1000);
 }
+
+// ── Init ──
+initPanels();
 </script>
 </body>
 </html>
