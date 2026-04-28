@@ -1,4 +1,4 @@
-export type SourceName = 'bz' | 'gbw' | 'by';
+export type SourceName = 'bz' | 'gbw' | 'by' | 'bzvip';
 
 export interface StandardSummary {
   id: string;
@@ -79,4 +79,5 @@ export interface SourceAdapter {
   createDownloadSession?(id: string): Promise<DownloadSessionInfo>;
   submitDownloadCaptcha?(sessionId: string, code: string): Promise<DownloadSessionInfo>;
   getDownloadSession?(sessionId: string): Promise<DownloadSessionInfo>;
+  autoDownload?(id: string, maxRetries?: number): Promise<DownloadSessionInfo>;
 }
