@@ -86,12 +86,16 @@ function createTray() {
 }
 
 async function startServer(): Promise<number> {
-  // Handle packed vs. dev environment path
+  // app.getAppPath() = app.asar in packed, project root in dev
+  // process.resourcesPath = resources/ dir in packed, undefined in dev
   const baseDir = (process as any).resourcesPath
-    ? (process as any).resourcesPath // Electron packed
-    : process.cwd();        // Dev mode
+    ? path.join((process as any).resourcesPath, '..') // resources/.. = app root
+    : process.cwd();
 
-  // Set DATA_DIR and SCRIPTS for the Express app
+  // Ensure data dir exists (outside asar, writable)
+  const dataDir = path.join(baseDir, 'data', 'exports');
+  if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
+
   process.env.BZXZ_BASE_DIR = baseDir;
 
   const expressApp = createApp();
