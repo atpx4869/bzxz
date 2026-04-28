@@ -35,8 +35,13 @@ function createWindow() {
 }
 
 function createTray() {
-  // Use empty image as fallback — tray still works via tooltip + context menu
-  const icon = nativeImage.createEmpty();
+  const iconPath = path.join(__dirname, '..', 'public', 'favicon-32.png');
+  let icon = nativeImage.createEmpty();
+  try {
+    icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+  } catch {
+    // fallback to empty image
+  }
   tray = new Tray(icon);
 
   const contextMenu = Menu.buildFromTemplate([
@@ -68,6 +73,14 @@ function createTray() {
 }
 
 async function startServer(): Promise<number> {
+  // Handle packed vs. dev environment path
+  const baseDir = (process as any).resourcesPath
+    ? (process as any).resourcesPath // Electron packed
+    : process.cwd();        // Dev mode
+
+  // Set DATA_DIR and SCRIPTS for the Express app
+  process.env.BZXZ_BASE_DIR = baseDir;
+
   const expressApp = createApp();
   return new Promise((resolve) => {
     const server = expressApp.listen(0, () => {  // 0 = random available port
