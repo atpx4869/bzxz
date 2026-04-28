@@ -987,7 +987,7 @@ async function doCascadeDownload() {
           success++; successItems.push(item);
           if (winner.fileName) triggerDownload(winner.fileName);
         } catch (e) {
-          addLog(`${item.standardNumber} ⚠ ${source.toUpperCase()} ${(e as Error).message || 'fail'}`, 'fail');
+          addLog(`${item.standardNumber} ⚠ ${source.toUpperCase()} ${(e && e.message) || 'fail'}`, 'fail');
         }
         completed++; fill.style.width = `${Math.round((completed / total) * 100)}%`;
       }

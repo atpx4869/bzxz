@@ -1,31 +1,58 @@
 {
   "name": "bzxz",
   "version": "1.0.0",
-  "description": "",
-  "main": "dist/src/index.js",
+  "description": "多源标准检索与批量下载",
+  "main": "dist/electron/main.js",
   "scripts": {
     "dev": "tsx src/index.ts",
-    "inspect:gbw:source": "tsx scripts/sources/gbw/inspect-source.ts",
-    "inspect:gbw:detail": "tsx scripts/sources/gbw/inspect-detail.ts",
-    "inspect:gbw:openstd": "tsx scripts/sources/gbw/inspect-openstd.ts",
-    "inspect:gbw:showgb": "tsx scripts/sources/gbw/inspect-showgb.ts",
-    "register:bot": "tsx scripts/register-bot.ts",
-    "register:login": "tsx scripts/register-bot.ts --login",
-    "capture:order": "tsx scripts/capture-order-request.ts",
     "start": "node dist/src/index.js",
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "test:dev": "vitest"
+    "test:dev": "vitest",
+    "electron:dev": "tsc -p tsconfig.json && electron .",
+    "electron:build": "tsc -p tsconfig.json && electron-builder --win portable",
+    "electron:dist": "tsc -p tsconfig.json && electron-builder --win"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "build": {
+    "appId": "com.bzxz.app",
+    "productName": "bzxz",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "public/**/*",
+      "scripts/ocr_ddddocr.py",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "scripts/ocr_ddddocr.py",
+        "to": "scripts/ocr_ddddocr.py"
+      },
+      {
+        "from": "data/accounts.json",
+        "to": "data/accounts.json"
+      }
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "public/favicon.ico"
+    }
+  },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/multer": "^2.1.0",
     "@types/node": "^25.5.0",
     "@types/supertest": "^7.2.0",
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1",
     "supertest": "^7.2.2",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2",
