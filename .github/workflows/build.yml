@@ -1,0 +1,41 @@
+name: Build Electron App
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python deps
+        run: pip install ddddocr
+
+      - name: Install Node deps
+        run: npm install
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Package Electron (portable)
+        run: npm run electron:build
+
+      - name: Upload portable .exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: bzxz-portable-win
+          path: release/*.exe

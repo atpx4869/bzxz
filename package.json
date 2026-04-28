@@ -9,9 +9,9 @@
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:dev": "vitest",
-    "electron:dev": "tsc -p tsconfig.json && electron .",
-    "electron:build": "tsc -p tsconfig.json && electron-builder --win portable",
-    "electron:dist": "tsc -p tsconfig.json && electron-builder --win"
+    "electron:dev": "tsc -p tsconfig.electron.json && electron .",
+    "electron:build": "tsc -p tsconfig.electron.json && electron-builder --win portable",
+    "electron:dist": "tsc -p tsconfig.electron.json && electron-builder --win"
   },
   "keywords": [],
   "author": "",
@@ -43,7 +43,7 @@
       "target": [
         "portable"
       ],
-      "icon": "public/favicon.ico"
+      "icon": "public/favicon-256.png"
     }
   },
   "devDependencies": {
