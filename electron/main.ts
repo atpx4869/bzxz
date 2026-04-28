@@ -1,10 +1,23 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, dialog } from 'electron';
+import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain, session } from 'electron';
 import path from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createApp } from '../src/api/app';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let serverPort = 0;
+
+// Default download path — persists in userData
+const SETTINGS_FILE = path.join(app.getPath('userData'), 'bzxz-settings.json');
+function loadSettings(): { downloadPath: string } {
+  try {
+    if (existsSync(SETTINGS_FILE)) return JSON.parse(readFileSync(SETTINGS_FILE, 'utf-8'));
+  } catch {}
+  return { downloadPath: path.join(app.getPath('downloads'), 'bzxz') };
+}
+function saveSettings(s: { downloadPath: string }) {
+  try { writeFileSync(SETTINGS_FILE, JSON.stringify(s)); } catch {}
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -94,6 +107,31 @@ async function startServer(): Promise<number> {
 app.whenReady().then(async () => {
   serverPort = await startServer();
   console.log(`Server on http://localhost:${serverPort}`);
+
+  // Download interception — auto-save to configured path, no dialog
+  const settings = loadSettings();
+  if (!existsSync(settings.downloadPath)) mkdirSync(settings.downloadPath, { recursive: true });
+
+  session.defaultSession.on('will-download', (_event, item) => {
+    const filePath = path.join(settings.downloadPath, item.getFilename());
+    item.setSavePath(filePath);
+  });
+
+  // IPC: get/set download path
+  ipcMain.handle('bzxz:get-download-path', () => settings.downloadPath);
+  ipcMain.handle('bzxz:set-download-path', async () => {
+    const result = await dialog.showOpenDialog({
+      title: '选择默认下载路径', properties: ['openDirectory', 'createDirectory'],
+    });
+    if (!result.canceled && result.filePaths[0]) {
+      settings.downloadPath = result.filePaths[0];
+      saveSettings(settings);
+    }
+    return settings.downloadPath;
+  });
+  ipcMain.handle('bzxz:open-download-folder', () => {
+    require('electron').shell.openPath(settings.downloadPath);
+  });
 
   createWindow();
   createTray();
