@@ -36,12 +36,25 @@ export function createApp() {
   const sourceRegistry = new SourceRegistry();
   const exportTaskStore = new ExportTaskStore();
 
+  // Resolve base path: Electron uses BZXZ_BASE_DIR env, dev mode uses cwd
+  const baseDir = process.env.BZXZ_BASE_DIR || process.cwd();
+
   app.use(express.json());
-  app.use(express.static(path.join(process.cwd(), 'public')));
+  app.use(express.static(path.join(baseDir, 'public')));
+
+  // Serve index.html at root
+  app.get('/', (_req, res) => {
+    const indexPath = path.join(baseDir, 'public', 'index.html');
+    if (existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.redirect('/index.html');
+    }
+  });
 
   // Serve exported files for browser download
   app.get('/api/downloads/:filename', (req, res) => {
-    const exportsDir = path.resolve(process.cwd(), 'data', 'exports');
+    const exportsDir = path.resolve(baseDir, 'data', 'exports');
     const filePath = path.resolve(exportsDir, req.params.filename);
     if (!filePath.startsWith(exportsDir + path.sep)) {
       res.status(400).json({ code: 'BAD_REQUEST', message: 'Invalid filename' });
