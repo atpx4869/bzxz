@@ -158,7 +158,7 @@ body { min-height: 100vh; }
 .hero p { color: var(--text-2); font-size: 15px; margin-bottom: 32px; }
 
 /* Search bar */
-.search-row {
+.search-row { position: relative;
   display: flex; gap: 10px; align-items: center;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 6px 6px 6px 18px;
@@ -477,8 +477,8 @@ body { min-height: 100vh; }
         <span class="source-tag active" data-source="bzvip">BZVIP</span>
       </div>
       <button class="btn btn-primary" id="searchBtn">搜索</button>
-    </div>
-    <div class="search-history" id="searchHistory"></div>
+          <div class="search-history" id="searchHistory"></div>
+</div>
   </div>
 </section>
 
@@ -1336,7 +1336,7 @@ function renderSettings() {
     const enabled = downloadSources.includes(s);
     return `
     <div class="setting-row" data-priority="${s}" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);opacity:${enabled ? '1' : '0.4'}">
-      <span class="drag-handle">≡</span>
+      <span class="drag-handle">??:</span>
       <span style="font-size:11px;color:var(--text-3);min-width:16px">${i + 1}</span>
       <div style="flex:1;min-width:0">
         <div style="font-size:14px;font-weight:500;color:var(--text)">${SETTINGS_LABELS[s]}</div>
@@ -1351,53 +1351,49 @@ function renderSettings() {
   }).join('');
 
   const concurrencyOpts = [1, 2, 3, 4, 5].map(n => {
-    const active = n === downloadConcurrency;
-    return `<button class="btn btn-sm ${active ? 'btn-primary' : 'btn-ghost'}" onclick="setConcurrency(${n});renderSettings()" style="min-width:38px">${n}</button>`;
+    return `<button class="btn btn-sm ${n === downloadConcurrency ? 'btn-primary' : 'btn-ghost'}" onclick="setConcurrency(${n});renderSettings()" style="min-width:38px">${n}</button>`;
   }).join('');
 
   const timeoutOpts = [10, 15, 20, 30, 60].map(n => {
-    const active = n === downloadTimeout;
-    return `<button class="btn btn-sm ${active ? 'btn-primary' : 'btn-ghost'}" onclick="setTimeoutVal(${n});renderSettings()" style="min-width:38px">${n}s</button>`;
+    return `<button class="btn btn-sm ${n === downloadTimeout ? 'btn-primary' : 'btn-ghost'}" onclick="setTimeoutVal(${n});renderSettings()" style="min-width:38px">${n}s</button>`;
+  }).join('');
+
+  const historyOpts = [3, 5, 8, 10, 15, 20].map(n => {
+    return `<button class="btn btn-sm ${n === getHistoryLimit() ? 'btn-primary' : 'btn-ghost'}" onclick="setHistoryLimit(${n})" style="min-width:38px">${n}</button>`;
   }).join('');
 
   document.getElementById('settingsBody').innerHTML = `
     <div class="setting-section" style="margin-bottom:20px">
       <div class="field-label" style="margin-bottom:8px">下载模式</div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-sm ${downloadMode === 'cascade' ? 'btn-primary' : 'btn-ghost'}" onclick="setDownloadMode('cascade');renderSettings()">级联模式</button>
+        <button class="btn btn-sm ${downloadMode === 'cascade' ? 'btn-primary' : 'btn-ghost'}" onclick="setDownloadMode('cascade');renderSettings()">顺序模式</button>
         <button class="btn btn-sm ${downloadMode === 'race' ? 'btn-primary' : 'btn-ghost'}" onclick="setDownloadMode('race');renderSettings()">竞速模式</button>
       </div>
       <div style="font-size:11px;color:var(--text-3);margin-top:6px">${
-        downloadMode === 'cascade' ? '按优先级逐源下载，失败换下一个源。省资源、推荐批量量大场景。' : '所有源同时请求，最快返回的结果胜出。适合少量下载追求速度。'
+        downloadMode === 'cascade' ? '按优先级逐源下载，失败回退下一源，省资源，推荐大多数场景' : '所有源同时下载，返回最快的结果，适合追求速度'
       }</div>
     </div>
     <div class="setting-section" style="margin-bottom:20px">
-      <div class="field-label" style="margin-bottom:8px">源优先级 · 拖拽调整（级联模式从上到下依次尝试）</div>
+      <div class="field-label" style="margin-bottom:8px">源优先级（拖拽排序，顺序模式下排前面的源先尝试）</div>
       <div id="priorityList">${priorityRows}</div>
     </div>
     <div class="setting-section" style="margin-bottom:20px">
       <div class="field-label" style="margin-bottom:8px">并发数</div>
       <div style="display:flex;gap:8px">${concurrencyOpts}</div>
     </div>
-    <div class="
-
-      <div class="setting-section" style="margin-top:16px">
-        <div class="field-label">    <div class="setting-section" style="margin-top:16px">
-      <div class="field-label" style="margin-bottom:8px">搜索记录条数</div>
-      <div style="display:flex;gap:6px;margin-top:6px">
-        ${[3,5,8,10,15,20].map(n => `<button class="btn btn-sm ${getHistoryLimit()===n ? 'btn-primary' : 'btn-ghost'}" onclick="setHistoryLimit(${n});renderSettings()" style="min-width:38px">${n}</button>`).join('')}
-      </div>
-    </div>
-    setting-section" style="margin-bottom:20px">
-      <div class="field-label" style="margin-bottom:8px">单条超时</div>
+    <div class="setting-section" style="margin-bottom:20px">
+      <div class="field-label" style="margin-bottom:8px">超时时间</div>
       <div style="display:flex;gap:8px">${timeoutOpts}</div>
+    </div>
+    <div class="setting-section" style="margin-bottom:20px">
+      <div class="field-label" style="margin-bottom:8px">搜索记录条数</div>
+      <div style="display:flex;gap:6px">${historyOpts}</div>
     </div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-ghost btn-sm" onclick="resetSettings();renderSettings()">恢复默认</button>
     </div>`;
   initDragSort();
 }
-
 function toggleDownloadSource(source, enabled) {
   if (enabled) { if (!downloadSources.includes(source)) downloadSources.push(source); }
   else { downloadSources = downloadSources.filter(s => s !== source); }
@@ -1627,6 +1623,11 @@ initPanels();
 </script>
 </body>
 </html>
+
+
+
+
+
 
 
 
