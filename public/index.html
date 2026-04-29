@@ -1379,7 +1379,16 @@ function renderSettings() {
       <div class="field-label" style="margin-bottom:8px">并发数</div>
       <div style="display:flex;gap:8px">${concurrencyOpts}</div>
     </div>
-    <div class="setting-section" style="margin-bottom:20px">
+    <div class="
+
+      <div class="setting-section" style="margin-top:16px">
+        <div class="field-label">    <div class="setting-section" style="margin-top:16px">
+      <div class="field-label" style="margin-bottom:8px">搜索记录条数</div>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        ${[3,5,8,10,15,20].map(n => `<button class="btn btn-sm ${getHistoryLimit()===n ? 'btn-primary' : 'btn-ghost'}" onclick="setHistoryLimit(${n});renderSettings()" style="min-width:38px">${n}</button>`).join('')}
+      </div>
+    </div>
+    setting-section" style="margin-bottom:20px">
       <div class="field-label" style="margin-bottom:8px">单条超时</div>
       <div style="display:flex;gap:8px">${timeoutOpts}</div>
     </div>
@@ -1534,12 +1543,19 @@ function saveSearchHistory(query) {
   let hist = loadSearchHistory();
   hist = hist.filter(h => h !== query);
   hist.unshift(query);
-  if (hist.length > 10) hist = hist.slice(0, 10);
+  const limit = getHistoryLimit(); if (hist.length > limit) hist = hist.slice(0, limit);
   localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(hist));
+function getHistoryLimit() {
+  try { return parseInt(localStorage.getItem('bzxz_history_limit') || '10', 10) || 10; } catch { return 10; }
+}
+function setHistoryLimit(n) {
+  localStorage.setItem('bzxz_history_limit', String(n));
+  renderSettings();
+}
 }
 function renderSearchHistory() {
   const el = document.getElementById('searchHistory');
-  const hist = loadSearchHistory();
+  const hist = loadSearchHistory().slice(0, getHistoryLimit());
   if (!hist.length) {
     el.innerHTML = '<div class="search-history-empty">暂无搜索记录</div>';
   } else {
@@ -1611,3 +1627,7 @@ initPanels();
 </script>
 </body>
 </html>
+
+
+
+
