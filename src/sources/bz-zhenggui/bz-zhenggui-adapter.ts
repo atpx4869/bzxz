@@ -139,7 +139,7 @@ export class BzZhengguiAdapter implements SourceAdapter {
     };
   }
 
-  async exportStandard(id: string): Promise<ExportResult> {
+  async exportStandard(id: string, onProgress?: (current: number, total: number) => void): Promise<ExportResult> {
     const detail = await this.getStandardDetail(id);
     let preview: PreviewInfo;
     for (let retry = 0; retry < 3; retry++) {
@@ -153,8 +153,10 @@ export class BzZhengguiAdapter implements SourceAdapter {
       throw new BadRequestError(`bz export: no preview pages available for ${detail.standardNumber}`);
     }
 
+    const totalPages = preview.totalPages;
     const pdfDoc = await PDFDocument.create();
 
+    let idx = 0;
     for (const pageUrl of preview.pageUrls) {
       const response = await fetch(pageUrl);
       if (!response.ok) {
@@ -167,6 +169,8 @@ export class BzZhengguiAdapter implements SourceAdapter {
       const image = await pdfDoc.embedJpg(bytes);
       const page = pdfDoc.addPage([image.width, image.height]);
       page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
+      idx++;
+      onProgress?.(idx, totalPages);
     }
 
     const fileName = buildFileName(detail.standardNumber, detail.title);
@@ -177,7 +181,7 @@ export class BzZhengguiAdapter implements SourceAdapter {
       standardId: id,
       filePath,
       fileName,
-      totalPages: preview.totalPages,
+      totalPages,
     };
   }
 

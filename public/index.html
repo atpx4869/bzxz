@@ -270,6 +270,7 @@ body { min-height: 100vh; }
 .progress-wrap.visible { display: block; }
 .progress-track { height: 3px; background: var(--surface); border-radius: 2px; overflow: hidden; }
 .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s var(--ease-out); width: 0%; }
+.progress-text { font-size: 11px; color: var(--text-3); margin-top: 4px; display: block; }
 
 /* ── Modal ── */
 .modal-overlay {
@@ -421,6 +422,7 @@ body { min-height: 100vh; }
     <div id="batchResults"></div>
     <div class="progress-wrap" id="batchProgressWrap">
       <div class="progress-track"><div class="progress-fill" id="batchProgressFill"></div></div>
+      <span class="progress-text" id="batchProgressText"></span>
     </div>
   </div>
 </div>
@@ -471,6 +473,7 @@ body { min-height: 100vh; }
   </div>
   <div class="progress-wrap" id="progressWrap">
     <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+    <span class="progress-text" id="progressText"></span>
   </div>
   <div class="log-body" id="logBody"></div>
 </div>
@@ -777,69 +780,92 @@ async function downloadOne(id) {
   downloadAborted = false;
   const sources = (r.sources || [r._source]).filter(s => downloadSources.includes(s));
   if (!sources.length) { addLog(`${r.standardNumber} 无可用下载源`, 'fail'); return; }
-  addLog(`${r.standardNumber} 竞速 [${sources.map(s => s.toUpperCase()).join('+')}]`, 'pending');
+  const logId = addLog(`${r.standardNumber} 竞速 [${sources.map(s => s.toUpperCase()).join('+')}]`, 'pending');
   try {
-    const winner = await Promise.any(sources.map(s => raceSource(r.id, s, r.standardNumber)));
-    addLog(`${r.standardNumber} ✅ ${winner.source.toUpperCase()}胜出 ${winner.fileName}`, 'success');
+    const winner = await Promise.any(sources.map(s => raceSource(r.id, s, r.standardNumber, (msg) => updateLog(logId, msg, 'pending'))));
+    const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
+    updateLog(logId, `${r.standardNumber} ✅ ${winner.source.toUpperCase()}胜出 ${winner.fileName}${sizeStr}`, 'success');
     if (winner.fileName) triggerDownload(winner.fileName);
   } catch (e) {
     const msgs = e instanceof AggregateError ? [...new Set(e.errors.map(err => err.message))].slice(0, 3).join('; ') : (e.message || '未知错误');
-    addLog(`${r.standardNumber} ❌ ${msgs}`, 'fail');
+    updateLog(logId, `${r.standardNumber} ❌ ${msgs}`, 'fail');
   }
 }
 
-function raceSource(standardId, source, label) {
+function raceSource(standardId, source, label, onProgress) {
   // Use source-specific ID if available (from multi-source search dedup)
   const r = results.find(r => r.id === standardId);
   const srcId = (r && r._sourceIds && r._sourceIds[source]) || standardId;
   switch (source) {
-    case 'gbw': return downloadGbw(srcId);
-    case 'bz':  return downloadBz(srcId);
-    case 'by':    return downloadBy(srcId);
-    case 'bzvip': return downloadBzVip(srcId);
+    case 'gbw': return downloadGbw(srcId, onProgress);
+    case 'bz':  return downloadBz(srcId, onProgress);
+    case 'by':    return downloadBy(srcId, onProgress);
+    case 'bzvip': return downloadBzVip(srcId, onProgress);
     default: return Promise.reject(new Error(`Unknown source ${source}`));
   }
 }
 
-async function downloadGbw(id) {
+async function downloadGbw(id, onProgress) {
+  if (onProgress) onProgress('GBW 识别验证码...');
   const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/auto-download`, { method: 'POST' });
   const data = await res.json();
   if (!res.ok) throw new Error(`GBW HTTP${res.status}`);
-  if (data.status === 'downloaded') return { source: 'gbw', fileName: data.meta?.fileName || data.fileName || '' };
+  if (data.status === 'downloaded') {
+    const meta = data.meta || {};
+    return { source: 'gbw', fileName: meta.fileName || data.fileName || '', fileSize: meta.fileSize };
+  }
   throw new Error(`GBW ${data.status}`);
 }
 
-async function downloadBz(id) {
+async function downloadBz(id, onProgress) {
   const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/export`, { method: 'POST' });
   const data = await res.json();
   if (!res.ok) throw new Error(`BZ HTTP${res.status}`);
+  const t0 = Date.now();
   for (let i = 0; i < 45; i++) {
     await sleep(2000);
     const tr = await fetch(`${API}/api/tasks/${data.id}`); const td = await tr.json();
-    if (td.status === 'success') return { source: 'bz', fileName: td.fileName || '' };
+    if (td.currentPage && td.totalPages && onProgress) {
+      onProgress(`BZ 下载 ${td.currentPage}/${td.totalPages} 页`);
+    }
+    if (td.status === 'success') {
+      const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+      const sizeStr = td.fileSize ? ` ${formatSize(td.fileSize)}` : '';
+      return { source: 'bz', fileName: td.fileName || '', fileSize: td.fileSize, meta: `${elapsed}s${sizeStr}` };
+    }
     if (td.status === 'failed') throw new Error(`BZ ${td.errorMessage || '失败'}`);
   }
   throw new Error('BZ轮询超时');
 }
 
-async function downloadBy(id) {
+async function downloadBy(id, onProgress) {
   const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/export`, { method: 'POST' });
   const data = await res.json();
   if (!res.ok) throw new Error(`BY HTTP${res.status}`);
+  const t0 = Date.now();
   for (let i = 0; i < 30; i++) {
     await sleep(1000);
     const tr = await fetch(`${API}/api/tasks/${data.id}`); const td = await tr.json();
-    if (td.status === 'success') return { source: 'by', fileName: td.fileName || '' };
+    if (td.status === 'running' && onProgress) onProgress('BY 下载中...');
+    if (td.status === 'success') {
+      const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+      const sizeStr = td.fileSize ? ` ${formatSize(td.fileSize)}` : '';
+      return { source: 'by', fileName: td.fileName || '', fileSize: td.fileSize, meta: `${elapsed}s${sizeStr}` };
+    }
     if (td.status === 'failed') throw new Error(`BY ${td.errorMessage || '失败'}`);
   }
   throw new Error('BY轮询超时');
 }
 
-async function downloadBzVip(id) {
+async function downloadBzVip(id, onProgress) {
+  if (onProgress) onProgress('BZVIP 下载中...');
   const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/auto-download`, { method: 'POST' });
   const data = await res.json();
   if (!res.ok) throw new Error(`BZVIP HTTP${res.status}`);
-  if (data.status === 'downloaded') return { source: 'bzvip', fileName: data.meta?.fileName || data.fileName || '' };
+  if (data.status === 'downloaded') {
+    const meta = data.meta || {};
+    return { source: 'bzvip', fileName: meta.fileName || data.fileName || '', fileSize: meta.fileSize };
+  }
   throw new Error(`BZVIP ${data.status}`);
 }
 
@@ -854,25 +880,33 @@ document.getElementById('downloadSelected').addEventListener('click', async () =
   const total = selected.length; let completed = 0, success = 0, failed = 0; const wins = {};
   const t0 = Date.now();
   const progress = document.getElementById('progressWrap'); const fill = document.getElementById('progressFill');
+  const progressText = document.getElementById('progressText');
   progress.classList.add('visible');
   const queue = [...selected];
+  const started = Date.now();
+  function updateProgress() {
+    const elapsed = ((Date.now() - started) / 1000).toFixed(0);
+    fill.style.width = `${(completed / total) * 100}%`;
+    progressText.textContent = `${completed}/${total} · ${downloadConcurrency}并发 · ${elapsed}s`;
+  }
   async function worker() {
     while (queue.length > 0 && !downloadAborted) {
       const item = queue.shift();
       const sources = (item.sources || [item._source]).filter(s => downloadSources.includes(s));
-      if (!sources.length) { completed++; failed++; continue; }
-      addLog(`${item.standardNumber} 竞速 [${sources.map(s => s.toUpperCase()).join('+')}]`, 'pending');
+      if (!sources.length) { completed++; failed++; updateProgress(); continue; }
+      const logId = addLog(`${item.standardNumber} 竞速 [${sources.map(s => s.toUpperCase()).join('+')}]`, 'pending');
       try {
-        const winner = await Promise.any(sources.map(s => raceSource(item.id, s, item.standardNumber)));
+        const winner = await Promise.any(sources.map(s => raceSource(item.id, s, item.standardNumber, (msg) => updateLog(logId, msg, 'pending'))));
         success++; wins[winner.source] = (wins[winner.source] || 0) + 1;
-        addLog(`${item.standardNumber} ✅ ${winner.source.toUpperCase()}胜出 ${winner.fileName}`, 'success');
+        const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
+        updateLog(logId, `${item.standardNumber} ✅ ${winner.source.toUpperCase()}胜出 ${winner.fileName}${sizeStr}`, 'success');
         if (winner.fileName) triggerDownload(winner.fileName);
       } catch (e) {
         failed++;
         const msgs = e instanceof AggregateError ? [...new Set(e.errors.map(err => err.message))].slice(0, 3).join('; ') : (e.message || '未知错误');
-        addLog(`${item.standardNumber} ❌ ${msgs}`, 'fail');
+        updateLog(logId, `${item.standardNumber} ❌ ${msgs}`, 'fail');
       }
-      completed++; fill.style.width = `${(completed / total) * 100}%`;
+      completed++; updateProgress();
     }
   }
   const workers = Array.from({ length: downloadConcurrency }, () => worker());
@@ -880,7 +914,7 @@ document.getElementById('downloadSelected').addEventListener('click', async () =
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
   const winSummary = Object.entries(wins).map(([k, v]) => `${k.toUpperCase()}:${v}`).join(' ');
   addLog(`完成 ${success}/${total} · ${elapsed}s · ${winSummary || '无'}`, 'success');
-  setTimeout(() => { progress.classList.remove('visible'); fill.style.width = '0%'; }, 2000);
+  setTimeout(() => { progress.classList.remove('visible'); fill.style.width = '0%'; progressText.textContent = ''; }, 2000);
   document.getElementById('stopDownload').style.display = 'none'; isDownloading = false; updateToolbar();
 });
 document.getElementById('stopDownload').addEventListener('click', stopAllDownloads);
@@ -972,9 +1006,15 @@ async function doCascadeDownload() {
   document.getElementById('batchStopBtn').style.display = 'inline-block';
   document.getElementById('batchProgressWrap').classList.add('visible');
   const fill = document.getElementById('batchProgressFill'); fill.style.width = '0%';
+  const progressText = document.getElementById('batchProgressText');
   const sources = downloadPriority.filter(s => downloadSources.includes(s));
   const total = items.length; let completed = 0, success = 0; const successItems = [], allFailedItems = [];
   const t0 = Date.now();
+  function updateProgress() {
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(0);
+    fill.style.width = `${Math.round((completed / total) * 100)}%`;
+    progressText.textContent = `${completed}/${total} · ${downloadConcurrency}并发 · ${elapsed}s`;
+  }
 
   for (let round = 0; round < sources.length; round++) {
     if (batchAborted) break;
@@ -986,20 +1026,23 @@ async function doCascadeDownload() {
     async function worker() {
       while (queue.length > 0 && !batchAborted) {
         const item = queue.shift();
+        const logId = addLog(`${item.standardNumber} ${source.toUpperCase()} 下载中...`, 'pending');
         try {
-          const winner = await raceSourceWithTimeout(item.standardId, source, item.standardNumber, downloadTimeout * 1000);
-          addLog(`${item.standardNumber} ✅ ${source.toUpperCase()} ${winner.fileName}`, 'success');
+          const winner = await raceSourceWithTimeout(item.standardId, source, item.standardNumber, downloadTimeout * 1000, (msg) => updateLog(logId, msg, 'pending'));
+          const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
+          updateLog(logId, `${item.standardNumber} ✅ ${source.toUpperCase()} ${winner.fileName}${sizeStr}`, 'success');
           success++; successItems.push(item);
           if (winner.fileName) triggerDownload(winner.fileName);
         } catch (e) {
-          addLog(`${item.standardNumber} ⚠ ${source.toUpperCase()} ${(e && e.message) || 'fail'}`, 'fail');
+          updateLog(logId, `${item.standardNumber} ⚠ ${source.toUpperCase()} ${(e && e.message) || 'fail'}`, 'fail');
         }
-        completed++; fill.style.width = `${Math.round((completed / total) * 100)}%`;
+        completed++; updateProgress();
       }
     }
     const workers = Array.from({ length: downloadConcurrency }, () => worker());
     await Promise.all(workers);
     if (remaining.filter(it => !successItems.some(s => s.standardId === it.standardId)).length === 0) break;
+    progressText.textContent = '';
   }
   const finalFailed = items.filter(it => !successItems.some(s => s.standardId === it.standardId));
   finalFailed.forEach(it => { allFailedItems.push(it); addLog(`${it.standardNumber} ❌ 所有源均失败`, 'fail'); });
@@ -1021,26 +1064,33 @@ async function doRaceDownload() {
   document.getElementById('batchStopBtn').style.display = 'inline-block';
   document.getElementById('batchProgressWrap').classList.add('visible');
   const fill = document.getElementById('batchProgressFill'); fill.style.width = '0%';
+  const progressText = document.getElementById('batchProgressText');
   const sources = downloadPriority.filter(s => downloadSources.includes(s));
   const total = items.length; let completed = 0, success = 0; const successItems = [], allFailedItems = [], wins = {};
   const t0 = Date.now();
+  function updateProgress() {
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(0);
+    fill.style.width = `${Math.round((completed / total) * 100)}%`;
+    progressText.textContent = `${completed}/${total} · ${downloadConcurrency}并发 · ${elapsed}s`;
+  }
   const queue = [...items];
   async function worker() {
     while (queue.length > 0 && !batchAborted) {
       const item = queue.shift();
       const sourceList = (sources.length > 0 ? sources : ['bzvip']).filter(s => downloadSources.includes(s));
-      addLog(`${item.standardNumber} 竞速 [${sourceList.map(s => s.toUpperCase()).join('+')}]`, 'pending');
+      const logId = addLog(`${item.standardNumber} 竞速 [${sourceList.map(s => s.toUpperCase()).join('+')}]`, 'pending');
       try {
-        const winner = await Promise.any(sourceList.map(s => raceSourceWithTimeout(item.standardId, s, item.standardNumber, downloadTimeout * 1000)));
+        const winner = await Promise.any(sourceList.map(s => raceSourceWithTimeout(item.standardId, s, item.standardNumber, downloadTimeout * 1000, (msg) => updateLog(logId, msg, 'pending'))));
         success++; successItems.push(item); wins[winner.source] = (wins[winner.source] || 0) + 1;
-        addLog(`${item.standardNumber} ✅ ${winner.source.toUpperCase()}胜出 ${winner.fileName}`, 'success');
+        const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
+        updateLog(logId, `${item.standardNumber} ✅ ${winner.source.toUpperCase()}胜出 ${winner.fileName}${sizeStr}`, 'success');
         if (winner.fileName) triggerDownload(winner.fileName);
       } catch (e) {
         allFailedItems.push(item);
         const msgs = e instanceof AggregateError ? [...new Set(e.errors.map(err => err.message))].slice(0, 3).join('; ') : (e.message || '未知错误');
-        addLog(`${item.standardNumber} ❌ ${msgs}`, 'fail');
+        updateLog(logId, `${item.standardNumber} ❌ ${msgs}`, 'fail');
       }
-      completed++; fill.style.width = `${Math.round((completed / total) * 100)}%`;
+      completed++; updateProgress();
     }
   }
   const workers = Array.from({ length: downloadConcurrency }, () => worker());
@@ -1057,10 +1107,10 @@ async function doRaceDownload() {
 
 function stopBatchDownload() { batchAborted = true; addLog('⏹ 中止批量下载', 'fail'); }
 
-function raceSourceWithTimeout(standardId, source, label, timeoutMs) {
+function raceSourceWithTimeout(standardId, source, label, timeoutMs, onProgress) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('timeout')), timeoutMs);
-    const p = raceSource(standardId, source, label);
+    const p = raceSource(standardId, source, label, onProgress);
     p.then(
       result => { clearTimeout(timer); resolve(result); },
       err => { clearTimeout(timer); reject(err); }
@@ -1286,14 +1336,28 @@ document.getElementById('modalOverlay').addEventListener('click', e => {
 document.addEventListener('keydown', e => { if (e.key === 'Escape') document.getElementById('modalOverlay').classList.remove('open'); });
 
 // ── Log ──
+let logIdCounter = 0;
 let logRenderScheduled = false;
 function addLog(msg, status) {
   const now = new Date();
   const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  logEntries.unshift({ time, msg, status });
+  const id = ++logIdCounter;
+  logEntries.unshift({ id, time, msg, status });
   if (!logRenderScheduled) {
     logRenderScheduled = true;
     requestAnimationFrame(() => { renderLogs(); logRenderScheduled = false; });
+  }
+  return id;
+}
+function updateLog(id, msg, status) {
+  const entry = logEntries.find(l => l.id === id);
+  if (entry) {
+    entry.msg = msg;
+    if (status) entry.status = status;
+    if (!logRenderScheduled) {
+      logRenderScheduled = true;
+      requestAnimationFrame(() => { renderLogs(); logRenderScheduled = false; });
+    }
   }
 }
 function renderLogs() {
@@ -1311,6 +1375,12 @@ document.getElementById('logToggle').addEventListener('click', () => {
 // ── Utils ──
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function formatSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+}
 function triggerDownload(fileName) {
   const a = document.createElement('a');
   a.href = `${API}/api/downloads/${encodeURIComponent(fileName)}`;

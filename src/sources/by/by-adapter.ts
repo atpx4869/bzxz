@@ -94,7 +94,7 @@ export class ByAdapter implements SourceAdapter {
     };
   }
 
-  async exportStandard(id: string): Promise<ExportResult> {
+  async exportStandard(id: string, _onProgress?: (current: number, total: number) => void): Promise<ExportResult> {
     if (!(await this.ensureLogin())) {
       throw new UpstreamError('BY login failed');
     }

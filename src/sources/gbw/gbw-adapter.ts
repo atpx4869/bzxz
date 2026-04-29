@@ -171,7 +171,7 @@ export class GbwAdapter implements SourceAdapter {
     };
   }
 
-  async exportStandard(id: string): Promise<ExportResult> {
+  async exportStandard(id: string, _onProgress?: (current: number, total: number) => void): Promise<ExportResult> {
     throw new BadRequestError('gbw export requires a captcha-assisted download session first');
   }
 

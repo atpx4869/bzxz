@@ -30,6 +30,7 @@ export class ExportTaskStore {
       status: 'success',
       filePath: result.filePath,
       fileName: result.fileName,
+      fileSize: result.fileSize,
       totalPages: result.totalPages,
     });
   }
@@ -39,6 +40,10 @@ export class ExportTaskStore {
       status: 'failed',
       errorMessage,
     });
+  }
+
+  markProgress(taskId: string, currentPage: number, totalPages: number): void {
+    this.update(taskId, { currentPage, totalPages });
   }
 
   get(taskId: string): ExportTask | undefined {

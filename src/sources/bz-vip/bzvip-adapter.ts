@@ -102,7 +102,7 @@ export class BzVipAdapter implements SourceAdapter {
 
   // --- VIP Download via Account Pool ---
 
-  async exportStandard(id: string): Promise<ExportResult> {
+  async exportStandard(id: string, _onProgress?: (current: number, total: number) => void): Promise<ExportResult> {
     const detail = await this.getStandardDetail(id);
     const standardNo = detail.standardNumber;
     const sourceId = detail.sourceId;

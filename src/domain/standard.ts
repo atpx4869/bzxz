@@ -39,6 +39,7 @@ export interface ExportResult {
   standardId: string;
   filePath: string;
   fileName: string;
+  fileSize?: number;
   totalPages?: number;
 }
 
@@ -48,6 +49,8 @@ export interface ExportTask {
   status: 'queued' | 'running' | 'success' | 'failed';
   filePath?: string;
   fileName?: string;
+  fileSize?: number;
+  currentPage?: number;
   totalPages?: number;
   errorMessage?: string;
   createdAt: string;
@@ -75,7 +78,7 @@ export interface SourceAdapter {
   searchStandards(input: SearchStandardsInput): Promise<StandardSummary[]>;
   getStandardDetail(id: string): Promise<StandardDetail>;
   detectPreview(id: string): Promise<PreviewInfo>;
-  exportStandard(id: string): Promise<ExportResult>;
+  exportStandard(id: string, onProgress?: (current: number, total: number) => void): Promise<ExportResult>;
   createDownloadSession?(id: string): Promise<DownloadSessionInfo>;
   submitDownloadCaptcha?(sessionId: string, code: string): Promise<DownloadSessionInfo>;
   getDownloadSession?(sessionId: string): Promise<DownloadSessionInfo>;
