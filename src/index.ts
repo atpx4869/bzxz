@@ -9,7 +9,7 @@ async function main() {
   const app = createApp();
   const port = Number(process.env.PORT ?? 3000);
 
-  createServer(app).listen(port, () => {
+  createServer(app).listen(port, '0.0.0.0', () => {
     console.log(`Server listening on http://localhost:${port}`);
   });
 }

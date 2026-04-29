@@ -108,7 +108,7 @@ async function startServer(): Promise<number> {
 
   const expressApp = createApp();
   return new Promise((resolve) => {
-    const server = expressApp.listen(0, () => {  // 0 = random available port
+    const server = expressApp.listen(0, '0.0.0.0', () => {  // 0 = random available port
       const addr = server.address();
       const port = typeof addr === 'object' && addr ? addr.port : 3000;
       resolve(port);
