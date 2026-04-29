@@ -1,74 +1,64 @@
 @echo off
+setlocal enabledelayedexpansion
 title bzxz
 cd /d "%~dp0"
-
-:: Log everything to file so we can see what happened
 set "LOG=%~dp0startup.log"
-echo %date% %time% === bzxz startup === > "%LOG%" 2>&1
+echo %date% %time% === start === > "%LOG%"
 
-:: ── Find Node.js ──
-:: fnm (most common in China)
-for /d %%d in ("%LOCALAPPDATA%\fnm_multishells\*") do (
-    if exist "%%d\node.exe" (
-        set "PATH=%%d;%PATH%"
-        echo found node via fnm: %%d\node.exe >> "%LOG%"
-        goto :found
-    )
+:: Find node
+set "FOUND="
+
+:: fnm
+for /d %%d in ("%LOCALAPPDATA%\fnm_multishells\*") do if not defined FOUND if exist "%%d\node.exe" (
+    set "PATH=%%d;!PATH!"
+    set "FOUND=1"
+    echo fnm: %%d\node.exe >> "%LOG%"
 )
 
-:: Standard install
-if exist "C:\Program Files\nodejs\node.exe" (
-    set "PATH=C:\Program Files\nodejs;%PATH%"
-    echo found node: C:\Program Files\nodejs\node.exe >> "%LOG%"
-    goto :found
+:: standard
+if not defined FOUND if exist "C:\Program Files\nodejs\node.exe" (
+    set "PATH=C:\Program Files\nodejs;!PATH!"
+    set "FOUND=1"
+    echo standard: C:\Program Files\nodejs\node.exe >> "%LOG%"
 )
 
-:: system PATH fallback
-node --version >nul 2>&1
-if not errorlevel 1 (
-    echo found node in PATH >> "%LOG%"
-    goto :found
+:: PATH fallback
+if not defined FOUND (
+    node --version >nul 2>&1 && set "FOUND=1" && echo PATH >> "%LOG%"
 )
 
-echo Node.js NOT FOUND >> "%LOG%"
-echo.
-echo ============================================
-echo   Node.js not found.
-echo   Please install from https://nodejs.org
-echo ============================================
-echo.
-type "%LOG%"
-pause
-exit /b 1
+if not defined FOUND (
+    echo Node.js not found >> "%LOG%"
+    echo.
+    echo Node.js not found. Install from https://nodejs.org
+    goto :end
+)
 
-:found
 node --version >> "%LOG%" 2>&1
-echo Node.js ready >> "%LOG%"
 
-:: ── Install dependencies ──
+:: deps
 if not exist "node_modules\" (
-    echo Installing dependencies... >> "%LOG%"
+    echo npm install... >> "%LOG%"
     call npm install >> "%LOG%" 2>&1
     if errorlevel 1 (
-        echo npm install FAILED >> "%LOG%"
-        type "%LOG%"
-        pause
-        exit /b 1
+        echo npm install failed >> "%LOG%"
+        goto :end
     )
 )
 
-:: ── Start ──
-echo Starting server... >> "%LOG%"
+:: go
 start "" http://localhost:3000
-
 if exist "dist\src\index.js" (
-    echo Running: node dist\src\index.js >> "%LOG%"
-    node dist\src\index.js >> "%LOG%" 2>&1
+    echo node dist\src\index.js >> "%LOG%"
+    node dist\src\index.js
 ) else (
-    echo Running: npx tsx src\index.ts >> "%LOG%"
-    npx tsx src\index.ts >> "%LOG%" 2>&1
+    echo npx tsx src\index.ts >> "%LOG%"
+    npx tsx src\index.ts
 )
 
-echo %date% %time% server stopped >> "%LOG%"
+:end
+echo %date% %time% === end === >> "%LOG%"
+echo.
+echo --- startup.log ---
 type "%LOG%"
 pause
