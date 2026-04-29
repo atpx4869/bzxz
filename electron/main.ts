@@ -89,7 +89,7 @@ async function startServer(): Promise<number> {
   // app.getAppPath() = app.asar in packed, project root in dev
   // process.resourcesPath = resources/ dir in packed, undefined in dev
   const baseDir = (process as any).resourcesPath
-    ? path.join((process as any).resourcesPath, '..') // resources/.. = app root
+    ? (process as any).resourcesPath // resources/ dir where extraResources live
     : process.cwd();
 
   // Ensure data dir exists (outside asar, writable)
