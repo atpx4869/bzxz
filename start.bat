@@ -2,67 +2,73 @@
 title bzxz
 cd /d "%~dp0"
 
-:: ── Locate Node.js ──
-set "NODE_EXE="
+:: Log everything to file so we can see what happened
+set "LOG=%~dp0startup.log"
+echo %date% %time% === bzxz startup === > "%LOG%" 2>&1
 
-:: 1) Try PATH first
-node --version >nul 2>&1 && set "NODE_EXE=node" && goto :found
-
-:: 2) fnm (Fast Node Manager) — common in China
-if exist "%LOCALAPPDATA%\fnm\fnm.exe" (
-    for /f "tokens=*" %%i in ('"%LOCALAPPDATA%\fnm\fnm.exe" env --shell cmd 2^>nul ^| findstr /r "^set PATH="') do %%i
-    node --version >nul 2>&1 && set "NODE_EXE=node" && goto :found
-)
-
-:: 3) nvm-windows
-for %%v in ("%NVM_HOME%" "%APPDATA%\nvm" "%USERPROFILE%\AppData\Roaming\nvm") do (
-    if exist "%%~v\node.exe" (
-        set "PATH=%%~v;%PATH%"
-        node --version >nul 2>&1 && set "NODE_EXE=node" && goto :found
+:: ── Find Node.js ──
+:: fnm (most common in China)
+for /d %%d in ("%LOCALAPPDATA%\fnm_multishells\*") do (
+    if exist "%%d\node.exe" (
+        set "PATH=%%d;%PATH%"
+        echo found node via fnm: %%d\node.exe >> "%LOG%"
+        goto :found
     )
 )
 
-:: 4) Standard install paths
-for %%v in ("%ProgramFiles%\nodejs" "%ProgramFiles(x86)%\nodejs" "%LOCALAPPDATA%\Programs\nodejs") do (
-    if exist "%%~v\node.exe" (
-        set "PATH=%%~v;%PATH%"
-        node --version >nul 2>&1 && set "NODE_EXE=node" && goto :found
-    )
+:: Standard install
+if exist "C:\Program Files\nodejs\node.exe" (
+    set "PATH=C:\Program Files\nodejs;%PATH%"
+    echo found node: C:\Program Files\nodejs\node.exe >> "%LOG%"
+    goto :found
 )
 
-:: 5) Volta
-for %%v in ("%LOCALAPPDATA%\Volta") do (
-    if exist "%%~v\volta.exe" (
-        set "PATH=%%~v;%PATH%"
-        node --version >nul 2>&1 && set "NODE_EXE=node" && goto :found
-    )
+:: system PATH fallback
+node --version >nul 2>&1
+if not errorlevel 1 (
+    echo found node in PATH >> "%LOG%"
+    goto :found
 )
 
-echo Node.js not found. Please install from https://nodejs.org
+echo Node.js NOT FOUND >> "%LOG%"
+echo.
+echo ============================================
+echo   Node.js not found.
+echo   Please install from https://nodejs.org
+echo ============================================
+echo.
+type "%LOG%"
 pause
 exit /b 1
 
 :found
-echo Node.js found: %NODE_EXE%
+node --version >> "%LOG%" 2>&1
+echo Node.js ready >> "%LOG%"
 
 :: ── Install dependencies ──
 if not exist "node_modules\" (
-    echo Installing dependencies...
-    call npm install
+    echo Installing dependencies... >> "%LOG%"
+    call npm install >> "%LOG%" 2>&1
     if errorlevel 1 (
-        echo npm install failed
+        echo npm install FAILED >> "%LOG%"
+        type "%LOG%"
         pause
         exit /b 1
     )
 )
 
-:: ── Start browser & server ──
+:: ── Start ──
+echo Starting server... >> "%LOG%"
 start "" http://localhost:3000
 
 if exist "dist\src\index.js" (
-    node dist\src\index.js
+    echo Running: node dist\src\index.js >> "%LOG%"
+    node dist\src\index.js >> "%LOG%" 2>&1
 ) else (
-    npx tsx src\index.ts
+    echo Running: npx tsx src\index.ts >> "%LOG%"
+    npx tsx src\index.ts >> "%LOG%" 2>&1
 )
 
+echo %date% %time% server stopped >> "%LOG%"
+type "%LOG%"
 pause
