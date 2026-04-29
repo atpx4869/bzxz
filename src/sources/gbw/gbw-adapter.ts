@@ -14,6 +14,8 @@ import type {
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
 import { buildFileName, getExportsDir } from '../../shared/fs';
 import { createStandardId, parseStandardId } from '../../shared/id';
+import { pooledFetch } from '../../shared/http';
+import { searchCache } from '../../shared/cache';
 import { GbwDownloadSessionStore } from './gbw-download-session-store';
 import { ocrCaptcha } from '../shared/captcha-ocr';
 
@@ -55,17 +57,16 @@ export class GbwAdapter implements SourceAdapter {
   constructor(private readonly downloadSessionStore = new GbwDownloadSessionStore()) {}
 
   async searchStandards(input: SearchStandardsInput): Promise<StandardSummary[]> {
+    const cacheKey = `gbw:search:${input.query}`;
+    const cached = searchCache.get<StandardSummary[]>(cacheKey);
+    if (cached) return cached;
+
     const searchUrl = new URL('/gb/search/gbQueryPage', GBW_STD_BASE);
     searchUrl.searchParams.set('searchText', input.query);
     searchUrl.searchParams.set('page', '1');
     searchUrl.searchParams.set('pageSize', '20');
 
-    const response = await fetch(searchUrl, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        Accept: 'application/json, text/plain, */*',
-      },
-    });
+    const response = await pooledFetch(searchUrl.toString());
 
     if (!response.ok) {
       throw new UpstreamError('Failed to query gbw search endpoint', { status: response.status });
@@ -73,8 +74,9 @@ export class GbwAdapter implements SourceAdapter {
 
     const payload = (await response.json()) as GbwSearchResponse;
     const rows = payload.rows ?? [];
-
-    return rows.map((row) => this.mapSearchRow(row));
+    const result = rows.map((row) => this.mapSearchRow(row));
+    searchCache.set(cacheKey, result);
+    return result;
   }
 
   async getStandardDetail(id: string): Promise<StandardDetail> {
