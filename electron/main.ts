@@ -1,3 +1,9 @@
+// Force direct connection — bypass any system proxy (Clash, etc.)
+for (const key of ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy']) {
+  delete (process.env as Record<string, string | undefined>)[key];
+}
+process.env.NO_PROXY = '*';
+
 import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain, session } from 'electron';
 
 Menu.setApplicationMenu(null);
@@ -113,6 +119,9 @@ async function startServer(): Promise<number> {
 app.whenReady().then(async () => {
   serverPort = await startServer();
   console.log(`Server on http://localhost:${serverPort}`);
+
+  // Force Chromium to bypass system proxy
+  session.defaultSession.setProxy({ mode: 'direct' });
 
   // Download interception — auto-save to configured path, no dialog
   const settings = loadSettings();
