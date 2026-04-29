@@ -1,4 +1,6 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain, session } from 'electron';
+
+Menu.setApplicationMenu(null);
 import path from 'node:path';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createApp } from '../src/api/app';
