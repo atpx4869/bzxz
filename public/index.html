@@ -1328,15 +1328,15 @@ async function doComplete() {
 }
 
 // ── Settings (floating panel) ──
-const SETTINGS_LABELS = { gbw: '国标公开系统', bz: '标准在线', by: '内网系统', bzvip: 'BZ官方直链' };
-const SETTINGS_NOTES = { gbw: 'OCR验证码 · 5~15s', bz: '逐页合成PDF · 30~90s', by: '直接PDF · 2~5s（需内网）', bzvip: '账号池 · 2~5s' };
+const SETTINGS_LABELS = { gbw: 'GB源', bz: 'BZ源', by: 'BY源', bzvip: 'BZvip源' };
+const SETTINGS_NOTES = { gbw: '自动验证码 5~15s', bz: '合成PDF 30~90s', by: '直链PDF 2~5s', bzvip: '账号池 2~5s' };
 
 function renderSettings() {
   const priorityRows = downloadPriority.map((s, i) => {
     const enabled = downloadSources.includes(s);
     return `
     <div class="setting-row" data-priority="${s}" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);opacity:${enabled ? '1' : '0.4'}">
-      <span class="drag-handle">??:</span>
+      <span class="drag-handle">⋮</span>
       <span style="font-size:11px;color:var(--text-3);min-width:16px">${i + 1}</span>
       <div style="flex:1;min-width:0">
         <div style="font-size:14px;font-weight:500;color:var(--text)">${SETTINGS_LABELS[s]}</div>
@@ -1623,6 +1623,7 @@ initPanels();
 </script>
 </body>
 </html>
+
 
 
 
