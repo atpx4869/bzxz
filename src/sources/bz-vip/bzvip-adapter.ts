@@ -8,7 +8,7 @@ import type {
   StandardSummary,
 } from '../../domain/standard';
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
-import { safeWriteExportFile } from '../../shared/fs';
+import { buildFileName, safeWriteExportFile } from '../../shared/fs';
 import { createStandardId, parseStandardId } from '../../shared/id';
 import { accountPool, bzVipGet, bzVipDownload, bzVipPost } from './account-pool';
 
@@ -244,14 +244,10 @@ function isValidPdf(data: Buffer): boolean {
 }
 
 function buildBzVipFileName(standardNumber: string, title: string, disposition: string): string {
-  // Try to get filename from Content-Disposition
   const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
   if (match) {
     const fname = match[1].replace(/['"]/g, '').trim();
     if (fname) return decodeURIComponent(fname);
   }
-  const num = standardNumber.replace(/[\\/:*?"<>|]/g, '_').trim();
-  const name = title.replace(/[\\/:*?"<>|]/g, '_').trim();
-  const joined = [num, name].filter(Boolean).join(' ');
-  return `${joined || 'bzvip-standard'}.pdf`;
+  return buildFileName(standardNumber, title);
 }

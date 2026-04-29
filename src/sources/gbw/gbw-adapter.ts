@@ -12,7 +12,7 @@ import type {
   StandardSummary,
 } from '../../domain/standard';
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
-import { getExportsDir } from '../../shared/fs';
+import { buildFileName, getExportsDir } from '../../shared/fs';
 import { createStandardId, parseStandardId } from '../../shared/id';
 import { GbwDownloadSessionStore } from './gbw-download-session-store';
 import { ocrCaptcha } from '../shared/captcha-ocr';
@@ -416,7 +416,7 @@ export class GbwAdapter implements SourceAdapter {
 
     const bytes = Buffer.from(await response.arrayBuffer());
     const detail = await this.getStandardDetail(session.standardId);
-    const fileName = buildGbwExportFileName(detail.standardNumber, detail.title, contentType);
+    const fileName = buildFileName(detail.standardNumber, detail.title, guessExtension(contentType));
     const filePath = path.join(getExportsDir(), fileName);
     await writeFile(filePath, bytes);
 
@@ -524,21 +524,6 @@ function stripDownloadSessionSecrets(session: DownloadSessionInfo & { cookies?: 
     updatedAt,
     meta,
   };
-}
-
-function buildGbwExportFileName(standardNumber: string, title: string, contentType: string): string {
-  const normalizedNumber = sanitizeFileNamePart(standardNumber).replace(/\//g, '_');
-  const normalizedTitle = sanitizeFileNamePart(title);
-  const extension = guessExtension(contentType);
-  const joined = [normalizedNumber, normalizedTitle].filter(Boolean).join(' ');
-  return `${joined || 'gbw-standard'}.${extension}`;
-}
-
-function sanitizeFileNamePart(value: string): string {
-  return cleanText(value)
-    .replace(/[\\/:*?"<>|]/g, '_')
-    .replace(/\s+/g, ' ')
-    .trim();
 }
 
 function guessExtension(contentType: string): string {

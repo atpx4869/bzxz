@@ -10,7 +10,7 @@ import type {
   StandardSummary,
 } from '../../domain/standard';
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
-import { getExportsDir } from '../../shared/fs';
+import { buildFileName, getExportsDir } from '../../shared/fs';
 import { createStandardId, parseStandardId } from '../../shared/id';
 
 // BY 内网系统配置
@@ -128,7 +128,7 @@ export class ByAdapter implements SourceAdapter {
     }
 
     const pdfUrl = this.resolvePdfUrl(pdfPathMatch[1]);
-    const fileName = buildByFileName(stdNo || sourceId, stdName || 'unknown');
+    const fileName = buildFileName(stdNo || sourceId, stdName || 'unknown');
     const filePath = path.join(getExportsDir(), fileName);
 
     const downloaded = await this.downloadPdf(pdfUrl, filePath);
@@ -452,11 +452,4 @@ function extractRegex(text: string, pattern: RegExp): string {
 function parseTotalPages(html: string): number {
   const match = html.match(/当前页：<font[^>]*><b>\d+\/(\d+)<\/b>/);
   return match?.[1] ? parseInt(match[1], 10) : 1;
-}
-
-function buildByFileName(standardNumber: string, title: string): string {
-  const num = standardNumber.replace(/[\\/:*?"<>|]/g, '_').replace(/\//g, '_').trim();
-  const name = title.replace(/[\\/:*?"<>|]/g, '_').trim();
-  const joined = [num, name].filter(Boolean).join(' ');
-  return `${joined || 'by-standard'}.pdf`;
 }

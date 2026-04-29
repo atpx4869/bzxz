@@ -12,7 +12,7 @@ import type {
   StandardSummary,
 } from '../../domain/standard';
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
-import { getExportsDir } from '../../shared/fs';
+import { buildFileName, getExportsDir } from '../../shared/fs';
 import { createStandardId, parseStandardId } from '../../shared/id';
 
 interface BzNewSearchRow {
@@ -169,7 +169,7 @@ export class BzZhengguiAdapter implements SourceAdapter {
       page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
     }
 
-    const fileName = buildBzFileName(detail.standardNumber, detail.title);
+    const fileName = buildFileName(detail.standardNumber, detail.title);
     const filePath = path.join(getExportsDir(), fileName);
     await writeFile(filePath, await pdfDoc.save());
 
@@ -290,11 +290,4 @@ export class BzZhengguiAdapter implements SourceAdapter {
       meta: row as Record<string, unknown>,
     };
   }
-}
-
-function buildBzFileName(standardNumber: string, title: string): string {
-  const num = standardNumber.replace(/[\\/:*?"<>|]/g, '_').replace(/\//g, '_').trim();
-  const name = title.replace(/[\\/:*?"<>|]/g, '_').trim();
-  const joined = [num, name].filter(Boolean).join(' ');
-  return `${joined || 'standard'}.pdf`;
 }
