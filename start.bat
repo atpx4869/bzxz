@@ -3,72 +3,49 @@ chcp 65001 >nul
 title bzxz · 标准检索
 cd /d "%~dp0"
 
-:: Minimize window on startup
-if not "%1"=="min" (
-    start "" /min "%~f0" min
-    exit
-)
-
-echo ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-echo   bzxz · 多源标准检索与批量下载
-echo ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-echo.
+echo %date% %time% bzxz starting > startup.log
 
 :: Check Node.js
 where node >nul 2>&1
 if errorlevel 1 (
-    echo ❌ 未找到 Node.js，请先安装 Node.js
-    echo    下载地址：https://nodejs.org
-    pause
+    echo Node.js not found >> startup.log
+    msg %username% "bzxz: Node.js not found. Install from https://nodejs.org"
     exit /b 1
 )
 
 :: Install dependencies
 if not exist "node_modules\" (
-    echo [1/3] 安装依赖...
-    call npm install
+    echo Installing dependencies... >> startup.log
+    call npm install >> startup.log 2>&1
     if errorlevel 1 (
-        echo ❌ 依赖安装失败
+        echo npm install failed >> startup.log
+        msg %username% "bzxz: dependency install failed. Check startup.log"
         pause
         exit /b 1
     )
-) else (
-    echo [1/3] 依赖已就绪
 )
 
-:: Build if needed, else use tsx directly
-set "SERVER_CMD="
-if exist "dist\src\index.js" (
-    echo [2/3] 使用编译版本启动
-    set "SERVER_CMD=node dist/src/index.js"
-) else (
-    echo [2/3] 使用 tsx 启动 ^(开发模式^)
-    set "SERVER_CMD=npx tsx src/index.ts"
-)
+:: Run server (avoid if-block variable expansion issues)
+if exist "dist\src\index.js" goto :run_compiled
+if exist "node_modules\.bin\tsx.cmd" goto :run_tsx
+goto :run_npx
 
-:: Get LAN IP
-for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4" 2^>nul') do (
-    for /f "tokens=*" %%b in ("%%a") do (
-        set "LAN_IP=%%b"
-        goto :gotip
-    )
-)
-:gotip
+:run_compiled
+echo Using compiled build >> startup.log
+node dist/src/index.js >> startup.log 2>&1
+goto :server_exit
 
-echo [3/3] 启动服务...
-echo.
-echo   ▸ 本机访问：http://localhost:3000
-if defined LAN_IP echo   ▸ 局域网访问：http://%LAN_IP%:3000
-echo   ▸ 关闭窗口即可停止服务
-echo.
+:run_tsx
+echo Using tsx (dev mode) >> startup.log
+node_modules\.bin\tsx.cmd src/index.ts >> startup.log 2>&1
+goto :server_exit
 
-:: Open browser
-start "" http://localhost:3000
+:run_npx
+echo Using npx tsx >> startup.log
+npx tsx src/index.ts >> startup.log 2>&1
+goto :server_exit
 
-:: Run server
-cmd /c %SERVER_CMD%
-
-:: If server exits unexpectedly
-echo.
-echo ❌ 服务已停止
+:server_exit
+echo %date% %time% server exited >> startup.log
+msg %username% "bzxz service stopped. Check startup.log for details."
 pause

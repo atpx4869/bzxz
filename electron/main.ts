@@ -46,9 +46,7 @@ function createWindow() {
 
   mainWindow.loadURL(`http://localhost:${serverPort}`);
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow?.show();
-  });
+  // Start minimized to tray — user opens window via tray menu or double-click
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -80,7 +78,7 @@ function createTray() {
     }},
   ]);
 
-  tray.setToolTip('bzxz · 标准检索');
+  tray.setToolTip(`bzxz · http://localhost:${serverPort}`);
   tray.setContextMenu(contextMenu);
 
   tray.on('double-click', () => {
