@@ -220,7 +220,16 @@ body { min-height: 100vh; }
   cursor: pointer; border: none; background: var(--surface-h); color: var(--text-2);
   transition: all 0.12s var(--ease-out);
 }
-.result-card .card-actions button:hover { background: var(--accent); color: #fff; }
+.result-card .card-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+.result-card .card-actions button .btn-spinner {
+  display: none; width: 12px; height: 12px; border: 2px solid var(--text-3); border-top-color: transparent;
+  border-radius: 50%; animation: btn-spin 0.6s linear infinite; vertical-align: middle; margin-right: 4px;
+}
+@keyframes btn-spin { to { transform: rotate(360deg); } }
+.result-card.downloading { border-color: var(--accent); box-shadow: 0 0 12px oklch(68% 0.18 230 / 0.25); }
+.result-card.downloading .card-number { color: oklch(70% 0.16 230); }
+.result-card.download-success { border-color: var(--success); box-shadow: 0 0 12px oklch(68% 0.16 158 / 0.2); transition: all 0.2s var(--ease-out); }
+.result-card.download-fail { border-color: var(--danger); box-shadow: 0 0 12px oklch(58% 0.20 25 / 0.15); transition: all 0.2s var(--ease-out); }
 
 .status-indicator {
   display: inline-flex; align-items: center; gap: 5px;
@@ -715,7 +724,7 @@ function renderResults() {
     const srcBadges = (r.sources || [r._source]).map(s => `<span class="source-badge source-${escapeHtml(String(s))}">${escapeHtml(String(s).toUpperCase())}</span>`).join(' ');
     const sCls = statusClass(r.status); const hasText = r.previewAvailable;
     return `
-    <div class="result-card${hasText ? '' : ' no-text'}">
+    <div class="result-card${hasText ? '' : ' no-text'}" data-sid="${escapeHtml(r.id)}">
       <div class="check-col"><input type="checkbox" data-idx="${i}" ${selectedIds.has(r.id) ? 'checked' : ''}></div>
       <div class="card-body">
         <div class="card-title-row">
@@ -755,8 +764,25 @@ document.getElementById('results').addEventListener('click', e => {
   if (!btn) return;
   const id = btn.dataset.id;
   if (btn.dataset.action === 'detail') showDetail(id);
-  else if (btn.dataset.action === 'download') downloadOne(id);
+  else if (btn.dataset.action === 'download') downloadOne(id, btn);
 });
+
+function setRowDownloadState(id, state) {
+  const card = document.querySelector(`.result-card[data-sid="${CSS.escape(id)}"]`);
+  if (!card) return;
+  const btn = card.querySelector('[data-action="download"]');
+  card.classList.remove('download-success', 'download-fail');
+  if (state === 'downloading') {
+    card.classList.add('downloading');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="btn-spinner" style="display:inline-block"></span>下载中'; }
+  } else {
+    card.classList.remove('downloading');
+    if (state === 'success') card.classList.add('download-success');
+    else if (state === 'fail') card.classList.add('download-fail');
+    if (btn) { btn.disabled = false; btn.textContent = '下载'; }
+    setTimeout(() => card.classList.remove('download-success', 'download-fail'), 2500);
+  }
+}
 
 function statusClass(s) { if (!s) return ''; if (s.includes('废止')) return 'expired'; if (s.includes('实施')) return 'upcoming'; if (s.includes('现行')) return 'current'; return ''; }
 
@@ -775,20 +801,23 @@ document.getElementById('selectAll').addEventListener('click', () => {
 // ── Download functions ──
 let downloadAborted = false;
 
-async function downloadOne(id) {
+async function downloadOne(id, btn) {
   const r = results.find(r => r.id === id); if (!r) return;
   downloadAborted = false;
   const sources = (r.sources || [r._source]).filter(s => downloadSources.includes(s));
   if (!sources.length) { addLog(`${r.standardNumber} 无可用下载源`, 'fail'); return; }
+  setRowDownloadState(id, 'downloading');
   const logId = addLog(`${r.standardNumber} 竞速 [${sources.map(s => s.toUpperCase()).join('+')}]`, 'pending');
   try {
     const winner = await Promise.any(sources.map(s => raceSource(r.id, s, r.standardNumber, (msg) => updateLog(logId, msg, 'pending'))));
     const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
     updateLog(logId, `${r.standardNumber} ✅ ${winner.source.toUpperCase()}胜出 ${winner.fileName}${sizeStr}`, 'success');
+    setRowDownloadState(id, 'success');
     if (winner.fileName) triggerDownload(winner.fileName);
   } catch (e) {
     const msgs = e instanceof AggregateError ? [...new Set(e.errors.map(err => err.message))].slice(0, 3).join('; ') : (e.message || '未知错误');
     updateLog(logId, `${r.standardNumber} ❌ ${msgs}`, 'fail');
+    setRowDownloadState(id, 'fail');
   }
 }
 
@@ -894,17 +923,20 @@ document.getElementById('downloadSelected').addEventListener('click', async () =
       const item = queue.shift();
       const sources = (item.sources || [item._source]).filter(s => downloadSources.includes(s));
       if (!sources.length) { completed++; failed++; updateProgress(); continue; }
+      setRowDownloadState(item.id, 'downloading');
       const logId = addLog(`${item.standardNumber} 竞速 [${sources.map(s => s.toUpperCase()).join('+')}]`, 'pending');
       try {
         const winner = await Promise.any(sources.map(s => raceSource(item.id, s, item.standardNumber, (msg) => updateLog(logId, msg, 'pending'))));
         success++; wins[winner.source] = (wins[winner.source] || 0) + 1;
         const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
         updateLog(logId, `${item.standardNumber} ✅ ${winner.source.toUpperCase()}胜出 ${winner.fileName}${sizeStr}`, 'success');
+        setRowDownloadState(item.id, 'success');
         if (winner.fileName) triggerDownload(winner.fileName);
       } catch (e) {
         failed++;
         const msgs = e instanceof AggregateError ? [...new Set(e.errors.map(err => err.message))].slice(0, 3).join('; ') : (e.message || '未知错误');
         updateLog(logId, `${item.standardNumber} ❌ ${msgs}`, 'fail');
+        setRowDownloadState(item.id, 'fail');
       }
       completed++; updateProgress();
     }
@@ -1026,15 +1058,18 @@ async function doCascadeDownload() {
     async function worker() {
       while (queue.length > 0 && !batchAborted) {
         const item = queue.shift();
+        setRowDownloadState(item.standardId, 'downloading');
         const logId = addLog(`${item.standardNumber} ${source.toUpperCase()} 下载中...`, 'pending');
         try {
           const winner = await raceSourceWithTimeout(item.standardId, source, item.standardNumber, downloadTimeout * 1000, (msg) => updateLog(logId, msg, 'pending'));
           const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
           updateLog(logId, `${item.standardNumber} ✅ ${source.toUpperCase()} ${winner.fileName}${sizeStr}`, 'success');
+          setRowDownloadState(item.standardId, 'success');
           success++; successItems.push(item);
           if (winner.fileName) triggerDownload(winner.fileName);
         } catch (e) {
           updateLog(logId, `${item.standardNumber} ⚠ ${source.toUpperCase()} ${(e && e.message) || 'fail'}`, 'fail');
+          setRowDownloadState(item.standardId, 'fail');
         }
         completed++; updateProgress();
       }
@@ -1077,6 +1112,7 @@ async function doRaceDownload() {
   async function worker() {
     while (queue.length > 0 && !batchAborted) {
       const item = queue.shift();
+      setRowDownloadState(item.standardId, 'downloading');
       const sourceList = (sources.length > 0 ? sources : ['bzvip']).filter(s => downloadSources.includes(s));
       const logId = addLog(`${item.standardNumber} 竞速 [${sourceList.map(s => s.toUpperCase()).join('+')}]`, 'pending');
       try {
@@ -1084,11 +1120,13 @@ async function doRaceDownload() {
         success++; successItems.push(item); wins[winner.source] = (wins[winner.source] || 0) + 1;
         const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
         updateLog(logId, `${item.standardNumber} ✅ ${winner.source.toUpperCase()}胜出 ${winner.fileName}${sizeStr}`, 'success');
+        setRowDownloadState(item.standardId, 'success');
         if (winner.fileName) triggerDownload(winner.fileName);
       } catch (e) {
         allFailedItems.push(item);
         const msgs = e instanceof AggregateError ? [...new Set(e.errors.map(err => err.message))].slice(0, 3).join('; ') : (e.message || '未知错误');
         updateLog(logId, `${item.standardNumber} ❌ ${msgs}`, 'fail');
+        setRowDownloadState(item.standardId, 'fail');
       }
       completed++; updateProgress();
     }
