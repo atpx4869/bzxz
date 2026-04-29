@@ -1541,13 +1541,13 @@ function saveSearchHistory(query) {
   hist.unshift(query);
   const limit = getHistoryLimit(); if (hist.length > limit) hist = hist.slice(0, limit);
   localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(hist));
+}
 function getHistoryLimit() {
   try { return parseInt(localStorage.getItem('bzxz_history_limit') || '10', 10) || 10; } catch { return 10; }
 }
 function setHistoryLimit(n) {
   localStorage.setItem('bzxz_history_limit', String(n));
   renderSettings();
-}
 }
 function renderSearchHistory() {
   const el = document.getElementById('searchHistory');
@@ -1623,6 +1623,7 @@ initPanels();
 </script>
 </body>
 </html>
+
 
 
 
