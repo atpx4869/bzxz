@@ -686,7 +686,9 @@ function dedupeResults(items) {
       if (!existing.title && item.title) existing.title = item.title;
       if (!existing.publishDate && item.publishDate) existing.publishDate = item.publishDate;
       if (!existing.implementDate && item.implementDate) existing.implementDate = item.implementDate;
-    } else { map.set(key, { ...item, sources: [item._source], _multiSource: item._source }); }
+      existing._sourceIds = existing._sourceIds || {};
+      existing._sourceIds[item._source] = item.id;
+    } else { map.set(key, { ...item, sources: [item._source], _multiSource: item._source, _sourceIds: { [item._source]: item.id } }); }
   }
   return [...map.values()];
 }
@@ -787,11 +789,14 @@ async function downloadOne(id) {
 }
 
 function raceSource(standardId, source, label) {
+  // Use source-specific ID if available (from multi-source search dedup)
+  const r = results.find(r => r.id === standardId);
+  const srcId = (r && r._sourceIds && r._sourceIds[source]) || standardId;
   switch (source) {
-    case 'gbw': return downloadGbw(standardId);
-    case 'bz':  return downloadBz(standardId);
-    case 'by':    return downloadBy(standardId);
-    case 'bzvip': return downloadBzVip(standardId);
+    case 'gbw': return downloadGbw(srcId);
+    case 'bz':  return downloadBz(srcId);
+    case 'by':    return downloadBy(srcId);
+    case 'bzvip': return downloadBzVip(srcId);
     default: return Promise.reject(new Error(`Unknown source ${source}`));
   }
 }
