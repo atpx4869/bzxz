@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import https from 'node:https';
+import { getRootDir } from '../../shared/fs';
 
 // --- Types ---
 
@@ -98,11 +99,13 @@ export function bzVipDownload(urlPath: string): Promise<{ status: number; data: 
 
 // --- OCR helper ---
 
-const OCR_BRIDGE = path.join(process.cwd(), 'scripts', 'ocr_ddddocr.py');
+function getOcrBridge(): string {
+  return path.join(getRootDir(), 'scripts', 'ocr_ddddocr.py');
+}
 
 function solveCaptcha(base64Image: string): string {
   try {
-    const raw = execFileSync('python', [OCR_BRIDGE], {
+    const raw = execFileSync('python', [getOcrBridge()], {
       input: base64Image, encoding: 'utf-8', timeout: 8000, maxBuffer: 1024 * 1024, windowsHide: true,
     });
     return raw.trim().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
@@ -111,7 +114,9 @@ function solveCaptcha(base64Image: string): string {
 
 const AUTH_HEADER = process.env.BZVIP_CLIENT_AUTH ?? 'Basic cG9ydGFsOnBvcnRhbF9zZWNyZXQ=';
 
-const ACCOUNTS_FILE = path.join(process.cwd(), 'data', 'accounts.json');
+function getAccountsFile(): string {
+  return path.join(getRootDir(), 'data', 'accounts.json');
+}
 
 export class AccountPoolManager {
   private accounts: PoolAccount[] = [];
@@ -123,9 +128,9 @@ export class AccountPoolManager {
   }
 
   load(): void {
-    if (!existsSync(ACCOUNTS_FILE)) { this.accounts = []; return; }
+    if (!existsSync(getAccountsFile())) { this.accounts = []; return; }
     try {
-      const raw: StoredAccount[] = JSON.parse(readFileSync(ACCOUNTS_FILE, 'utf-8'));
+      const raw: StoredAccount[] = JSON.parse(readFileSync(getAccountsFile(), 'utf-8'));
       this.accounts = raw.map(a => ({
         ...a,
         downloadsUsed: a.downloadsUsed ?? 0,
@@ -136,7 +141,7 @@ export class AccountPoolManager {
 
   async save(): Promise<void> {
     const { writeFile } = await import('node:fs/promises');
-    await writeFile(ACCOUNTS_FILE, JSON.stringify(this.accounts, null, 2), 'utf-8');
+    await writeFile(getAccountsFile(), JSON.stringify(this.accounts, null, 2), 'utf-8');
   }
 
   /** Get a usable account with valid token and remaining quota */

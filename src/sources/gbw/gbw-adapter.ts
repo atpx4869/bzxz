@@ -12,7 +12,7 @@ import type {
   StandardSummary,
 } from '../../domain/standard';
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
-import { EXPORTS_DIR } from '../../shared/fs';
+import { getExportsDir } from '../../shared/fs';
 import { createStandardId, parseStandardId } from '../../shared/id';
 import { GbwDownloadSessionStore } from './gbw-download-session-store';
 import { ocrCaptcha } from '../shared/captcha-ocr';
@@ -417,7 +417,7 @@ export class GbwAdapter implements SourceAdapter {
     const bytes = Buffer.from(await response.arrayBuffer());
     const detail = await this.getStandardDetail(session.standardId);
     const fileName = buildGbwExportFileName(detail.standardNumber, detail.title, contentType);
-    const filePath = path.join(EXPORTS_DIR, fileName);
+    const filePath = path.join(getExportsDir(), fileName);
     await writeFile(filePath, bytes);
 
     return {

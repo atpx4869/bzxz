@@ -12,7 +12,7 @@ import type {
   StandardSummary,
 } from '../../domain/standard';
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
-import { EXPORTS_DIR } from '../../shared/fs';
+import { getExportsDir } from '../../shared/fs';
 import { createStandardId, parseStandardId } from '../../shared/id';
 
 interface BzNewSearchRow {
@@ -170,7 +170,7 @@ export class BzZhengguiAdapter implements SourceAdapter {
     }
 
     const fileName = buildBzFileName(detail.standardNumber, detail.title);
-    const filePath = path.join(EXPORTS_DIR, fileName);
+    const filePath = path.join(getExportsDir(), fileName);
     await writeFile(filePath, await pdfDoc.save());
 
     return {

@@ -10,7 +10,7 @@ import type {
   StandardSummary,
 } from '../../domain/standard';
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
-import { EXPORTS_DIR } from '../../shared/fs';
+import { getExportsDir } from '../../shared/fs';
 import { createStandardId, parseStandardId } from '../../shared/id';
 
 // BY 内网系统配置
@@ -129,7 +129,7 @@ export class ByAdapter implements SourceAdapter {
 
     const pdfUrl = this.resolvePdfUrl(pdfPathMatch[1]);
     const fileName = buildByFileName(stdNo || sourceId, stdName || 'unknown');
-    const filePath = path.join(EXPORTS_DIR, fileName);
+    const filePath = path.join(getExportsDir(), fileName);
 
     const downloaded = await this.downloadPdf(pdfUrl, filePath);
     if (!downloaded) {

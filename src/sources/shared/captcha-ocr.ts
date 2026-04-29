@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import sharp from 'sharp';
 import { createWorker } from 'tesseract.js';
+import { getRootDir } from '../../shared/fs';
 
 interface OcrResult {
   text: string;
@@ -10,7 +11,10 @@ interface OcrResult {
 }
 
 const CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-const PYTHON_BRIDGE = path.join(process.cwd(), 'scripts', 'ocr_ddddocr.py');
+
+function getPythonBridge(): string {
+  return path.join(getRootDir(), 'scripts', 'ocr_ddddocr.py');
+}
 
 export async function ocrCaptcha(base64Image: string): Promise<OcrResult> {
   const ddddResult = await tryDdddocr(base64Image);
@@ -23,7 +27,7 @@ export async function ocrCaptcha(base64Image: string): Promise<OcrResult> {
 
 async function tryDdddocr(base64Image: string): Promise<OcrResult> {
   try {
-    const raw = execFileSync('python', [PYTHON_BRIDGE], {
+    const raw = execFileSync('python', [getPythonBridge()], {
       input: base64Image,
       encoding: 'utf-8',
       timeout: 8000,
