@@ -360,6 +360,88 @@ body { min-height: 100vh; }
 .batch-textarea::placeholder { color: var(--text-3); }
 .batch-actions { display: flex; gap: 8px; margin-top: 12px; align-items: center; flex-wrap: wrap; }
 .batch-summary { margin-top: 12px; font-size: 13px; color: var(--text-2); }
+
+/* ── Search history dropdown ── */
+.search-history {
+  display: none; position: absolute; top: 100%; left: 0; right: 0;
+  margin-top: 6px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+  z-index: 50; overflow: hidden;
+}
+.search-history.open { display: block; animation: histIn 0.15s var(--ease-out); }
+@keyframes histIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.search-history-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 18px; cursor: pointer; font-size: 14px; color: var(--text-2);
+  border-bottom: 1px solid var(--border); transition: background 0.1s var(--ease-out);
+}
+.search-history-item:last-child { border: none; }
+.search-history-item:hover { background: var(--surface-h); color: var(--text); }
+.search-history-item .hist-icon { color: var(--text-3); font-size: 12px; }
+.search-history-item .hist-query { flex: 1; }
+.search-history-empty { padding: 16px 18px; font-size: 13px; color: var(--text-3); text-align: center; }
+
+/* ── Toast ── */
+.toast-container {
+  position: fixed; bottom: 160px; right: 24px; z-index: 500;
+  display: flex; flex-direction: column-reverse; gap: 8px; pointer-events: none;
+}
+.toast {
+  pointer-events: auto; display: flex; align-items: center; gap: 10px;
+  padding: 12px 18px; border-radius: var(--radius);
+  background: var(--surface); border: 1px solid var(--border);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  font-size: 13px; font-weight: 500; color: var(--text);
+  animation: toastIn 0.3s var(--ease-spring); max-width: 360px;
+  position: relative; overflow: hidden;
+}
+.toast.success { border-color: oklch(68% 0.16 158 / 0.4); }
+.toast.fail { border-color: oklch(58% 0.20 25 / 0.4); }
+.toast .toast-icon { font-size: 16px; flex-shrink: 0; }
+.toast .toast-msg { flex: 1; }
+.toast .toast-bar {
+  position: absolute; bottom: 0; left: 0; height: 2px; border-radius: 0 2px 0 0;
+  animation: toastBar linear forwards;
+}
+.toast.success .toast-bar { background: var(--success); }
+.toast.fail .toast-bar { background: var(--danger); }
+@keyframes toastIn { from { opacity: 0; transform: translateY(12px) scale(0.95); } to { opacity: 1; transform: none; } }
+@keyframes toastBar { from { width: 100%; } to { width: 0%; } }
+
+/* ── Card entrance ── */
+.result-card.card-enter {
+  opacity: 0; transform: translateY(20px);
+  animation: cardIn 0.4s var(--ease-spring) forwards;
+}
+@keyframes cardIn { to { opacity: 1; transform: none; } }
+
+/* ── Shortcuts overlay ── */
+.shortcuts-overlay {
+  display: none; position: fixed; inset: 0; z-index: 600;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+  align-items: center; justify-content: center;
+}
+.shortcuts-overlay.open { display: flex; }
+.shortcuts-panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 28px 32px;
+  box-shadow: 0 16px 64px rgba(0,0,0,0.5); min-width: 380px;
+  animation: toastIn 0.25s var(--ease-spring);
+}
+.shortcuts-panel h3 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+.shortcuts-panel .kbd-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.shortcuts-panel .kbd-row:last-child { border: none; }
+.shortcuts-panel .kbd-key {
+  display: inline-flex; gap: 4px;
+}
+.shortcuts-panel .kbd-key kbd {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  background: var(--surface-h); border: 1px solid var(--border);
+  font: 400 11px 'DM Mono', monospace; color: var(--text-2);
+}
 </style>
 </head>
 <body>
@@ -396,6 +478,7 @@ body { min-height: 100vh; }
       </div>
       <button class="btn btn-primary" id="searchBtn">搜索</button>
     </div>
+    <div class="search-history" id="searchHistory"></div>
   </div>
 </section>
 
@@ -495,6 +578,17 @@ body { min-height: 100vh; }
   </div>
 </div>
 
+<div class="toast-container" id="toastContainer"></div>
+<div class="shortcuts-overlay" id="shortcutsOverlay">
+  <div class="shortcuts-panel">
+    <h3>⌨ 快捷键</h3>
+    <div class="kbd-row"><span>聚焦搜索</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>K</kbd></span></div>
+    <div class="kbd-row"><span>执行搜索</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span></div>
+    <div class="kbd-row"><span>全选结果</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>A</kbd></span></div>
+    <div class="kbd-row"><span>关闭面板/弹窗</span><span class="kbd-key"><kbd>Esc</kbd></span></div>
+    <div class="kbd-row"><span>显示快捷键</span><span class="kbd-key"><kbd>?</kbd></span></div>
+  </div>
+</div>
 <script>
 const API = '';
 
@@ -658,6 +752,7 @@ async function doSearch() {
   document.getElementById('searchBtn').innerHTML = '<span class="spinner"></span>搜索中';
   document.getElementById('searchBtn').disabled = true;
   results = []; selectedIds.clear(); updateToolbar(); searchAborted = false;
+  saveSearchHistory(q);
 
   const sources = [...selectedSources];
   const promises = sources.map(src => {
@@ -724,7 +819,7 @@ function renderResults() {
     const srcBadges = (r.sources || [r._source]).map(s => `<span class="source-badge source-${escapeHtml(String(s))}">${escapeHtml(String(s).toUpperCase())}</span>`).join(' ');
     const sCls = statusClass(r.status); const hasText = r.previewAvailable;
     return `
-    <div class="result-card${hasText ? '' : ' no-text'}" data-sid="${escapeHtml(r.id)}">
+    <div class="result-card card-enter${hasText ? '' : ' no-text'}" data-sid="${escapeHtml(r.id)}" style="animation-delay:${i * 40}ms">
       <div class="check-col"><input type="checkbox" data-idx="${i}" ${selectedIds.has(r.id) ? 'checked' : ''}></div>
       <div class="card-body">
         <div class="card-title-row">
@@ -946,6 +1041,7 @@ document.getElementById('downloadSelected').addEventListener('click', async () =
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
   const winSummary = Object.entries(wins).map(([k, v]) => `${k.toUpperCase()}:${v}`).join(' ');
   addLog(`完成 ${success}/${total} · ${elapsed}s · ${winSummary || '无'}`, 'success');
+  if (success > 0) showToast(`下载完成 ${success}/${total} · ${elapsed}s`);
   setTimeout(() => { progress.classList.remove('visible'); fill.style.width = '0%'; progressText.textContent = ''; }, 2000);
   document.getElementById('stopDownload').style.display = 'none'; isDownloading = false; updateToolbar();
 });
@@ -1083,6 +1179,7 @@ async function doCascadeDownload() {
   finalFailed.forEach(it => { allFailedItems.push(it); addLog(`${it.standardNumber} ❌ 所有源均失败`, 'fail'); });
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
   addLog(`━━ 批量下载完成: ${success}/${total} 成功 (${elapsed}s)`, 'success');
+  if (success > 0) showToast(`批量完成 ${success}/${total} · ${elapsed}s`);
   showBatchResultModal(successItems, allFailedItems, finalFailed, elapsed);
   batchDownloading = false;
   document.getElementById('batchDownloadBtn').disabled = false;
@@ -1137,6 +1234,7 @@ async function doRaceDownload() {
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
   const winSummary = Object.entries(wins).map(([k, v]) => `${k.toUpperCase()}:${v}`).join(' ');
   addLog(`━━ 竞速完成: ${success}/${total} 成功 [${winSummary}] (${elapsed}s)`, 'success');
+  if (success > 0) showToast(`竞速完成 ${success}/${total} · ${elapsed}s`);
   showBatchResultModal(successItems, allFailedItems, finalFailed, elapsed);
   batchDownloading = false;
   document.getElementById('batchDownloadBtn').disabled = false;
@@ -1426,6 +1524,87 @@ function triggerDownload(fileName) {
   document.body.appendChild(a); a.click();
   setTimeout(() => document.body.removeChild(a), 1000);
 }
+
+// ── Search history ──
+const SEARCH_HISTORY_KEY = 'bzxz_search_history';
+function loadSearchHistory() {
+  try { return JSON.parse(localStorage.getItem(SEARCH_HISTORY_KEY) || '[]'); } catch { return []; }
+}
+function saveSearchHistory(query) {
+  let hist = loadSearchHistory();
+  hist = hist.filter(h => h !== query);
+  hist.unshift(query);
+  if (hist.length > 10) hist = hist.slice(0, 10);
+  localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(hist));
+}
+function renderSearchHistory() {
+  const el = document.getElementById('searchHistory');
+  const hist = loadSearchHistory();
+  if (!hist.length) {
+    el.innerHTML = '<div class="search-history-empty">暂无搜索记录</div>';
+  } else {
+    el.innerHTML = hist.map(q => `<div class="search-history-item" data-query="${escapeHtml(q)}"><span class="hist-icon">🕐</span><span class="hist-query">${escapeHtml(q)}</span></div>`).join('');
+  }
+  el.classList.add('open');
+}
+function hideSearchHistory() { document.getElementById('searchHistory').classList.remove('open'); }
+
+document.getElementById('searchInput').addEventListener('focus', () => {
+  if (!document.getElementById('searchInput').value) renderSearchHistory();
+});
+document.getElementById('searchInput').addEventListener('blur', () => {
+  setTimeout(hideSearchHistory, 150);
+});
+document.getElementById('searchHistory').addEventListener('click', e => {
+  const item = e.target.closest('.search-history-item');
+  if (!item) return;
+  document.getElementById('searchInput').value = item.dataset.query;
+  hideSearchHistory();
+  doSearch();
+});
+
+// ── Toast ──
+function showToast(msg, type, duration) {
+  type = type || 'success'; duration = duration || 3000;
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  const icon = type === 'success' ? '✅' : type === 'fail' ? '❌' : 'ℹ️';
+  toast.innerHTML = `<span class="toast-icon">${icon}</span><span class="toast-msg">${escapeHtml(msg)}</span><div class="toast-bar" style="animation-duration:${duration}ms"></div>`;
+  container.appendChild(toast);
+  setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.2s'; setTimeout(() => toast.remove(), 200); }, duration);
+}
+
+// ── Keyboard shortcuts ──
+document.addEventListener('keydown', e => {
+  if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey && document.activeElement === document.body) {
+    document.getElementById('shortcutsOverlay').classList.add('open');
+  }
+  if (e.key === 'Escape') {
+    document.getElementById('shortcutsOverlay').classList.remove('open');
+    document.getElementById('modalOverlay').classList.remove('open');
+    closePanel('batch'); closePanel('complete');
+    hideSearchHistory();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault();
+    document.getElementById('searchInput').focus();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    doSearch();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'a' && document.activeElement === document.body) {
+    e.preventDefault();
+    const allSelected = selectedIds.size === results.length && results.length > 0;
+    results.forEach(r => allSelected ? selectedIds.delete(r.id) : selectedIds.add(r.id));
+    renderResults(); updateToolbar();
+  }
+});
+document.getElementById('shortcutsOverlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('shortcutsOverlay')) {
+    document.getElementById('shortcutsOverlay').classList.remove('open');
+  }
+});
 
 // ── Init ──
 initPanels();
