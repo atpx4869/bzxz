@@ -661,8 +661,8 @@ async function doSearch() {
   for (const p of promises) {
     const outcome = await p; receivedCount++;
     if (searchAborted) break;
-    if (outcome.ok) { receivedResults.push(...outcome.items); addLog(`搜索 ${outcome.src} 完成 (+${outcome.items.length} 条)`, 'success'); }
-    else { addLog(`搜索 ${outcome.src} 失败: ${outcome.error}`, 'fail'); }
+    if (outcome.ok) { receivedResults.push(...outcome.items); addLog(`搜索 ${outcome.src}(${q}) 完成 (+${outcome.items.length} 条)`, 'success'); }
+    else { addLog(`搜索 ${outcome.src}(${q}) 失败: ${outcome.error}`, 'fail'); }
     results = dedupeResults(receivedResults); results.sort(sortByStatus);
     document.getElementById('summary').innerHTML = `<span class="count-anim">找到 ${results.length} 条结果 (${receivedCount}/${sources.length} 源)</span>`;
     document.getElementById('toolbar').style.display = results.length > 0 ? 'flex' : 'none';
