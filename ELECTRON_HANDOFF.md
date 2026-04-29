@@ -1,100 +1,101 @@
-# Electron Desktop App — Handoff Document
+# bzxz 移交文档
 
-## Current Status (2026-04-28)
+## 当前状态 (2026-04-29)
 
-Electron 桌面应用 **基本功能已跑通**：TypeScript 编译通过，`npx electron .` 可正常启动窗口并加载 Express 服务。
+Electron 桌面应用 + Web 版均可正常使用。所有已知路径/代理/命名问题已修复。
 
-## 已完成
+## 功能清单
 
-1. **`electron/main.ts`** — 主进程
-   - Express 随机端口启动（`app.listen(0)`）
-   - `BrowserWindow` 创建（1280×860, min 900×600）
-   - 系统托盘（右键菜单：打开/退出，双击恢复窗口）
-   - 关闭窗口不退出（Windows 托盘驻留）
-2. **`electron/preload.ts`** — preload 脚本，暴露 `window.bzxz` 供前端判断 Electron 环境
-3. **`package.json`** — 添加 `electron:dev` / `electron:build` / `electron:dist` 脚本和 build 配置
-4. **`tsconfig.json`** — include electron 目录，exclude release
-5. **`start.bat`** — 一键启动脚本
+### 搜索
+- 4 个数据源：BZ（标准在线）、GBW（国标网）、BY（内部网）、BZVIP（VIP账号）
+- 支持多源搜索去重，同一标准号合并结果
+- 批量解析标准号（粘贴换行分隔的标准号列表）
 
-## 待完成
+### 下载
+- 竞速模式（多源同时竞争，取最快完成）
+- 级联模式（按优先级逐源尝试）
+- 批量下载（N 并发，进度条 + 日志）
+- 单条下载带逐行状态反馈（按钮 spinner、卡片高亮、成功/失败闪烁）
+- BZ 下载页级进度实时显示（如 `BZ 下载 12/45 页`）
+- 完成日志显示文件大小和耗时
+- 统一文件命名：`标准号 标准名称.pdf`
 
-### 1. 托盘图标（小问题）
-`electron/main.ts` 第 37-38 行，当前用 `nativeImage.createEmpty()` 创建空图标，托盘能工作但不可见。需要一个 `public/favicon.ico`（16×16 + 32×32 的 .ico 文件），然后改回：
+### 桌面端特性
+- 系统托盘驻留（右键菜单：打开/退出，双击恢复窗口）
+- 关闭窗口不退出
+- 自动选择随机端口
+- 下载文件保存到用户 downloads/bzxz（可自定义）
+- 绕过系统代理直连（Clash 等不影响）
+- 隐藏默认菜单栏
+- LAN 访问支持（绑定 0.0.0.0）
 
-```typescript
-function createTray() {
-  const iconPath = path.join(__dirname, '..', 'public', 'favicon.ico');
-  const icon = nativeImage.createFromPath(iconPath);
-  tray = new Tray(icon.resize({ width: 16, height: 16 }));
-  // ...
-```
-
-### 2. 打包测试（需验证）
-```bash
-# TypeScript 编译
-npx tsc -p tsconfig.json
-
-# 打包为 portable .exe（单文件）
-npm run electron:build   # → release/bzxz *.exe
-
-# 打包为 NSIS 安装包
-npm run electron:dist    # → release/bzxz Setup *.exe
-```
-
-**注意**：首次打包会下载 electron-builder 的 win 依赖（~50MB），可能需要几分钟。
-
-### 3. 已知问题 / 注意事项
-
-- **`public/favicon.ico` 不存在** — 目前 public/ 下只有 `index.html` 和 `gbw-captcha.html`，缺应用图标。需要准备一个 .ico 文件放在 `public/favicon.ico`。
-- **punycode deprecation** — Electron/Node 内部警告，不影响功能。
-- **打包后路径** — `extraResources` 配置了 `data/accounts.json` 和 `scripts/ocr_ddddocr.py`，打包后通过 `process.resourcesPath` 访问，但代码中目前是用 `process.cwd()` 的相对路径。如果打包后运行报找不到文件，需要在 `app.ts` 中区分开发/打包环境的路径。
+### 一键启动
+- `start.bat` — 自动检测 Node.js（fnm/nvm/manual/standard），npm install 缺依赖，启动服务 + 打开浏览器
+- `start.vbs` — 无窗口静默启动
 
 ## 关键命令速查
 
 ```bash
-# 开发模式（浏览器）
-npm run dev                # tsx src/index.ts → http://localhost:3000
-
-# Electron 开发模式
-npm run electron:dev       # 编译 → 启动 Electron 窗口
-
-# 一键启动（Windows）
-start.bat
-
-# 测试
-npm test                   # 11/12 pass（1个因 DNS 超时失败，非代码 bug）
-
-# 打包
+npm run dev                # Web 开发模式 → http://localhost:3000
+npm run electron:dev       # Electron 开发模式
+npm run build              # TypeScript 编译
 npm run electron:build     # portable .exe
 npm run electron:dist      # NSIS 安装包
+npm test                   # 测试
+start.bat                  # Windows 一键启动
 ```
 
-## 关键文件结构
+## 项目结构
 
 ```
 bzxz/
 ├── electron/
-│   ├── main.ts            # Electron 主进程
+│   ├── main.ts            # Electron 主进程（Express + BrowserWindow + Tray）
 │   └── preload.ts         # 预加载脚本
 ├── src/
-│   ├── api/app.ts         # Express API（被 Electron 复用）
-│   ├── sources/           # 各数据源适配器
-│   └── services/          # 业务逻辑
+│   ├── index.ts           # Web 版入口
+│   ├── api/app.ts         # Express API
+│   ├── domain/standard.ts # 领域类型定义
+│   ├── services/          # 业务逻辑（任务队列、标准解析）
+│   ├── sources/           # 4 个数据源适配器
+│   │   ├── bz-zhenggui/   # BZ 标准在线（Playwright 截图 + 逐页下载）
+│   │   ├── gbw/           # GBW 国标网（验证码识别 + 下载）
+│   │   ├── by/            # BY 内部网
+│   │   ├── bz-vip/        # BZVIP 会员（账号池 + 打码）
+│   │   └── shared/        # OCR 验证码工具
+│   └── shared/            # 通用工具（路径、错误、ID 解析）
 ├── public/
 │   ├── index.html         # 前端 SPA
-│   └── favicon.ico        # ← 需要添加
-├── package.json           # electron:dev/build/dist 脚本 + build 配置
-├── tsconfig.json          # include electron/
+│   ├── favicon-256.png    # 应用图标
+│   └── favicon-32.png     # 托盘图标
+├── scripts/               # Python OCR 脚本
+├── data/                  # 运行时数据（账号、导出文件）
+├── package.json
+├── tsconfig.json
+├── start.bat / start.vbs  # 一键启动
 └── ELECTRON_HANDOFF.md    # 本文档
 ```
 
-## 电子应用拆包路径适配（打包后需要处理）
+## 核心设计决策
 
-`src/api/app.ts` 中 `createApp()` 使用 `process.cwd()` 作为基础路径。在 Electron 打包后 `process.cwd()` 指向 asar 所在目录，`extraResources` 中的文件不在 `process.cwd()` 下。如果打包后运行报 `data/accounts.json not found`，需要：
+### 路径解析（getter 函数）
+所有路径常量用 getter 函数（`getRootDir()`, `getExportsDir()`）而非模块级常量，原因：Electron 打包后 `BZXZ_BASE_DIR` 由 main.ts 在运行时设置，模块级常量在 import 时就固化，会指向错误目录。
 
-```typescript
-// 在 app.ts 顶部判断环境
-const BASE_DIR = process.resourcesPath 
-  ? path.join(process.resourcesPath, '..')  // 打包后
-  : process.cwd();                            // 开发时
-```
+### 代理直连
+Node.js `fetch()` (undici) 会使用 `HTTP_PROXY`/`HTTPS_PROXY` 环境变量。入口文件（`src/index.ts` 和 `electron/main.ts`）在所有 import 之前清除这些变量 + 设置 `NO_PROXY='*'`。Chromium 渲染进程通过 `session.defaultSession.setProxy({ mode: 'direct' })` 绕过。
+
+### 跨源 ID 映射
+搜索结果去重时保留 `_sourceIds` map，记录每个源的专属 ID。下载时用源专属 ID 调用对应适配器，避免 BZ 标准号传给 GBW 适配器。
+
+### BZ 逐页进度
+BZ 适配器逐页下载，每完成一页回调 `onProgress(current, total)`。`ExportTaskService` 将进度写入 `ExportTaskStore`。前端轮询 `/api/tasks/:id` 时读取 `currentPage`/`totalPages`，实时显示页级进度。
+
+### 下载日志系统
+`addLog(msg, status)` 返回 ID，`updateLog(id, msg, status)` 更新同一条目。避免 BZ 轮询刷屏，同一条日志持续更新显示最新进度。
+
+## 打包注意事项
+
+1. `extraResources` 配置了 `public/`, `scripts/`, `data/` 到 `resources/`。打包后通过 `process.resourcesPath` 访问。
+2. 打包后 `process.cwd()` 指向 asar 所在目录，不适用于数据文件读写。必须用 `BZXZ_BASE_DIR` 环境变量（指向 `resourcesPath`）。
+3. 图标文件 `public/favicon-256.png` 和 `public/favicon-32.png` 已就绪。
+4. 首次打包需下载 electron-builder win 依赖（~50MB）。
