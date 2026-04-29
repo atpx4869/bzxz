@@ -26,7 +26,7 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     title: 'bzxz · 标准检索',
-    icon: path.join(__dirname, '..', 'public', 'favicon.ico'),
+    icon: path.join(__dirname, '..', '..', 'public', 'favicon-256.png'),
     backgroundColor: '#1a1a2e',
     show: false,
     webPreferences: {
@@ -48,7 +48,7 @@ function createWindow() {
 }
 
 function createTray() {
-  const iconPath = path.join(__dirname, '..', 'public', 'favicon-32.png');
+  const iconPath = path.join(__dirname, '..', '..', 'public', 'favicon-32.png');
   let icon = nativeImage.createEmpty();
   try {
     icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });

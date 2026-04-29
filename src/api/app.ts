@@ -290,7 +290,7 @@ export function createApp() {
       ];
       XLSX.utils.book_append_sheet(outWorkbook, outSheet, '标准补全结果');
 
-      const exportsDir = path.resolve(process.cwd(), 'data', 'exports');
+      const exportsDir = path.resolve(baseDir, 'data', 'exports');
       await mkdir(exportsDir, { recursive: true });
       const outFileName = `标准补全_${Date.now()}.xlsx`;
       const outPath = path.resolve(exportsDir, outFileName);
