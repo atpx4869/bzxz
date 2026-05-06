@@ -31,11 +31,11 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
-      - name: Package Electron (portable)
-        run: npm run electron:build
+      - name: Package Electron (portable + nsis)
+        run: npm run electron:build:all
 
-      - name: Upload portable .exe
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: bzxz-portable-win
+          name: bzxz-win
           path: release/*.exe
