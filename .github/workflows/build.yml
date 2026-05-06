@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -33,6 +36,10 @@ jobs:
 
       - name: Package Electron (portable + nsis)
         run: npm run electron:build:all
+
+      - name: List build output
+        if: always()
+        run: dir release /s /b
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
