@@ -22,9 +22,6 @@
   "build": {
     "appId": "com.bzxz.app",
     "productName": "bzxz",
-    "asar": {
-      "compression": "maximum"
-    },
     "directories": {
       "output": "release"
     },
