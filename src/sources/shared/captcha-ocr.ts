@@ -1,7 +1,5 @@
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import sharp from 'sharp';
-import { createWorker } from 'tesseract.js';
 import { getRootDir } from '../../shared/fs';
 
 interface OcrResult {
@@ -48,6 +46,9 @@ async function tryDdddocr(base64Image: string): Promise<OcrResult> {
 
 async function tryTesseract(base64Image: string): Promise<OcrResult> {
   const buffer = Buffer.from(base64Image, 'base64');
+
+  const { default: sharp } = await import('sharp');
+  const { createWorker } = await import('tesseract.js');
 
   const preprocessed = await sharp(buffer)
     .resize({ width: 200, fit: 'inside' })

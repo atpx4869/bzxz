@@ -11,6 +11,8 @@
     "test:dev": "vitest",
     "electron:dev": "tsc -p tsconfig.electron.json && electron .",
     "electron:build": "tsc -p tsconfig.electron.json && electron-builder --win portable",
+    "electron:build:nsis": "tsc -p tsconfig.electron.json && electron-builder --win nsis",
+    "electron:build:all": "tsc -p tsconfig.electron.json && electron-builder --win",
     "electron:dist": "tsc -p tsconfig.electron.json && electron-builder --win"
   },
   "keywords": [],
@@ -36,7 +38,8 @@
     ],
     "win": {
       "target": [
-        "portable"
+        "portable",
+        "nsis"
       ],
       "icon": "public/favicon-256.png"
     }
@@ -48,6 +51,7 @@
     "@types/supertest": "^7.2.0",
     "electron": "^41.3.0",
     "electron-builder": "^26.8.1",
+    "playwright": "^1.58.2",
     "supertest": "^7.2.2",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2",
@@ -59,7 +63,6 @@
     "express": "^5.2.1",
     "multer": "^2.1.1",
     "pdf-lib": "^1.17.1",
-    "playwright": "^1.58.2",
     "sharp": "^0.34.5",
     "tesseract.js": "^5.1.1",
     "xlsx": "^0.18.5",

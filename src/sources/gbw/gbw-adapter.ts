@@ -1,4 +1,3 @@
-import { load } from 'cheerio';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -99,6 +98,7 @@ export class GbwAdapter implements SourceAdapter {
     }
 
     const html = await response.text();
+    const { load } = await import('cheerio');
     const $ = load(html);
     const bodyText = $('body').text();
 
@@ -467,7 +467,7 @@ function cleanText(value: string): string {
     .trim();
 }
 
-function extractFieldMap($: ReturnType<typeof load>): Record<string, string> {
+function extractFieldMap($: any): Record<string, string> {
   const map: Record<string, string> = {};
   const titles = $('.title').toArray();
   for (const element of titles) {
@@ -480,7 +480,7 @@ function extractFieldMap($: ReturnType<typeof load>): Record<string, string> {
   return map;
 }
 
-function extractBasicInfoField($: ReturnType<typeof load>, name: string): string | undefined {
+function extractBasicInfoField($: any, name: string): string | undefined {
   const names = $('.basicInfo-item.name').toArray();
   for (const element of names) {
     const label = cleanText($(element).text());

@@ -1,6 +1,5 @@
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { PDFDocument } from 'pdf-lib';
 
 import type {
   ExportResult,
@@ -167,6 +166,7 @@ export class BzZhengguiAdapter implements SourceAdapter {
     }
 
     const totalPages = preview.totalPages;
+    const { PDFDocument } = await import('pdf-lib');
     const pdfDoc = await PDFDocument.create();
 
     // Download pages in parallel batches of 8

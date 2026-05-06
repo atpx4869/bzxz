@@ -196,6 +196,22 @@ body { min-height: 100vh; }
 .main { max-width: 960px; margin: 0 auto; padding: 0 32px 80px; }
 .summary { margin: 32px 0 20px; color: var(--text-2); font-size: 13px; }
 
+/* ── Filter bar ── */
+.filter-bar {
+  display: none; align-items: center; gap: 6px; margin-bottom: 16px; flex-wrap: wrap;
+}
+.filter-bar.visible { display: flex; }
+.filter-sep { width: 1px; height: 20px; background: var(--border); margin: 0 6px; }
+.filter-chip {
+  padding: 4px 12px; border-radius: 100px; font-size: 12px; font-weight: 500;
+  cursor: pointer; user-select: none; border: 1px solid var(--border);
+  background: transparent; color: var(--text-2);
+  transition: all 0.15s var(--ease-out);
+}
+.filter-chip:hover { border-color: var(--text-2); color: var(--text); }
+.filter-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.filter-chip .chip-count { opacity: 0.7; margin-left: 2px; font-weight: 400; }
+
 /* Result cards */
 .result-card {
   display: flex; align-items: center; gap: 16px;
@@ -492,6 +508,7 @@ body { min-height: 100vh; }
       <button class="btn btn-sm btn-ghost" id="selectAll">全选</button>
     </div>
   </div>
+  <div class="filter-bar" id="filterBar"></div>
   <div id="results"></div>
 </main>
 
@@ -628,6 +645,7 @@ let logEntries = [];
 let isDownloading = false;
 let searchAborted = false;
 let activePanelId = null;
+let filterState = { sources: new Set(), statuses: new Set() };
 
 // ── Panel management ──
 let activeDrag = null;
@@ -777,6 +795,7 @@ async function doSearch() {
     updateToolbar();
   }
   document.getElementById('searchBtn').innerHTML = '搜索'; document.getElementById('searchBtn').disabled = false;
+  filterState.sources.clear(); filterState.statuses.clear(); renderFilterBar();
   if (results.length === 0 && !searchAborted) {
     document.getElementById('results').innerHTML = `<div class="empty"><p>—</p><p>未找到相关标准</p><p style="font-size:13px;color:var(--text-3)">尝试更换关键词或数据源</p></div>`;
     document.getElementById('toolbar').style.display = 'none';
@@ -813,13 +832,73 @@ function statusPriority(s) {
 document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
 document.getElementById('searchBtn').addEventListener('click', doSearch);
 
+// ── Filter bar ──
+function statusCategory(s) {
+  if (!s) return '其它';
+  if (s.includes('现行') || s.includes('部分有效')) return '现行';
+  if (s.includes('废止')) return '废止';
+  if (s.includes('即将实施')) return '即将实施';
+  return '其它';
+}
+
+function getFilteredResults() {
+  if (filterState.sources.size === 0 && filterState.statuses.size === 0) return results;
+  return results.filter(r => {
+    if (filterState.sources.size > 0) {
+      const rSources = r.sources || [r._source];
+      if (!rSources.some(s => filterState.sources.has(s))) return false;
+    }
+    if (filterState.statuses.size > 0) {
+      if (!filterState.statuses.has(statusCategory(r.status))) return false;
+    }
+    return true;
+  });
+}
+
+function renderFilterBar() {
+  const bar = document.getElementById('filterBar');
+  if (!results.length) { bar.classList.remove('visible'); bar.innerHTML = ''; return; }
+
+  const srcCounts = {}; const statusCounts = {};
+  for (const r of results) {
+    for (const s of (r.sources || [r._source])) { srcCounts[s] = (srcCounts[s] || 0) + 1; }
+    statusCounts[statusCategory(r.status)] = (statusCounts[statusCategory(r.status)] || 0) + 1;
+  }
+
+  const srcChips = [
+    { key: '', label: '全部', count: results.length },
+    ...['bz','gbw','by','bzvip'].map(s => ({ key: s, label: s.toUpperCase(), count: srcCounts[s] || 0 }))
+  ];
+  const statusChips = [
+    { key: '', label: '全部', count: results.length },
+    { key: '现行', label: '现行', count: statusCounts['现行'] || 0 },
+    { key: '废止', label: '废止', count: statusCounts['废止'] || 0 },
+    { key: '即将实施', label: '即将实施', count: statusCounts['即将实施'] || 0 },
+    { key: '其它', label: '其它', count: statusCounts['其它'] || 0 }
+  ];
+
+  function chipHtml(chips, set) {
+    const allActive = set.size === 0;
+    return chips.map(c => {
+      const active = c.key === '' ? allActive : set.has(c.key);
+      return `<span class="filter-chip${active ? ' active' : ''}" data-filter-type="${set === filterState.sources ? 'source' : 'status'}" data-filter-key="${escapeHtml(c.key)}">${escapeHtml(c.label)}<span class="chip-count">${c.count}</span></span>`;
+    }).join('');
+  }
+
+  bar.innerHTML = chipHtml(srcChips, filterState.sources) + '<span class="filter-sep"></span>' + chipHtml(statusChips, filterState.statuses);
+  bar.classList.add('visible');
+}
+
 // ── Render cards ──
 function renderResults() {
-  const cards = results.map((r, i) => {
+  const filtered = getFilteredResults();
+  const idxMap = new Map(results.map((r, i) => [r.id, i]));
+  const cards = filtered.map((r, fi) => {
+    const i = idxMap.get(r.id);
     const srcBadges = (r.sources || [r._source]).map(s => `<span class="source-badge source-${escapeHtml(String(s))}">${escapeHtml(String(s).toUpperCase())}</span>`).join(' ');
     const sCls = statusClass(r.status); const hasText = r.previewAvailable;
     return `
-    <div class="result-card card-enter${hasText ? '' : ' no-text'}" data-sid="${escapeHtml(r.id)}" style="animation-delay:${i * 40}ms">
+    <div class="result-card card-enter${hasText ? '' : ' no-text'}" data-sid="${escapeHtml(r.id)}" style="animation-delay:${fi * 40}ms">
       <div class="check-col"><input type="checkbox" data-idx="${i}" ${selectedIds.has(r.id) ? 'checked' : ''}></div>
       <div class="card-body">
         <div class="card-title-row">
@@ -852,6 +931,19 @@ function renderResults() {
     });
   });
 }
+
+// Filter bar chip clicks
+document.getElementById('filterBar').addEventListener('click', e => {
+  const chip = e.target.closest('.filter-chip');
+  if (!chip) return;
+  const type = chip.dataset.filterType;
+  const key = chip.dataset.filterKey;
+  const set = type === 'source' ? filterState.sources : filterState.statuses;
+  if (key === '') { set.clear(); }
+  else if (set.has(key)) { set.delete(key); }
+  else { set.add(key); }
+  renderFilterBar(); renderResults(); updateToolbar();
+});
 
 // Delegated event handler for result card buttons
 document.getElementById('results').addEventListener('click', e => {
@@ -888,8 +980,9 @@ function updateToolbar() {
   if (dlBtn) dlBtn.disabled = selectedIds.size === 0 || isDownloading;
 }
 document.getElementById('selectAll').addEventListener('click', () => {
-  const all = selectedIds.size === results.length && results.length > 0;
-  results.forEach(r => all ? selectedIds.delete(r.id) : selectedIds.add(r.id));
+  const filtered = getFilteredResults();
+  const allSelected = filtered.length > 0 && filtered.every(r => selectedIds.has(r.id));
+  filtered.forEach(r => allSelected ? selectedIds.delete(r.id) : selectedIds.add(r.id));
   renderResults(); updateToolbar();
 });
 
@@ -1607,8 +1700,9 @@ document.addEventListener('keydown', e => {
   }
   if ((e.ctrlKey || e.metaKey) && e.key === 'a' && document.activeElement === document.body) {
     e.preventDefault();
-    const allSelected = selectedIds.size === results.length && results.length > 0;
-    results.forEach(r => allSelected ? selectedIds.delete(r.id) : selectedIds.add(r.id));
+    const filtered = getFilteredResults();
+    const allSelected = filtered.length > 0 && filtered.every(r => selectedIds.has(r.id));
+    filtered.forEach(r => allSelected ? selectedIds.delete(r.id) : selectedIds.add(r.id));
     renderResults(); updateToolbar();
   }
 });

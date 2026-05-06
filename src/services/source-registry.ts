@@ -1,32 +1,42 @@
 import type { SourceAdapter, SourceName } from '../domain/standard';
 import { BadRequestError } from '../shared/errors';
-import { BzZhengguiAdapter } from '../sources/bz-zhenggui/bz-zhenggui-adapter';
-import { GbwAdapter } from '../sources/gbw/gbw-adapter';
-import { ByAdapter } from '../sources/by/by-adapter';
-import { BzVipAdapter } from '../sources/bz-vip/bzvip-adapter';
+
+type AdapterFactory = () => SourceAdapter;
+
+const FACTORIES: Record<SourceName, AdapterFactory> = {
+  bz: () => {
+    const { BzZhengguiAdapter } = require('../sources/bz-zhenggui/bz-zhenggui-adapter');
+    return new BzZhengguiAdapter();
+  },
+  gbw: () => {
+    const { GbwAdapter } = require('../sources/gbw/gbw-adapter');
+    return new GbwAdapter();
+  },
+  by: () => {
+    const { ByAdapter } = require('../sources/by/by-adapter');
+    return new ByAdapter();
+  },
+  bzvip: () => {
+    const { BzVipAdapter } = require('../sources/bz-vip/bzvip-adapter');
+    return new BzVipAdapter();
+  },
+};
 
 export class SourceRegistry {
-  private readonly adapters: Record<SourceName, SourceAdapter>;
-
-  constructor() {
-    this.adapters = {
-      bz: new BzZhengguiAdapter(),
-      gbw: new GbwAdapter(),
-      by: new ByAdapter(),
-      bzvip: new BzVipAdapter(),
-    };
-  }
+  private readonly cache = new Map<SourceName, SourceAdapter>();
 
   get(source: SourceName): SourceAdapter {
-    const adapter = this.adapters[source];
-    if (!adapter) {
+    if (this.cache.has(source)) return this.cache.get(source)!;
+    const factory = FACTORIES[source];
+    if (!factory) {
       throw new BadRequestError(`Unsupported source: ${source}`);
     }
-
+    const adapter = factory();
+    this.cache.set(source, adapter);
     return adapter;
   }
 
   list(): SourceName[] {
-    return Object.keys(this.adapters) as SourceName[];
+    return Object.keys(FACTORIES) as SourceName[];
   }
 }

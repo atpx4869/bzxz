@@ -4,7 +4,6 @@ import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import multer from 'multer';
-import XLSX from 'xlsx';
 
 import { StandardService } from '../services/standard-service';
 import { StandardResolver } from '../services/standard-resolver';
@@ -232,7 +231,8 @@ export function createApp() {
       });
       const { sources } = bodySchema.parse(req.body.sources ? { sources: JSON.parse(req.body.sources) } : {});
 
-      // Parse workbook
+      // Parse workbook — lazy load xlsx only when needed
+      const XLSX = (await import('xlsx')).default;
       const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
       if (!sheetName) throw new BadRequestError('表格为空或格式无法识别');
