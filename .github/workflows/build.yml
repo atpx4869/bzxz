@@ -39,7 +39,7 @@ jobs:
 
       - name: List build output
         if: always()
-        run: dir release /s /b
+        run: Get-ChildItem -Path release -Recurse -Filter *.exe | Select-Object -ExpandProperty FullName
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
