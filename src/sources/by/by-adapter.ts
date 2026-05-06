@@ -16,9 +16,9 @@ import { createStandardId, parseStandardId } from '../../shared/id';
 // BY 内网系统配置
 const BY_BASE = 'http://172.16.100.72:8080';
 const LOGIN_URL = `${BY_BASE}/login.aspx`;
-const DEPT_ID = 'fc4186fba640402188b91e6bd0d491a6';
-const USERNAME = 'leiming';
-const PASSWORD = '888888';
+const DEPT_ID = process.env.BY_DEPT_ID || 'fc4186fba640402188b91e6bd0d491a6';
+const USERNAME = process.env.BY_USERNAME || 'leiming';
+const PASSWORD = process.env.BY_PASSWORD || '888888';
 const MAX_PAGES = 5;
 const TIMEOUT_MS = 10000;
 const TIMEOUT_FAST_MS = 5000;
@@ -50,7 +50,16 @@ export class ByAdapter implements SourceAdapter {
     }
 
     const keyword = input.query;
-    const items = await this.searchInternal(keyword);
+    let items = await this.searchInternal(keyword);
+
+    // If no results and session might have expired, re-login and retry once
+    if (items.length === 0 && this.loggedIn) {
+      this.loggedIn = false;
+      this.sessionCookies = null;
+      if (await this.ensureLogin()) {
+        items = await this.searchInternal(keyword);
+      }
+    }
 
     return items.map((item) => this.mapSearchItem(item));
   }

@@ -53,8 +53,14 @@ export function createApp() {
 
   // Serve exported files for browser download
   app.get('/api/downloads/:filename', (req, res) => {
+    const filename = req.params.filename;
+    // Strict filename whitelist — no path separators or traversal
+    if (!/^[a-zA-Z0-9一-鿿._\-\s()]+$/.test(filename)) {
+      res.status(400).json({ code: 'BAD_REQUEST', message: 'Invalid filename' });
+      return;
+    }
     const exportsDir = path.resolve(baseDir, 'data', 'exports');
-    const filePath = path.resolve(exportsDir, req.params.filename);
+    const filePath = path.resolve(exportsDir, filename);
     if (!filePath.startsWith(exportsDir + path.sep)) {
       res.status(400).json({ code: 'BAD_REQUEST', message: 'Invalid filename' });
       return;
@@ -321,6 +327,29 @@ export function createApp() {
     } catch (error) {
       next(normalizeError(error));
     }
+  });
+
+  // SSE endpoint for real-time task progress
+  app.get('/api/tasks/:taskId/stream', (req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+
+    const taskId = req.params.taskId;
+    const interval = setInterval(() => {
+      const task = exportTaskStore.get(taskId);
+      if (task) {
+        res.write(`data: ${JSON.stringify(task)}\n\n`);
+        if (task.status === 'success' || task.status === 'failed') {
+          clearInterval(interval);
+          res.end();
+        }
+      }
+    }, 500);
+
+    req.on('close', () => clearInterval(interval));
   });
 
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {

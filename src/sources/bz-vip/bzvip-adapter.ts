@@ -9,28 +9,9 @@ import type {
 } from '../../domain/standard';
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
 import { buildFileName, safeWriteExportFile } from '../../shared/fs';
-import { createStandardId, parseStandardId } from '../../shared/id';
+import { parseStandardId } from '../../shared/id';
 import { accountPool, bzVipGet, bzVipDownload, bzVipPost } from './account-pool';
-
-interface BzSearchRow {
-  id: number | string;
-  stdNo: string;
-  cnName: string;
-  enName?: string;
-  pubDate: string;
-  actDate: string;
-  stdStatus: string;
-  stdNature?: string;
-  replacedStd?: string;
-  pdf?: string;
-  isPdf?: string;
-  icsClass?: string;
-  cnClass?: string;
-  endData?: string;
-  drafterName?: string;
-  drafter2nd?: string;
-  [key: string]: unknown;
-}
+import { BZ_NEW_BASE, mapBzSearchRow, mapBzDetail, type BzSearchRow } from '../shared/bz-utils';
 
 interface BzSearchResponse {
   code: number;
@@ -41,13 +22,6 @@ interface BzDetailResponse {
   code: number;
   data?: BzSearchRow;
 }
-
-const STATUS_MAP: Record<string, string> = {
-  '1': '现行有效', '2': '部分有效', '3': '即将实施',
-  '4': '即将废止', '5': '已经废止', '6': '调整转号', '9': '其它',
-};
-
-const BZ_NEW_BASE = 'https://bz.gxzl.org.cn';
 
 export class BzVipAdapter implements SourceAdapter {
   readonly source = 'bzvip' as const;
@@ -191,49 +165,11 @@ export class BzVipAdapter implements SourceAdapter {
   // --- Private helpers ---
 
   private mapSearchRow(row: BzSearchRow): StandardSummary {
-    return {
-      id: createStandardId('bzvip', String(row.id)),
-      source: 'bzvip',
-      sourceId: String(row.id),
-      standardNumber: row.stdNo ?? '',
-      title: row.cnName ?? '',
-      standardType: row.stdNature ?? undefined,
-      status: STATUS_MAP[row.stdStatus] ?? row.stdStatus,
-      publishDate: row.pubDate ?? null,
-      implementDate: row.actDate ?? null,
-      abolishedDate: row.endData ?? null,
-      previewAvailable: row.isPdf === '1' || Boolean(row.pdf),
-      detailUrl: `${BZ_NEW_BASE}/api/gxist-standard/standardstd/detail?id=${row.id}`,
-      meta: row as Record<string, unknown>,
-    };
+    return mapBzSearchRow(row, 'bzvip');
   }
 
   private mapDetail(row: BzSearchRow): StandardDetail {
-    return {
-      id: createStandardId('bzvip', String(row.id)),
-      source: 'bzvip',
-      sourceId: String(row.id),
-      standardNumber: row.stdNo ?? '',
-      title: row.cnName ?? '',
-      standardType: row.stdNature ?? undefined,
-      status: STATUS_MAP[row.stdStatus] ?? row.stdStatus,
-      publishDate: row.pubDate ?? null,
-      implementDate: row.actDate ?? null,
-      abolishedDate: row.endData ?? null,
-      previewAvailable: row.isPdf === '1' || Boolean(row.pdf),
-      detailUrl: `${BZ_NEW_BASE}/api/gxist-standard/standardstd/detail?id=${row.id}`,
-      contentText: row.enName ?? '',
-      moreInfo: {
-        enName: row.enName,
-        cnClass: row.cnClass,
-        icsClass: row.icsClass,
-        replacedStd: row.replacedStd,
-        hasPdf: row.isPdf === '1',
-        isPdf: row.isPdf,
-        pdfPath: row.pdf,
-      },
-      meta: row as Record<string, unknown>,
-    };
+    return mapBzDetail(row, 'bzvip');
   }
 }
 

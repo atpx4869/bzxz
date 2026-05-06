@@ -11,55 +11,25 @@ import type {
 } from '../../domain/standard';
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
 import { buildFileName, getExportsDir } from '../../shared/fs';
-import { createStandardId, parseStandardId } from '../../shared/id';
+import { parseStandardId } from '../../shared/id';
 import { pooledFetch } from '../../shared/http';
 import { getCachedPageCount, setCachedPageCount } from '../../shared/page-cache';
 import { searchCache } from '../../shared/cache';
-
-interface BzNewSearchRow {
-  id: string;
-  stdNo: string;
-  cnName: string;
-  enName?: string;
-  pubDate: string;
-  actDate: string;
-  stdStatus: string;
-  stdNature?: string;
-  replacedStd?: string;
-  pdf?: string;
-  isPdf?: string;
-  icsClass?: string;
-  cnClass?: string;
-  endData?: string;
-  drafterName?: string;
-  drafter2nd?: string;
-  [key: string]: unknown;
-}
+import { BZ_NEW_BASE, mapBzSearchRow, mapBzDetail, type BzSearchRow } from '../shared/bz-utils';
 
 interface BzNewSearchResponse {
   code: number;
   data?: {
-    records?: BzNewSearchRow[];
+    records?: BzSearchRow[];
     total: number;
   };
 }
 
 interface BzNewDetailResponse {
   code: number;
-  data?: BzNewSearchRow;
+  data?: BzSearchRow;
 }
 
-const STATUS_MAP: Record<string, string> = {
-  '1': '现行有效',
-  '2': '部分有效',
-  '3': '即将实施',
-  '4': '即将废止',
-  '5': '已经废止',
-  '6': '调整转号',
-  '9': '其它',
-};
-
-const BZ_NEW_BASE = 'https://bz.gxzl.org.cn';
 const SEARCH_API = `${BZ_NEW_BASE}/api/gxist-standard/standardstd/list`;
 
 export class BzZhengguiAdapter implements SourceAdapter {
@@ -264,51 +234,11 @@ export class BzZhengguiAdapter implements SourceAdapter {
     }
   }
 
-  private mapSearchRow(row: BzNewSearchRow): StandardSummary {
-    return {
-      id: createStandardId('bz', row.id),
-      source: 'bz',
-      sourceId: row.id,
-      standardNumber: row.stdNo ?? '',
-      title: row.cnName ?? '',
-      standardType: row.stdNature ?? undefined,
-      status: STATUS_MAP[row.stdStatus] ?? row.stdStatus,
-      publishDate: row.pubDate ?? null,
-      implementDate: row.actDate ?? null,
-      abolishedDate: row.endData ?? null,
-      previewAvailable: row.isPdf === '1' || Boolean(row.pdf),
-      detailUrl: `${BZ_NEW_BASE}/api/gxist-standard/standardstd/detail?id=${row.id}`,
-      meta: row as Record<string, unknown>,
-    };
+  private mapSearchRow(row: BzSearchRow): StandardSummary {
+    return mapBzSearchRow(row, 'bz');
   }
 
-  private mapDetail(row: BzNewSearchRow): StandardDetail {
-    return {
-      id: createStandardId('bz', row.id),
-      source: 'bz',
-      sourceId: row.id,
-      standardNumber: row.stdNo ?? '',
-      title: row.cnName ?? '',
-      standardType: row.stdNature ?? undefined,
-      status: STATUS_MAP[row.stdStatus] ?? row.stdStatus,
-      publishDate: row.pubDate ?? null,
-      implementDate: row.actDate ?? null,
-      abolishedDate: row.endData ?? null,
-      previewAvailable: row.isPdf === '1' || Boolean(row.pdf),
-      detailUrl: `${BZ_NEW_BASE}/api/gxist-standard/standardstd/detail?id=${row.id}`,
-      contentText: row.enName ?? '',
-      moreInfo: {
-        enName: row.enName,
-        cnClass: row.cnClass,
-        icsClass: row.icsClass,
-        replacedStd: row.replacedStd,
-        hasPdf: row.isPdf === '1',
-        isPdf: row.isPdf,
-        pdfPath: row.pdf,
-        drafterName: row.drafterName,
-        drafter2nd: row.drafter2nd,
-      },
-      meta: row as Record<string, unknown>,
-    };
+  private mapDetail(row: BzSearchRow): StandardDetail {
+    return mapBzDetail(row, 'bz');
   }
 }

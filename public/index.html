@@ -269,6 +269,7 @@ body { min-height: 100vh; }
 
 .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .toolbar-left { display: flex; gap: 8px; align-items: center; }
+.toolbar-right { display: flex; gap: 8px; align-items: center; }
 .badge-count { font-size: 12px; color: var(--text-3); background: var(--surface); padding: 4px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
 
 /* ── Log panel ── */
@@ -401,6 +402,7 @@ body { min-height: 100vh; }
 .toast-container {
   position: fixed; bottom: 160px; right: 24px; z-index: 500;
   display: flex; flex-direction: column-reverse; gap: 8px; pointer-events: none;
+  transition: bottom 0.3s var(--ease-out);
 }
 .toast {
   pointer-events: auto; display: flex; align-items: center; gap: 10px;
@@ -430,6 +432,26 @@ body { min-height: 100vh; }
   animation: cardIn 0.4s var(--ease-spring) forwards;
 }
 @keyframes cardIn { to { opacity: 1; transform: none; } }
+
+/* ── Skeleton loading ── */
+.skeleton-card {
+  display: flex; align-items: center; gap: 16px;
+  padding: 16px 20px; border-radius: var(--radius);
+  background: var(--surface); border: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.skeleton-line {
+  height: 12px; border-radius: 6px;
+  background: linear-gradient(90deg, var(--surface-h) 25%, oklch(28% 0.01 250) 50%, var(--surface-h) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+.skeleton-line.w60 { width: 60%; }
+.skeleton-line.w40 { width: 40%; }
+.skeleton-line.w80 { width: 80%; height: 14px; margin-bottom: 8px; }
+.skeleton-badge { width: 48px; height: 22px; border-radius: 100px; }
+.skeleton-body { flex: 1; }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
 /* ── Shortcuts overlay ── */
 .shortcuts-overlay {
@@ -475,6 +497,9 @@ body { min-height: 100vh; }
     <span>📋</span><span class="dock-tooltip">标准补全</span>
   </button>
   <div class="dock-sep"></div>
+  <button class="dock-btn" id="dockHistory" onclick="togglePanel('history')" title="下载历史">
+    <span>📥</span><span class="dock-tooltip">下载历史</span>
+  </button>
   <button class="dock-btn" id="dockSettings" onclick="togglePanel('settings')" title="设置">
     <span>⚙</span><span class="dock-tooltip">下载设置</span>
   </button>
@@ -506,6 +531,9 @@ body { min-height: 100vh; }
       <button class="btn btn-sm btn-primary" id="downloadSelected" disabled>下载选中</button>
       <button class="btn btn-sm btn-ghost" id="stopDownload" style="display:none;color:var(--danger);border-color:var(--danger)">停止</button>
       <button class="btn btn-sm btn-ghost" id="selectAll">全选</button>
+    </div>
+    <div class="toolbar-right">
+      <button class="btn btn-sm btn-ghost" id="exportResults">导出结果</button>
     </div>
   </div>
   <div class="filter-bar" id="filterBar"></div>
@@ -557,6 +585,23 @@ body { min-height: 100vh; }
     </div>
     <div class="batch-summary" id="completeSummary"></div>
     <div id="completeDownload" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<!-- Floating panel: Download history -->
+<div class="float-panel" id="floatHistory" style="top:80px;left:calc(50% - 260px + 80px)">
+  <div class="float-panel-header" id="floatHistoryHeader">
+    <div class="panel-accent accent-batch"></div>
+    <span class="panel-icon">📥</span>
+    <span class="panel-title">下载历史</span>
+    <button class="panel-btn" onclick="minimizePanel('history')" title="最小化">─</button>
+    <button class="panel-btn close" onclick="closePanel('history')" title="关闭">&times;</button>
+  </div>
+  <div class="float-panel-body" id="floatHistoryBody">
+    <div id="historyList" style="max-height:400px;overflow-y:auto;font-size:13px"></div>
+    <div style="text-align:right;margin-top:8px">
+      <button class="btn btn-ghost btn-sm" onclick="clearDownloadHistory()">清空历史</button>
+    </div>
   </div>
 </div>
 
@@ -651,7 +696,7 @@ let filterState = { sources: new Set(), statuses: new Set() };
 let activeDrag = null;
 
 function initPanels() {
-  ['batch', 'complete', 'settings'].forEach(id => {
+  ['batch', 'complete', 'settings', 'history'].forEach(id => {
     const panel = document.getElementById('float' + id.charAt(0).toUpperCase() + id.slice(1));
     const header = document.getElementById(panel.id + 'Header');
     if (!panel || !header) return;
@@ -716,6 +761,7 @@ function openPanel(id) {
 
   // Render settings on open
   if (id === 'settings') renderSettings();
+  if (id === 'history') renderDownloadHistory();
   if (id === 'batch') updateBatchSourceHint();
 
   // Bring to front
@@ -747,7 +793,7 @@ function activatePanel(id) {
 }
 
 function updatePanelZIndices(topId) {
-  ['batch', 'complete', 'settings'].forEach(id => {
+  ['batch', 'complete', 'settings', 'history'].forEach(id => {
     const panel = document.getElementById('float' + id.charAt(0).toUpperCase() + id.slice(1));
     if (panel) panel.style.zIndex = id === topId ? 260 : 250;
   });
@@ -765,11 +811,17 @@ document.querySelectorAll('.source-tag').forEach(tag => {
 
 // ── Search ──
 async function doSearch() {
+  if (searchAborted === 'cancelling') return; // already cancelling
   const q = document.getElementById('searchInput').value.trim();
   if (!q) return;
-  document.getElementById('searchBtn').innerHTML = '<span class="spinner"></span>搜索中';
-  document.getElementById('searchBtn').disabled = true;
+  document.getElementById('searchBtn').innerHTML = '<span class="spinner"></span>取消';
+  document.getElementById('searchBtn').disabled = false;
   results = []; selectedIds.clear(); updateToolbar(); searchAborted = false;
+  // Show skeleton
+  document.getElementById('results').innerHTML = Array.from({ length: 4 }, () =>
+    `<div class="skeleton-card"><div class="skeleton-badge skeleton-line"></div><div class="skeleton-body"><div class="skeleton-line w80"></div><div class="skeleton-line w60"></div><div class="skeleton-line w40"></div></div></div>`
+  ).join('');
+  document.getElementById('toolbar').style.display = 'none';
   saveSearchHistory(q);
 
   const sources = [...selectedSources];
@@ -793,6 +845,10 @@ async function doSearch() {
     document.getElementById('toolbar').style.display = results.length > 0 ? 'flex' : 'none';
     if (results.length > 0) renderResults();
     updateToolbar();
+  }
+  if (searchAborted) {
+    addLog('搜索已取消', 'fail');
+    document.getElementById('summary').innerHTML = `<span class="count-anim">已取消 (${results.length} 条结果)</span>`;
   }
   document.getElementById('searchBtn').innerHTML = '搜索'; document.getElementById('searchBtn').disabled = false;
   filterState.sources.clear(); filterState.statuses.clear(); renderFilterBar();
@@ -829,8 +885,27 @@ function statusPriority(s) {
   if (!s) return 3; if (s.includes('现行')) return 0; if (s.includes('即将实施')) return 1; if (s.includes('废止')) return 4; return 2;
 }
 
-document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
-document.getElementById('searchBtn').addEventListener('click', doSearch);
+document.getElementById('searchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { hideSearchHistory(); doSearch(); }
+  if (e.key === 'Escape') hideSearchHistory();
+});
+document.getElementById('searchInput').addEventListener('input', () => {
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  if (!q) { renderSearchHistory(); return; }
+  const hist = loadSearchHistory().filter(h => h.toLowerCase().includes(q)).slice(0, 5);
+  const el = document.getElementById('searchHistory');
+  if (!hist.length) { el.classList.remove('open'); return; }
+  el.innerHTML = hist.map(h => `<div class="search-history-item" data-query="${escapeHtml(h)}"><span class="hist-icon">🕐</span><span class="hist-query">${escapeHtml(h)}</span></div>`).join('');
+  el.classList.add('open');
+});
+document.getElementById('searchBtn').addEventListener('click', () => {
+  const btn = document.getElementById('searchBtn');
+  if (btn.textContent.includes('取消')) {
+    searchAborted = true;
+    return;
+  }
+  doSearch();
+});
 
 // ── Filter bar ──
 function statusCategory(s) {
@@ -986,6 +1061,23 @@ document.getElementById('selectAll').addEventListener('click', () => {
   renderResults(); updateToolbar();
 });
 
+document.getElementById('exportResults').addEventListener('click', () => {
+  const data = getFilteredResults();
+  if (!data.length) { showToast('没有可导出的结果', 'fail'); return; }
+  const rows = [['标准号', '标准名称', '状态', '来源', '发布日期', '实施日期']];
+  data.forEach(r => {
+    rows.push([r.standardNumber, r.title, r.status || '', (r.sources || [r._source]).join('+'), r.publishDate || '', r.implementDate || '']);
+  });
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `搜索结果_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast(`已导出 ${data.length} 条结果`);
+});
+
 // ── Download functions ──
 let downloadAborted = false;
 
@@ -1001,7 +1093,7 @@ async function downloadOne(id, btn) {
     const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
     updateLog(logId, `${r.standardNumber} ✅ ${winner.source.toUpperCase()}胜出 ${winner.fileName}${sizeStr}`, 'success');
     setRowDownloadState(id, 'success');
-    if (winner.fileName) triggerDownload(winner.fileName);
+    if (winner.fileName) { triggerDownload(winner.fileName); recordDownload(winner.source, winner.fileName, r.standardNumber); }
   } catch (e) {
     const msgs = e instanceof AggregateError ? [...new Set(e.errors.map(err => err.message))].slice(0, 3).join('; ') : (e.message || '未知错误');
     updateLog(logId, `${r.standardNumber} ❌ ${msgs}`, 'fail');
@@ -1039,20 +1131,17 @@ async function downloadBz(id, onProgress) {
   const data = await res.json();
   if (!res.ok) throw new Error(`BZ HTTP${res.status}`);
   const t0 = Date.now();
-  for (let i = 0; i < 45; i++) {
-    await sleep(2000);
-    const tr = await fetch(`${API}/api/tasks/${data.id}`); const td = await tr.json();
-    if (td.currentPage && td.totalPages && onProgress) {
-      onProgress(`BZ 下载 ${td.currentPage}/${td.totalPages} 页`);
-    }
-    if (td.status === 'success') {
-      const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-      const sizeStr = td.fileSize ? ` ${formatSize(td.fileSize)}` : '';
-      return { source: 'bz', fileName: td.fileName || '', fileSize: td.fileSize, meta: `${elapsed}s${sizeStr}` };
-    }
-    if (td.status === 'failed') throw new Error(`BZ ${td.errorMessage || '失败'}`);
-  }
-  throw new Error('BZ轮询超时');
+  return new Promise((resolve, reject) => {
+    const es = new EventSource(`${API}/api/tasks/${data.id}/stream`);
+    const timeout = setTimeout(() => { es.close(); reject(new Error('BZ轮询超时')); }, 120000);
+    es.onmessage = (e) => {
+      const td = JSON.parse(e.data);
+      if (td.currentPage && td.totalPages && onProgress) onProgress(`BZ 下载 ${td.currentPage}/${td.totalPages} 页`);
+      if (td.status === 'success') { clearTimeout(timeout); es.close(); const elapsed = ((Date.now() - t0) / 1000).toFixed(1); const sizeStr = td.fileSize ? ` ${formatSize(td.fileSize)}` : ''; resolve({ source: 'bz', fileName: td.fileName || '', fileSize: td.fileSize, meta: `${elapsed}s${sizeStr}` }); }
+      if (td.status === 'failed') { clearTimeout(timeout); es.close(); reject(new Error(`BZ ${td.errorMessage || '失败'}`)); }
+    };
+    es.onerror = () => { clearTimeout(timeout); es.close(); reject(new Error('BZ SSE连接失败')); };
+  });
 }
 
 async function downloadBy(id, onProgress) {
@@ -1060,18 +1149,17 @@ async function downloadBy(id, onProgress) {
   const data = await res.json();
   if (!res.ok) throw new Error(`BY HTTP${res.status}`);
   const t0 = Date.now();
-  for (let i = 0; i < 30; i++) {
-    await sleep(1000);
-    const tr = await fetch(`${API}/api/tasks/${data.id}`); const td = await tr.json();
-    if (td.status === 'running' && onProgress) onProgress('BY 下载中...');
-    if (td.status === 'success') {
-      const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-      const sizeStr = td.fileSize ? ` ${formatSize(td.fileSize)}` : '';
-      return { source: 'by', fileName: td.fileName || '', fileSize: td.fileSize, meta: `${elapsed}s${sizeStr}` };
-    }
-    if (td.status === 'failed') throw new Error(`BY ${td.errorMessage || '失败'}`);
-  }
-  throw new Error('BY轮询超时');
+  return new Promise((resolve, reject) => {
+    const es = new EventSource(`${API}/api/tasks/${data.id}/stream`);
+    const timeout = setTimeout(() => { es.close(); reject(new Error('BY轮询超时')); }, 60000);
+    es.onmessage = (e) => {
+      const td = JSON.parse(e.data);
+      if (td.status === 'running' && onProgress) onProgress('BY 下载中...');
+      if (td.status === 'success') { clearTimeout(timeout); es.close(); const elapsed = ((Date.now() - t0) / 1000).toFixed(1); const sizeStr = td.fileSize ? ` ${formatSize(td.fileSize)}` : ''; resolve({ source: 'by', fileName: td.fileName || '', fileSize: td.fileSize, meta: `${elapsed}s${sizeStr}` }); }
+      if (td.status === 'failed') { clearTimeout(timeout); es.close(); reject(new Error(`BY ${td.errorMessage || '失败'}`)); }
+    };
+    es.onerror = () => { clearTimeout(timeout); es.close(); reject(new Error('BY SSE连接失败')); };
+  });
 }
 
 async function downloadBzVip(id, onProgress) {
@@ -1119,7 +1207,7 @@ document.getElementById('downloadSelected').addEventListener('click', async () =
         const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
         updateLog(logId, `${item.standardNumber} ✅ ${winner.source.toUpperCase()}胜出 ${winner.fileName}${sizeStr}`, 'success');
         setRowDownloadState(item.id, 'success');
-        if (winner.fileName) triggerDownload(winner.fileName);
+        if (winner.fileName) { triggerDownload(winner.fileName); recordDownload(winner.source, winner.fileName, item.standardNumber); }
       } catch (e) {
         failed++;
         const msgs = e instanceof AggregateError ? [...new Set(e.errors.map(err => err.message))].slice(0, 3).join('; ') : (e.message || '未知错误');
@@ -1255,7 +1343,7 @@ async function doCascadeDownload() {
           updateLog(logId, `${item.standardNumber} ✅ ${source.toUpperCase()} ${winner.fileName}${sizeStr}`, 'success');
           setRowDownloadState(item.standardId, 'success');
           success++; successItems.push(item);
-          if (winner.fileName) triggerDownload(winner.fileName);
+          if (winner.fileName) { triggerDownload(winner.fileName); recordDownload(winner.source, winner.fileName, item.standardNumber); }
         } catch (e) {
           updateLog(logId, `${item.standardNumber} ⚠ ${source.toUpperCase()} ${(e && e.message) || 'fail'}`, 'fail');
           setRowDownloadState(item.standardId, 'fail');
@@ -1311,7 +1399,7 @@ async function doRaceDownload() {
         const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
         updateLog(logId, `${item.standardNumber} ✅ ${winner.source.toUpperCase()}胜出 ${winner.fileName}${sizeStr}`, 'success');
         setRowDownloadState(item.standardId, 'success');
-        if (winner.fileName) triggerDownload(winner.fileName);
+        if (winner.fileName) { triggerDownload(winner.fileName); recordDownload(winner.source, winner.fileName, item.standardNumber); }
       } catch (e) {
         allFailedItems.push(item);
         const msgs = e instanceof AggregateError ? [...new Set(e.errors.map(err => err.message))].slice(0, 3).join('; ') : (e.message || '未知错误');
@@ -1546,9 +1634,10 @@ async function showDetail(id) {
     clearTimeout(timer); const d = await res.json();
     const sources = (d.moreInfo?.sources || d.sources || [d._source || d.source]).filter(Boolean);
     const srcBadges = sources.map(s => `<span class="source-badge source-${escapeHtml(String(s))}">${escapeHtml(String(s).toUpperCase())}</span>`).join(' ');
-    const fields = [['标准号', d.standardNumber], ['名称', d.title], ['状态', d.status], ['发布日期', d.publishDate], ['实施日期', d.implementDate], ['来源', srcBadges], ['类型', d.standardType]];
-    document.getElementById('modalBody').innerHTML = `<h3>${escapeHtml(d.standardNumber)}</h3>` +
+    const fields = [['标准号', d.standardNumber], ['名称', d.title], ['英文名', d.contentText || d.moreInfo?.enName], ['状态', d.status], ['发布日期', d.publishDate], ['实施日期', d.implementDate], ['来源', srcBadges], ['类型', d.standardType]];
+    document.getElementById('modalBody').innerHTML = `<h3>${escapeHtml(d.standardNumber)} <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="navigator.clipboard.writeText('${escapeHtml(d.standardNumber)}');showToast('已复制标准号')">复制</button></h3>` +
       fields.filter(f => f[1]).map(f => `<div class="field"><div class="field-label">${f[0]}</div><div class="field-value">${f[1]}</div></div>`).join('') +
+      (d.detailUrl ? `<div style="margin-top:12px"><a href="${escapeHtml(d.detailUrl)}" target="_blank" style="color:var(--accent);font-size:13px">打开来源页面 ↗</a></div>` : '') +
       `<button class="btn btn-primary btn-sm" style="margin-top:12px" data-action="modal-download" data-id="${escapeHtml(d.id)}">下载此标准</button>
        <button class="btn btn-ghost btn-sm" style="margin-top:12px;margin-left:6px" data-action="modal-close">关闭</button>`;
     document.getElementById('modalOverlay').classList.add('open');
@@ -1604,6 +1693,13 @@ document.getElementById('logToggle').addEventListener('click', () => {
   const panel = document.getElementById('logPanel');
   panel.classList.toggle('collapsed');
   document.getElementById('logChevron').textContent = panel.classList.contains('collapsed') ? '▲' : '▼';
+  // Adjust toast position based on log panel state
+  const toastContainer = document.getElementById('toastContainer');
+  if (panel.classList.contains('collapsed')) {
+    toastContainer.style.bottom = '160px';
+  } else {
+    toastContainer.style.bottom = '260px';
+  }
 });
 
 // ── Utils ──
@@ -1621,6 +1717,11 @@ function triggerDownload(fileName) {
   a.download = fileName; a.style.display = 'none';
   document.body.appendChild(a); a.click();
   setTimeout(() => document.body.removeChild(a), 1000);
+}
+function recordDownload(source, fileName, standardNumber) {
+  const now = new Date();
+  const time = `${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  addDownloadHistory({ source, fileName, standardNumber: standardNumber || fileName, name: fileName, time });
 }
 
 // ── Search history ──
@@ -1667,6 +1768,34 @@ document.getElementById('searchHistory').addEventListener('click', e => {
   hideSearchHistory();
   doSearch();
 });
+
+// ── Download history ──
+const DL_HISTORY_KEY = 'bzxz_dl_history';
+function loadDownloadHistory() {
+  try { return JSON.parse(localStorage.getItem(DL_HISTORY_KEY) || '[]'); } catch { return []; }
+}
+function addDownloadHistory(entry) {
+  const hist = loadDownloadHistory();
+  hist.unshift(entry);
+  if (hist.length > 100) hist.length = 100;
+  localStorage.setItem(DL_HISTORY_KEY, JSON.stringify(hist));
+}
+function clearDownloadHistory() {
+  localStorage.removeItem(DL_HISTORY_KEY);
+  renderDownloadHistory();
+  showToast('历史已清空');
+}
+function renderDownloadHistory() {
+  const hist = loadDownloadHistory();
+  const el = document.getElementById('historyList');
+  if (!hist.length) { el.innerHTML = '<div style="color:var(--text-3);text-align:center;padding:32px">暂无下载记录</div>'; return; }
+  el.innerHTML = hist.map(h => `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border)">
+    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(h.name || h.standardNumber)}">${escapeHtml(h.name || h.standardNumber)}</span>
+    <span style="color:var(--text-3);font-size:11px">${escapeHtml(h.source || '')}</span>
+    <span style="color:var(--text-3);font-size:11px">${escapeHtml(h.time || '')}</span>
+    ${h.fileName ? `<button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" onclick="triggerDownload('${escapeHtml(h.fileName)}')">重下</button>` : ''}
+  </div>`).join('');
+}
 
 // ── Toast ──
 function showToast(msg, type, duration) {
