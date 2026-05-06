@@ -12,7 +12,7 @@
     "electron:dev": "tsc -p tsconfig.electron.json && electron .",
     "electron:build": "tsc -p tsconfig.electron.json && electron-builder --win portable",
     "electron:build:nsis": "tsc -p tsconfig.electron.json && electron-builder --win nsis",
-    "electron:build:all": "tsc -p tsconfig.electron.json && electron-builder --win",
+    "electron:build:all": "tsc -p tsconfig.electron.json && electron-builder --win --publish never",
     "electron:dist": "tsc -p tsconfig.electron.json && electron-builder --win"
   },
   "keywords": [],
