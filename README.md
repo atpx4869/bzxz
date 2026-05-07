@@ -1,13 +1,13 @@
 # bzxz — 多源标准检索与批量下载
 
-面向自用的标准检索与文档导出系统。Web 前端 + Express API + Electron 桌面壳。
+面向团队的标准检索与文档导出系统。Web 前端 + Express API + SQLite + Electron 桌面壳。
 
 ## 支持的标准源
 
 | 源 | 代号 | 搜索 | 导出 |
 |---|---|---|---|
 | bz.gxzl.org.cn | `bz` | JSON API | 逐页 JPEG → pdf-lib 合并 PDF |
-| openstd.samr.gov.cn | `gbw` | JSON API | ddddocr 验证码 → 直接 PDF |
+| openstd.samr.gov.cn | `gbw` (显示为 BW) | JSON API | ddddocr 验证码 → 直接 PDF |
 | std.samr.gov.cn | `by` | JSON API | 直接 PDF |
 | bzuser.gxzl.org.cn | `bzvip` | 需登录 | 账号池 + JWT → 直链 PDF |
 
@@ -16,7 +16,7 @@
 ### 环境
 
 - Node.js ≥ 18
-- Python ≥ 3.8 + ddddocr（仅 gbw 源需要）
+- Python ≥ 3.8 + ddddocr（仅 BW 源需要）
 
 ```powershell
 npm install
@@ -25,7 +25,7 @@ npm run build
 node dist/src/index.js
 ```
 
-打开 `http://localhost:3000`。
+打开 `http://localhost:3000`，首次访问自动进入注册页面（首个用户为管理员）。
 
 ### 一键启动 (Windows)
 
@@ -46,6 +46,26 @@ start.bat
 | Electron 安装包 | `npm run electron:build:nsis` | NSIS 安装包 |
 | Electron 全量 | `npm run electron:build:all` | portable + nsis |
 
+## 账号管理
+
+基于 SQLite 的本地用户体系，无需外部数据库。
+
+- **注册**：首个注册用户自动成为管理员，后续默认普通用户
+- **登录**：Session Cookie（HttpOnly，30 天滑动续期）
+- **管理员功能**：
+  - 开启/关闭公开注册
+  - 用户增删改查（角色、启用/禁用）
+  - 查看用户使用明细（搜索/下载次数、来源分布、事件列表）
+
+## 使用统计
+
+自动记录搜索、下载、批量解析等操作事件，提供可视化仪表盘：
+
+- 汇总卡片（按事件类型）
+- 趋势折线图（按日期）
+- 来源分布饼图
+- 管理员可按用户维度查看明细
+
 ## 目录结构
 
 ```
@@ -54,30 +74,53 @@ start.bat
 ├── public/              # 前端 SPA (index.html)
 ├── scripts/             # 勘察脚本 + 注册机 + OCR 桥接
 ├── src/
-│   ├── api/             # Express 路由
+│   ├── api/             # Express 路由（含 auth/admin/stats）
 │   ├── domain/          # 领域模型 + SourceAdapter 接口
-│   ├── services/        # 业务逻辑（搜索/解析/导出任务）
+│   ├── services/        # 业务逻辑 + SQLite 数据库 + 使用追踪
 │   ├── shared/          # 工具函数（ID解析/错误/路径）
 │   └── sources/         # 数据源适配器
 │       ├── bz-zhenggui/ # BZ 标准在线
-│       ├── gbw/         # GBW 国标网
+│       ├── gbw/         # BW 国标网
 │       ├── by/          # BY 内部网
 │       ├── bz-vip/      # BZVIP 会员
 │       └── shared/      # OCR 验证码工具
 ├── docs/                # 源实现文档
-└── data/exports/        # 导出文件 (.gitignore)
+└── data/                # SQLite 数据库 (bzxz.db, .gitignore)
 ```
 
 ## API 端点
 
+### 公共
+
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/health` | 健康检查 |
+
+### 认证（无需登录）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/auth/status` | 检查初始化状态 + 当前用户 |
+| POST | `/api/auth/register` | 注册（首个用户自动 admin） |
+| POST | `/api/auth/login` | 登录 |
+
+### 认证（需登录）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| DELETE | `/api/auth/session` | 登出 |
+| GET | `/api/auth/me` | 当前用户信息 |
+| PUT | `/api/auth/password` | 修改密码 |
+
+### 标准检索与下载（需登录）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
 | GET | `/api/standards/search?q=&source=` | 搜索标准 |
 | GET | `/api/standards/:id` | 标准详情 |
 | POST | `/api/standards/:id/preview/detect` | 探测预览 |
 | POST | `/api/standards/:id/export` | 导出（bz/bvip） |
-| POST | `/api/standards/:id/auto-download` | gbw 自动验证码下载 |
+| POST | `/api/standards/:id/auto-download` | BW 自动验证码下载 |
 | POST | `/api/standards/:id/download-session` | 创建下载会话 |
 | POST | `/api/download-sessions/:id/verify` | 提交验证码 |
 | GET | `/api/download-sessions/:id` | 查询下载会话 |
@@ -86,6 +129,28 @@ start.bat
 | GET | `/api/tasks/:taskId` | 查询导出任务状态 |
 | GET | `/api/tasks/:taskId/stream` | SSE 实时任务进度 |
 | GET | `/api/downloads/:filename` | 下载导出文件 |
+
+### 管理（需 admin）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/admin/settings` | 获取系统设置 |
+| PUT | `/api/admin/settings` | 更新设置（注册开关等） |
+| GET | `/api/admin/users` | 用户列表（含使用统计） |
+| POST | `/api/admin/users` | 创建用户 |
+| PUT | `/api/admin/users/:id` | 更新用户（角色/状态/密码） |
+| DELETE | `/api/admin/users/:id` | 删除用户 |
+| GET | `/api/admin/users/:id/events` | 用户使用明细 |
+
+### 统计（需登录）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/stats/summary` | 汇总计数 |
+| GET | `/api/stats/timeseries` | 每日趋势数据 |
+| GET | `/api/stats/by-source` | 来源分布 |
+| GET | `/api/stats/by-user` | 用户分布（仅 admin） |
+| GET | `/api/stats/recent` | 近期事件列表 |
 
 ## 前端功能
 
@@ -96,10 +161,12 @@ start.bat
 - BZ 页级实时进度
 - 搜索历史（可配置条数 3~20，localStorage 持久化）
 - 键盘快捷键（`Ctrl+K` 搜索 / `Ctrl+Enter` 确认 / `Esc` 关闭 / `?` 查看）
-- GBW 自动 OCR 验证码
+- BW 自动 OCR 验证码
 - 下载优先级设置（持久化）
 - 底部日志面板 + 执行历史
-- 设置面板（源标签、搜索记录条数）
+- 登录/注册界面 + 用户菜单
+- 使用统计仪表盘（Chart.js 图表）
+- 管理员用户管理面板（含使用明细）
 
 ## Electron 桌面端
 
