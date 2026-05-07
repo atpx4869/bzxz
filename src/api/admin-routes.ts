@@ -33,9 +33,50 @@ export function createAdminRoutes(db: Database.Database) {
   // GET /api/admin/users
   router.get('/users', (_req, res) => {
     const users = db.prepare(
-      'SELECT id, username, display_name, role, is_active, created_at, updated_at FROM users ORDER BY id'
+      `SELECT u.id, u.username, u.display_name, u.role, u.is_active, u.created_at, u.updated_at,
+        COALESCE(s.cnt, 0) as search_count, COALESCE(d.cnt, 0) as download_count
+       FROM users u
+       LEFT JOIN (SELECT user_id, COUNT(*) as cnt FROM usage_events WHERE event_type = 'search' GROUP BY user_id) s ON s.user_id = u.id
+       LEFT JOIN (SELECT user_id, COUNT(*) as cnt FROM usage_events WHERE event_type = 'download' GROUP BY user_id) d ON d.user_id = u.id
+       ORDER BY u.id`
     ).all();
     res.json({ users });
+  });
+
+  // GET /api/admin/users/:id/events — user usage details
+  router.get('/users/:id/events', (req, res) => {
+    const userId = parseInt(req.params.id as string, 10);
+    if (isNaN(userId)) {
+      res.status(400).json({ code: 'BAD_REQUEST', message: '无效用户 ID' });
+      return;
+    }
+
+    const user = db.prepare('SELECT id, username, display_name FROM users WHERE id = ?').get(userId) as { id: number; username: string; display_name: string } | undefined;
+    if (!user) {
+      res.status(404).json({ code: 'NOT_FOUND', message: '用户不存在' });
+      return;
+    }
+
+    const limit = Math.min(parseInt((req.query.limit as string) || '50', 10), 200);
+
+    const summary = db.prepare(
+      `SELECT event_type, COUNT(*) as count FROM usage_events WHERE user_id = ? GROUP BY event_type`
+    ).all(userId) as { event_type: string; count: number }[];
+
+    const bySource = db.prepare(
+      `SELECT source, COUNT(*) as count FROM usage_events WHERE user_id = ? AND source IS NOT NULL GROUP BY source ORDER BY count DESC`
+    ).all(userId) as { source: string; count: number }[];
+
+    const recent = db.prepare(
+      `SELECT id, event_type, source, standard_id, metadata, created_at FROM usage_events WHERE user_id = ? ORDER BY created_at DESC LIMIT ?`
+    ).all(userId, limit) as { id: number; event_type: string; source: string | null; standard_id: string | null; metadata: string | null; created_at: string }[];
+
+    res.json({
+      user,
+      summary,
+      bySource,
+      recent: recent.map(r => ({ ...r, metadata: r.metadata ? JSON.parse(r.metadata) : null })),
+    });
   });
 
   // POST /api/admin/users

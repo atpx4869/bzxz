@@ -620,9 +620,6 @@ body { min-height: 100vh; }
   <button class="dock-btn" id="dockStats" onclick="togglePanel('stats')" title="统计">
     <span>📊</span><span class="dock-tooltip">使用统计</span>
   </button>
-  <button class="dock-btn" id="dockUsers" onclick="togglePanel('users')" title="用户管理" style="display:none">
-    <span>👥</span><span class="dock-tooltip">用户管理</span>
-  </button>
   <div class="dock-sep"></div>
   <button class="dock-btn" id="dockUser" onclick="toggleUserDropdown()" title="用户">
     <span>👤</span><span class="dock-tooltip">账户</span>
@@ -853,7 +850,7 @@ body { min-height: 100vh; }
       </label>
     </div>
     <table class="users-table">
-      <thead><tr><th>用户名</th><th>显示名</th><th>角色</th><th>状态</th><th>操作</th></tr></thead>
+      <thead><tr><th>用户名</th><th>显示名</th><th>角色</th><th>状态</th><th>搜索</th><th>下载</th><th>操作</th></tr></thead>
       <tbody id="usersBody"></tbody>
     </table>
   </div>
@@ -1721,7 +1718,7 @@ async function doComplete() {
 }
 
 // ── Settings (floating panel) ──
-const SETTINGS_LABELS = { gbw: 'GB源', bz: 'BZ源', by: 'BY源', bzvip: 'BZvip源' };
+const SETTINGS_LABELS = { gbw: 'BW源', bz: 'BZ源', by: 'BY源', bzvip: 'BZvip源' };
 const SETTINGS_NOTES = { gbw: '自动验证码 5~15s', bz: '合成PDF 30~90s', by: '直链PDF 2~5s', bzvip: '账号池 2~5s' };
 
 function renderSettings() {
@@ -2106,7 +2103,6 @@ async function checkAuthStatus() {
 function onAuthReady() {
   document.getElementById('udHeader').innerHTML = `${currentUser.display_name || currentUser.username} <span>${currentUser.role}</span>`;
   if (currentUser.role === 'admin') {
-    document.getElementById('dockUsers').style.display = '';
     document.getElementById('udManageUsers').style.display = '';
   }
   // Default stats date range: last 30 days
@@ -2259,7 +2255,10 @@ async function loadUsers() {
         <td>${u.display_name || '—'}</td>
         <td>${roleBadge}</td>
         <td>${statusBadge}</td>
+        <td>${u.search_count}</td>
+        <td>${u.download_count}</td>
         <td class="users-actions">
+          <button onclick="showUserDetail(${u.id},'${u.username}')">明细</button>
           <button onclick="toggleUserActive(${u.id},${u.is_active ? 0 : 1})">${toggleLabel}</button>
           <button onclick="changeUserRole(${u.id},'${u.role === 'admin' ? 'user' : 'admin'}')">${roleLabel}</button>
         </td>
@@ -2310,6 +2309,62 @@ function showCreateUser() {
     if (d.user) { alert('用户已创建'); loadUsers(); }
     else alert(d.message || '创建失败');
   });
+}
+
+async function showUserDetail(userId, username) {
+  const modal = document.getElementById('modalBody');
+  const overlay = document.getElementById('modalOverlay');
+  modal.innerHTML = '<p style="color:var(--text-3)">加载中...</p>';
+  overlay.classList.add('open');
+  try {
+    const res = await apiFetch(`/api/admin/users/${userId}/events`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.message || '加载失败');
+
+    const typeLabels = { search: '搜索', download: '下载', batch_resolve: '批量解析', complete: '补全' };
+    const typeColors = { search: 'var(--accent)', download: 'var(--success)', batch_resolve: 'var(--warn)', complete: '#a78bfa' };
+
+    let summaryHtml = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin:12px 0">';
+    const total = d.summary.reduce((s, r) => s + r.count, 0);
+    summaryHtml += `<div style="padding:8px 14px;border-radius:8px;background:oklch(25% 0.01 250 / 0.5);text-align:center"><div style="font-size:20px;font-weight:600;color:var(--text)">${total}</div><div style="font-size:11px;color:var(--text-3)">总计</div></div>`;
+    for (const s of d.summary) {
+      const color = typeColors[s.event_type] || 'var(--text-2)';
+      summaryHtml += `<div style="padding:8px 14px;border-radius:8px;background:oklch(25% 0.01 250 / 0.5);text-align:center"><div style="font-size:20px;font-weight:600;color:${color}">${s.count}</div><div style="font-size:11px;color:var(--text-3)">${typeLabels[s.event_type] || s.event_type}</div></div>`;
+    }
+    summaryHtml += '</div>';
+
+    let sourceHtml = '';
+    if (d.bySource.length > 0) {
+      sourceHtml = '<div style="margin:8px 0;font-size:13px;color:var(--text-2)">来源分布: ' +
+        d.bySource.map(s => `<span class="source-badge source-${escapeHtml(s.source)}">${srcLabel(s.source)} ${s.count}</span>`).join(' ') +
+        '</div>';
+    }
+
+    let listHtml = '';
+    if (d.recent.length > 0) {
+      listHtml = '<div style="max-height:320px;overflow-y:auto;margin-top:8px"><table class="users-table"><thead><tr><th>时间</th><th>类型</th><th>来源</th><th>标准号</th></tr></thead><tbody>';
+      for (const e of d.recent) {
+        const time = e.created_at ? e.created_at.slice(0, 16).replace('T', ' ') : '—';
+        const typeLabel = typeLabels[e.event_type] || e.event_type;
+        const color = typeColors[e.event_type] || 'var(--text-2)';
+        listHtml += `<tr>
+          <td style="font-size:12px;white-space:nowrap">${time}</td>
+          <td><span style="color:${color};font-size:12px">${typeLabel}</span></td>
+          <td>${e.source ? srcLabel(e.source) : '—'}</td>
+          <td style="font-size:12px">${e.standard_id ? escapeHtml(e.standard_id) : '—'}</td>
+        </tr>`;
+      }
+      listHtml += '</tbody></table></div>';
+    } else {
+      listHtml = '<p style="color:var(--text-3);font-size:13px;margin-top:8px">暂无使用记录</p>';
+    }
+
+    modal.innerHTML = `<h3>用户: ${escapeHtml(d.user.display_name || d.user.username)}</h3>
+      ${summaryHtml}${sourceHtml}${listHtml}
+      <button class="btn btn-ghost btn-sm" style="margin-top:12px" data-action="modal-close">关闭</button>`;
+  } catch (e) {
+    modal.innerHTML = `<p style="color:var(--danger)">加载失败: ${escapeHtml(e.message)}</p>`;
+  }
 }
 
 // ── Init ──
