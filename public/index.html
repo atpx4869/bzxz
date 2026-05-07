@@ -802,8 +802,8 @@ body { min-height: 100vh; }
 </div>
 
 <!-- Stats panel -->
-<div class="float-panel" id="floatStats" style="display:none">
-  <div class="float-panel-header">
+<div class="float-panel" id="floatStats" style="top:80px;left:calc(50% - 260px + 100px)">
+  <div class="float-panel-header" id="floatStatsHeader">
     <span class="accent-batch"></span>
     <span>使用统计</span>
     <div class="float-panel-controls">
@@ -833,8 +833,8 @@ body { min-height: 100vh; }
 </div>
 
 <!-- Users panel (admin only) -->
-<div class="float-panel" id="floatUsers" style="display:none">
-  <div class="float-panel-header">
+<div class="float-panel" id="floatUsers" style="top:80px;left:calc(50% - 260px + 120px)">
+  <div class="float-panel-header" id="floatUsersHeader">
     <span class="accent-settings"></span>
     <span>用户管理</span>
     <div class="float-panel-controls">
@@ -903,7 +903,7 @@ let filterState = { sources: new Set(), statuses: new Set() };
 let activeDrag = null;
 
 function initPanels() {
-  ['batch', 'complete', 'settings', 'history'].forEach(id => {
+  ['batch', 'complete', 'settings', 'history', 'stats', 'users'].forEach(id => {
     const panel = document.getElementById('float' + id.charAt(0).toUpperCase() + id.slice(1));
     const header = document.getElementById(panel.id + 'Header');
     if (!panel || !header) return;
@@ -1002,7 +1002,7 @@ function activatePanel(id) {
 }
 
 function updatePanelZIndices(topId) {
-  ['batch', 'complete', 'settings', 'history'].forEach(id => {
+  ['batch', 'complete', 'settings', 'history', 'stats', 'users'].forEach(id => {
     const panel = document.getElementById('float' + id.charAt(0).toUpperCase() + id.slice(1));
     if (panel) panel.style.zIndex = id === topId ? 260 : 250;
   });
