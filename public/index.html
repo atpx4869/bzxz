@@ -804,12 +804,11 @@ body { min-height: 100vh; }
 <!-- Stats panel -->
 <div class="float-panel" id="floatStats" style="top:80px;left:calc(50% - 260px + 100px)">
   <div class="float-panel-header" id="floatStatsHeader">
-    <span class="accent-batch"></span>
-    <span>使用统计</span>
-    <div class="float-panel-controls">
-      <button class="float-ctrl-btn" onclick="toggleMinimize('stats')">−</button>
-      <button class="float-ctrl-btn" onclick="togglePanel('stats')">×</button>
-    </div>
+    <div class="panel-accent accent-batch"></div>
+    <span class="panel-icon">📊</span>
+    <span class="panel-title">使用统计</span>
+    <button class="panel-btn" onclick="minimizePanel('stats')" title="最小化">─</button>
+    <button class="panel-btn close" onclick="closePanel('stats')" title="关闭">&times;</button>
   </div>
   <div class="float-panel-body">
     <div class="stats-controls">
@@ -835,12 +834,11 @@ body { min-height: 100vh; }
 <!-- Users panel (admin only) -->
 <div class="float-panel" id="floatUsers" style="top:80px;left:calc(50% - 260px + 120px)">
   <div class="float-panel-header" id="floatUsersHeader">
-    <span class="accent-settings"></span>
-    <span>用户管理</span>
-    <div class="float-panel-controls">
-      <button class="float-ctrl-btn" onclick="toggleMinimize('users')">−</button>
-      <button class="float-ctrl-btn" onclick="togglePanel('users')">×</button>
-    </div>
+    <div class="panel-accent accent-settings"></div>
+    <span class="panel-icon">👥</span>
+    <span class="panel-title">用户管理</span>
+    <button class="panel-btn" onclick="minimizePanel('users')" title="最小化">─</button>
+    <button class="panel-btn close" onclick="closePanel('users')" title="关闭">&times;</button>
   </div>
   <div class="float-panel-body">
     <div style="margin-bottom:12px">
