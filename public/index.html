@@ -637,7 +637,7 @@ body { min-height: 100vh; }
       <input type="text" id="searchInput" placeholder="输入标准号或关键词…" autofocus>
       <div class="source-tags">
         <span class="source-tag active" data-source="bz">BZ</span>
-        <span class="source-tag active" data-source="gbw">GBW</span>
+        <span class="source-tag active" data-source="gbw">BW</span>
         <span class="source-tag active" data-source="by">BY</span>
         <span class="source-tag active" data-source="bzvip">BZVIP</span>
       </div>
@@ -677,7 +677,7 @@ body { min-height: 100vh; }
     <textarea class="batch-textarea" id="batchInput" placeholder="粘贴标准号，每行一个&#10;例如：&#10;GB/T 1.1&#10;GB/T 12345-2020&#10;YY/T 0287&#10;DB44/T 1234"></textarea>
     <div class="batch-actions">
       <button class="btn btn-primary btn-sm" id="batchResolveBtn" onclick="doBatchResolve()">解析标准号</button>
-      <span style="font-size:11px;color:var(--text-3)" id="batchSourceHint">级联顺序：BZVIP → GBW → BY → BZ（超时 15s）</span>
+      <span style="font-size:11px;color:var(--text-3)" id="batchSourceHint">级联顺序：BZVIP → BW → BY → BZ（超时 15s）</span>
     </div>
     <div class="batch-summary" id="batchSummary"></div>
     <div id="batchResults"></div>
@@ -865,6 +865,8 @@ const API = '';
 // ── Settings ──
 const ALL_SOURCES = ['gbw', 'bz', 'by', 'bzvip'];
 const DEFAULT_DOWNLOAD_SOURCES = ['gbw', 'bz', 'by', 'bzvip'];
+const SOURCE_LABELS = { gbw: 'BW', bz: 'BZ', by: 'BY', bzvip: 'BZVIP' };
+function srcLabel(s) { return SOURCE_LABELS[s] || s.toUpperCase(); }
 const DEFAULT_CONCURRENCY = 3;
 
 const VALID_CONCURRENCY = [1, 2, 3, 4, 5];
@@ -1152,7 +1154,7 @@ function renderFilterBar() {
 
   const srcChips = [
     { key: '', label: '全部', count: results.length },
-    ...['bz','gbw','by','bzvip'].map(s => ({ key: s, label: s.toUpperCase(), count: srcCounts[s] || 0 }))
+    ...['bz','gbw','by','bzvip'].map(s => ({ key: s, label: srcLabel(s), count: srcCounts[s] || 0 }))
   ];
   const statusChips = [
     { key: '', label: '全部', count: results.length },
@@ -1180,7 +1182,7 @@ function renderResults() {
   const idxMap = new Map(results.map((r, i) => [r.id, i]));
   const cards = filtered.map((r, fi) => {
     const i = idxMap.get(r.id);
-    const srcBadges = (r.sources || [r._source]).map(s => `<span class="source-badge source-${escapeHtml(String(s))}">${escapeHtml(String(s).toUpperCase())}</span>`).join(' ');
+    const srcBadges = (r.sources || [r._source]).map(s => `<span class="source-badge source-${escapeHtml(String(s))}">${escapeHtml(srcLabel(String(s)))}</span>`).join(' ');
     const sCls = statusClass(r.status); const hasText = r.previewAvailable;
     return `
     <div class="result-card card-enter${hasText ? '' : ' no-text'}" data-sid="${escapeHtml(r.id)}" style="animation-delay:${fi * 40}ms">
@@ -1297,11 +1299,11 @@ async function downloadOne(id, btn) {
   const sources = (r.sources || [r._source]).filter(s => downloadSources.includes(s));
   if (!sources.length) { addLog(`${r.standardNumber} 无可用下载源`, 'fail'); return; }
   setRowDownloadState(id, 'downloading');
-  const logId = addLog(`${r.standardNumber} 竞速 [${sources.map(s => s.toUpperCase()).join('+')}]`, 'pending');
+  const logId = addLog(`${r.standardNumber} 竞速 [${sources.map(s => srcLabel(s)).join('+')}]`, 'pending');
   try {
     const winner = await Promise.any(sources.map(s => raceSource(r.id, s, r.standardNumber, (msg) => updateLog(logId, msg, 'pending'))));
     const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
-    updateLog(logId, `${r.standardNumber} ✅ ${winner.source.toUpperCase()}胜出 ${winner.fileName}${sizeStr}`, 'success');
+    updateLog(logId, `${r.standardNumber} ✅ ${srcLabel(winner.source)}胜出 ${winner.fileName}${sizeStr}`, 'success');
     setRowDownloadState(id, 'success');
     if (winner.fileName) { triggerDownload(winner.fileName); recordDownload(winner.source, winner.fileName, r.standardNumber); }
   } catch (e) {
@@ -1325,15 +1327,15 @@ function raceSource(standardId, source, label, onProgress) {
 }
 
 async function downloadGbw(id, onProgress) {
-  if (onProgress) onProgress('GBW 识别验证码...');
+  if (onProgress) onProgress('BW 识别验证码...');
   const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/auto-download`, { method: 'POST' });
   const data = await res.json();
-  if (!res.ok) throw new Error(`GBW HTTP${res.status}`);
+  if (!res.ok) throw new Error(`BW HTTP${res.status}`);
   if (data.status === 'downloaded') {
     const meta = data.meta || {};
     return { source: 'gbw', fileName: meta.fileName || data.fileName || '', fileSize: meta.fileSize };
   }
-  throw new Error(`GBW ${data.status}`);
+  throw new Error(`BW ${data.status}`);
 }
 
 async function downloadBz(id, onProgress) {
@@ -1410,12 +1412,12 @@ document.getElementById('downloadSelected').addEventListener('click', async () =
       const sources = (item.sources || [item._source]).filter(s => downloadSources.includes(s));
       if (!sources.length) { completed++; failed++; updateProgress(); continue; }
       setRowDownloadState(item.id, 'downloading');
-      const logId = addLog(`${item.standardNumber} 竞速 [${sources.map(s => s.toUpperCase()).join('+')}]`, 'pending');
+      const logId = addLog(`${item.standardNumber} 竞速 [${sources.map(s => srcLabel(s)).join('+')}]`, 'pending');
       try {
         const winner = await Promise.any(sources.map(s => raceSource(item.id, s, item.standardNumber, (msg) => updateLog(logId, msg, 'pending'))));
         success++; wins[winner.source] = (wins[winner.source] || 0) + 1;
         const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
-        updateLog(logId, `${item.standardNumber} ✅ ${winner.source.toUpperCase()}胜出 ${winner.fileName}${sizeStr}`, 'success');
+        updateLog(logId, `${item.standardNumber} ✅ ${srcLabel(winner.source)}胜出 ${winner.fileName}${sizeStr}`, 'success');
         setRowDownloadState(item.id, 'success');
         if (winner.fileName) { triggerDownload(winner.fileName); recordDownload(winner.source, winner.fileName, item.standardNumber); }
       } catch (e) {
@@ -1430,7 +1432,7 @@ document.getElementById('downloadSelected').addEventListener('click', async () =
   const workers = Array.from({ length: downloadConcurrency }, () => worker());
   await Promise.all(workers);
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-  const winSummary = Object.entries(wins).map(([k, v]) => `${k.toUpperCase()}:${v}`).join(' ');
+  const winSummary = Object.entries(wins).map(([k, v]) => `${srcLabel(k)}:${v}`).join(' ');
   addLog(`完成 ${success}/${total} · ${elapsed}s · ${winSummary || '无'}`, 'success');
   if (success > 0) showToast(`下载完成 ${success}/${total} · ${elapsed}s`);
   setTimeout(() => { progress.classList.remove('visible'); fill.style.width = '0%'; progressText.textContent = ''; }, 2000);
@@ -1443,7 +1445,7 @@ let batchResolved = [], batchUnmatched = [], batchDownloading = false, batchAbor
 
 function updateBatchSourceHint() {
   const sources = downloadPriority.filter(s => downloadSources.includes(s));
-  const labels = { bzvip: 'BZVIP', gbw: 'GBW', by: 'BY', bz: 'BZ' };
+  const labels = { bzvip: 'BZVIP', gbw: 'BW', by: 'BY', bz: 'BZ' };
   const el = document.getElementById('batchSourceHint');
   if (downloadMode === 'race') {
     if (el) el.textContent = `竞速模式：${sources.map(s => labels[s]||s).join(' + ')} 同时发起（超时 ${downloadTimeout}s）`;
@@ -1479,7 +1481,7 @@ function renderBatchResults() {
       <input type="checkbox" id="br_${i}" checked style="accent-color:var(--accent);cursor:pointer;flex-shrink:0" onchange="updateBatchToolbar()">
       <span class="card-num" style="flex:0 0 150px" title="${escapeHtml(r.standardNumber)}">${escapeHtml(r.standardNumber)}</span>
       <span class="card-title" style="flex:1" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</span>
-      <span class="card-src">${r.source.toUpperCase()}</span>
+      <span class="card-src">${srcLabel(r.source)}</span>
     </div>`).join('');
   const unmatchedCards = batchUnmatched.map(u => `
     <div class="batch-result-card unmatched">
@@ -1540,22 +1542,22 @@ async function doCascadeDownload() {
     const source = sources[round];
     const remaining = items.filter(it => !successItems.some(s => s.standardId === it.standardId));
     if (remaining.length === 0) break;
-    addLog(`━━ 第${round + 1}轮: ${source.toUpperCase()} (${remaining.length}条待下载)`, 'pending');
+    addLog(`━━ 第${round + 1}轮: ${srcLabel(source)} (${remaining.length}条待下载)`, 'pending');
     const queue = [...remaining];
     async function worker() {
       while (queue.length > 0 && !batchAborted) {
         const item = queue.shift();
         setRowDownloadState(item.standardId, 'downloading');
-        const logId = addLog(`${item.standardNumber} ${source.toUpperCase()} 下载中...`, 'pending');
+        const logId = addLog(`${item.standardNumber} ${srcLabel(source)} 下载中...`, 'pending');
         try {
           const winner = await raceSourceWithTimeout(item.standardId, source, item.standardNumber, downloadTimeout * 1000, (msg) => updateLog(logId, msg, 'pending'));
           const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
-          updateLog(logId, `${item.standardNumber} ✅ ${source.toUpperCase()} ${winner.fileName}${sizeStr}`, 'success');
+          updateLog(logId, `${item.standardNumber} ✅ ${srcLabel(source)} ${winner.fileName}${sizeStr}`, 'success');
           setRowDownloadState(item.standardId, 'success');
           success++; successItems.push(item);
           if (winner.fileName) { triggerDownload(winner.fileName); recordDownload(winner.source, winner.fileName, item.standardNumber); }
         } catch (e) {
-          updateLog(logId, `${item.standardNumber} ⚠ ${source.toUpperCase()} ${(e && e.message) || 'fail'}`, 'fail');
+          updateLog(logId, `${item.standardNumber} ⚠ ${srcLabel(source)} ${(e && e.message) || 'fail'}`, 'fail');
           setRowDownloadState(item.standardId, 'fail');
         }
         completed++; updateProgress();
@@ -1602,12 +1604,12 @@ async function doRaceDownload() {
       const item = queue.shift();
       setRowDownloadState(item.standardId, 'downloading');
       const sourceList = (sources.length > 0 ? sources : ['bzvip']).filter(s => downloadSources.includes(s));
-      const logId = addLog(`${item.standardNumber} 竞速 [${sourceList.map(s => s.toUpperCase()).join('+')}]`, 'pending');
+      const logId = addLog(`${item.standardNumber} 竞速 [${sourceList.map(s => srcLabel(s)).join('+')}]`, 'pending');
       try {
         const winner = await Promise.any(sourceList.map(s => raceSourceWithTimeout(item.standardId, s, item.standardNumber, downloadTimeout * 1000, (msg) => updateLog(logId, msg, 'pending'))));
         success++; successItems.push(item); wins[winner.source] = (wins[winner.source] || 0) + 1;
         const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
-        updateLog(logId, `${item.standardNumber} ✅ ${winner.source.toUpperCase()}胜出 ${winner.fileName}${sizeStr}`, 'success');
+        updateLog(logId, `${item.standardNumber} ✅ ${srcLabel(winner.source)}胜出 ${winner.fileName}${sizeStr}`, 'success');
         setRowDownloadState(item.standardId, 'success');
         if (winner.fileName) { triggerDownload(winner.fileName); recordDownload(winner.source, winner.fileName, item.standardNumber); }
       } catch (e) {
@@ -1623,7 +1625,7 @@ async function doRaceDownload() {
   await Promise.all(workers);
   const finalFailed = items.filter(it => !successItems.some(s => s.standardId === it.standardId));
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-  const winSummary = Object.entries(wins).map(([k, v]) => `${k.toUpperCase()}:${v}`).join(' ');
+  const winSummary = Object.entries(wins).map(([k, v]) => `${srcLabel(k)}:${v}`).join(' ');
   addLog(`━━ 竞速完成: ${success}/${total} 成功 [${winSummary}] (${elapsed}s)`, 'success');
   if (success > 0) showToast(`竞速完成 ${success}/${total} · ${elapsed}s`);
   showBatchResultModal(successItems, allFailedItems, finalFailed, elapsed);
@@ -1733,7 +1735,7 @@ function renderSettings() {
         <div style="font-size:14px;font-weight:500;color:var(--text)">${SETTINGS_LABELS[s]}</div>
         <div style="font-size:12px;color:var(--text-3);margin-top:2px">${SETTINGS_NOTES[s]}</div>
       </div>
-      <span class="source-tag" style="pointer-events:none">${s.toUpperCase()}</span>
+      <span class="source-tag" style="pointer-events:none">${srcLabel(s)}</span>
       <label class="toggle-switch" style="flex-shrink:0">
         <input type="checkbox" ${enabled ? 'checked' : ''} onchange="toggleDownloadSource('${s}', this.checked);renderSettings()">
         <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -1843,11 +1845,11 @@ async function showDetail(id) {
     const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}`, { signal: ctrl.signal });
     clearTimeout(timer); const d = await res.json();
     const sources = (d.moreInfo?.sources || d.sources || [d._source || d.source]).filter(Boolean);
-    const srcBadges = sources.map(s => `<span class="source-badge source-${escapeHtml(String(s))}">${escapeHtml(String(s).toUpperCase())}</span>`).join(' ');
+    const srcBadges = sources.map(s => `<span class="source-badge source-${escapeHtml(String(s))}">${escapeHtml(srcLabel(String(s)))}</span>`).join(' ');
     const fields = [['标准号', d.standardNumber], ['名称', d.title], ['英文名', d.contentText || d.moreInfo?.enName], ['状态', d.status], ['发布日期', d.publishDate], ['实施日期', d.implementDate], ['来源', srcBadges], ['类型', d.standardType]];
     document.getElementById('modalBody').innerHTML = `<h3>${escapeHtml(d.standardNumber)} <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="navigator.clipboard.writeText('${escapeHtml(d.standardNumber)}');showToast('已复制标准号')">复制</button></h3>` +
       fields.filter(f => f[1]).map(f => `<div class="field"><div class="field-label">${f[0]}</div><div class="field-value">${f[1]}</div></div>`).join('') +
-      (d.detailUrl ? `<div style="margin-top:12px"><a href="${escapeHtml(d.detailUrl)}" target="_blank" style="color:var(--accent);font-size:13px">打开来源页面 ↗</a></div>` : '') +
+
       `<button class="btn btn-primary btn-sm" style="margin-top:12px" data-action="modal-download" data-id="${escapeHtml(d.id)}">下载此标准</button>
        <button class="btn btn-ghost btn-sm" style="margin-top:12px;margin-left:6px" data-action="modal-close">关闭</button>`;
     document.getElementById('modalOverlay').classList.add('open');
