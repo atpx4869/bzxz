@@ -10,6 +10,12 @@ import { StandardResolver } from '../services/standard-resolver';
 import { ExportTaskService } from '../services/export-task-service';
 import { ExportTaskStore } from '../services/export-task-store';
 import { SourceRegistry } from '../services/source-registry';
+import { getDb } from '../services/db';
+import { trackEvent } from '../services/usage-tracker';
+import { createAuthMiddleware } from './auth-middleware';
+import { createAuthRoutes } from './auth-routes';
+import { createAdminRoutes } from './admin-routes';
+import { createStatsRoutes } from './stats-routes';
 import { AppError, BadRequestError, NotFoundError } from '../shared/errors';
 import { parseStandardId, VALID_SOURCES } from '../shared/id';
 import type { SourceName } from '../domain/standard';
@@ -34,6 +40,8 @@ export function createApp() {
   const app = express();
   const sourceRegistry = new SourceRegistry();
   const exportTaskStore = new ExportTaskStore();
+  const db = getDb();
+  const { requireAuth, requireAdmin } = createAuthMiddleware(db);
 
   // Resolve base path: Electron uses BZXZ_BASE_DIR env, dev mode uses cwd
   const baseDir = process.env.BZXZ_BASE_DIR || process.cwd();
@@ -76,11 +84,16 @@ export function createApp() {
     }
   });
 
+  // Auth routes (no auth required)
+  app.use('/api/auth', createAuthRoutes(db, requireAuth));
+  app.use('/api/admin', requireAdmin, createAdminRoutes(db));
+  app.use('/api/stats', createStatsRoutes(db, requireAuth));
+
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, sources: sourceRegistry.list() });
   });
 
-  app.get('/api/standards/search', async (req, res, next) => {
+  app.get('/api/standards/search', requireAuth, async (req, res, next) => {
     try {
       const querySchema = z.object({
         q: z.string().trim().min(1, 'q is required').max(500),
@@ -91,6 +104,7 @@ export function createApp() {
       const selectedSource = (source ?? 'bz') as SourceName;
       const service = new StandardService(sourceRegistry.get(selectedSource));
       const results = await service.searchStandards({ query: q });
+      trackEvent(db, req.user!.id, 'search', selectedSource, undefined, { query: q, resultCount: results.length });
 
       res.json({
         items: results,
@@ -107,7 +121,7 @@ export function createApp() {
     }
   });
 
-  app.post('/api/standards/resolve', async (req, res, next) => {
+  app.post('/api/standards/resolve', requireAuth, async (req, res, next) => {
     try {
       const bodySchema = z.object({
         lines: z.array(z.string().trim()).min(1, 'lines is required').max(200),
@@ -118,77 +132,87 @@ export function createApp() {
       const selectedSources = (sources ?? sourceRegistry.list()) as SourceName[];
       const resolver = new StandardResolver(sourceRegistry);
       const result = await resolver.resolve(lines, selectedSources);
+      trackEvent(db, req.user!.id, 'batch_resolve', selectedSources.join(','), undefined, {
+        lineCount: lines.length, resolvedCount: result.resolved.length, unmatchedCount: result.unmatched.length,
+      });
       res.json(result);
     } catch (error) {
       next(normalizeError(error));
     }
   });
 
-  app.get('/api/standards/:id', async (req, res, next) => {
+  app.get('/api/standards/:id', requireAuth, async (req, res, next) => {
     try {
-      const parsed = parseStandardId(req.params.id);
+      const id = req.params.id as string;
+      const parsed = parseStandardId(id);
       const service = new StandardService(sourceRegistry.get(parsed.source));
-      const detail = await service.getStandardDetail(req.params.id);
+      const detail = await service.getStandardDetail(id);
       res.json(detail);
     } catch (error) {
       next(normalizeError(error));
     }
   });
 
-  app.post('/api/standards/:id/preview/detect', async (req, res, next) => {
+  app.post('/api/standards/:id/preview/detect', requireAuth, async (req, res, next) => {
     try {
-      const parsed = parseStandardId(req.params.id);
+      const id = req.params.id as string;
+      const parsed = parseStandardId(id);
       const service = new StandardService(sourceRegistry.get(parsed.source));
-      const preview = await service.detectPreview(req.params.id);
+      const preview = await service.detectPreview(id);
       res.json(preview);
     } catch (error) {
       next(normalizeError(error));
     }
   });
 
-  app.post('/api/standards/:id/export', async (req, res, next) => {
+  app.post('/api/standards/:id/export', requireAuth, async (req, res, next) => {
     try {
-      const parsed = parseStandardId(req.params.id);
+      const id = req.params.id as string;
+      const parsed = parseStandardId(id);
       const adapter = sourceRegistry.get(parsed.source);
       const exportTaskService = new ExportTaskService(adapter, exportTaskStore);
-      const task = exportTaskService.createTask(req.params.id);
+      const task = exportTaskService.createTask(id);
+      trackEvent(db, req.user!.id, 'download', parsed.source, id);
       res.status(202).json(task);
     } catch (error) {
       next(normalizeError(error));
     }
   });
 
-  app.post('/api/standards/:id/download-session', async (req, res, next) => {
+  app.post('/api/standards/:id/download-session', requireAuth, async (req, res, next) => {
     try {
-      const parsed = parseStandardId(req.params.id);
+      const id = req.params.id as string;
+      const parsed = parseStandardId(id);
       const adapter = sourceRegistry.get(parsed.source);
       if (!adapter.createDownloadSession) {
         throw new BadRequestError(`Source ${parsed.source} does not support download sessions`);
       }
 
-      const session = await adapter.createDownloadSession(req.params.id);
+      const session = await adapter.createDownloadSession(id);
       res.status(201).json(session);
     } catch (error) {
       next(normalizeError(error));
     }
   });
 
-  app.post('/api/standards/:id/auto-download', async (req, res, next) => {
+  app.post('/api/standards/:id/auto-download', requireAuth, async (req, res, next) => {
     try {
-      const parsed = parseStandardId(req.params.id);
+      const id = req.params.id as string;
+      const parsed = parseStandardId(id);
       const adapter = sourceRegistry.get(parsed.source);
       if (!adapter.autoDownload) {
         throw new BadRequestError(`Source ${parsed.source} does not support auto-download`);
       }
 
-      const result = await adapter.autoDownload(req.params.id, 5);
+      const result = await adapter.autoDownload(id, 5);
+      trackEvent(db, req.user!.id, 'download', parsed.source, id);
       res.json(result);
     } catch (error) {
       next(normalizeError(error));
     }
   });
 
-  app.post('/api/download-sessions/:sessionId/verify', async (req, res, next) => {
+  app.post('/api/download-sessions/:sessionId/verify', requireAuth, async (req, res, next) => {
     try {
       const bodySchema = z.object({
         source: z.enum(['gbw']),
@@ -200,14 +224,14 @@ export function createApp() {
         throw new BadRequestError(`Source ${source} does not support captcha verification`);
       }
 
-      const result = await adapter.submitDownloadCaptcha(req.params.sessionId, code);
+      const result = await adapter.submitDownloadCaptcha(req.params.sessionId as string, code);
       res.json(result);
     } catch (error) {
       next(normalizeError(error));
     }
   });
 
-  app.get('/api/download-sessions/:sessionId', async (req, res, next) => {
+  app.get('/api/download-sessions/:sessionId', requireAuth, async (req, res, next) => {
     try {
       const source = (req.query.source as string | undefined) ?? 'gbw';
       if (source !== 'gbw') {
@@ -219,14 +243,14 @@ export function createApp() {
         throw new BadRequestError('Source gbw does not support download session lookup');
       }
 
-      const session = await adapter.getDownloadSession(req.params.sessionId);
+      const session = await adapter.getDownloadSession(req.params.sessionId as string);
       res.json(session);
     } catch (error) {
       next(normalizeError(error));
     }
   });
 
-  app.post('/api/standards/complete', upload.single('file'), async (req, res, next) => {
+  app.post('/api/standards/complete', requireAuth, upload.single('file'), async (req, res, next) => {
     try {
       if (!req.file) {
         throw new BadRequestError('请上传文件');
@@ -303,6 +327,10 @@ export function createApp() {
       const buf = XLSX.write(outWorkbook, { type: 'buffer', bookType: 'xlsx' });
       await writeFile(outPath, buf);
 
+      trackEvent(db, req.user!.id, 'complete', undefined, undefined, {
+        fileName: outFileName, totalLines: lines.length, resolved: resolved.length, unmatched: unmatched.length,
+      });
+
       res.json({
         fileName: outFileName,
         downloadUrl: `/api/downloads/${encodeURIComponent(outFileName)}`,
@@ -317,11 +345,11 @@ export function createApp() {
     }
   });
 
-  app.get('/api/tasks/:taskId', async (req, res, next) => {
+  app.get('/api/tasks/:taskId', requireAuth, async (req, res, next) => {
     try {
-      const task = exportTaskStore.get(req.params.taskId);
+      const task = exportTaskStore.get(req.params.taskId as string);
       if (!task) {
-        throw new NotFoundError(`Export task not found: ${req.params.taskId}`);
+        throw new NotFoundError(`Export task not found: ${req.params.taskId as string}`);
       }
       res.json(task);
     } catch (error) {
@@ -330,14 +358,14 @@ export function createApp() {
   });
 
   // SSE endpoint for real-time task progress
-  app.get('/api/tasks/:taskId/stream', (req, res) => {
+  app.get('/api/tasks/:taskId/stream', requireAuth, (req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
     });
 
-    const taskId = req.params.taskId;
+    const taskId = req.params.taskId as string;
     const interval = setInterval(() => {
       const task = exportTaskStore.get(taskId);
       if (task) {

@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;1,8..60,400&family=DM+Mono:ital,wght@0,400;0,500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <style>
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -480,6 +481,118 @@ body { min-height: 100vh; }
   background: var(--surface-h); border: 1px solid var(--border);
   font: 400 11px 'DM Mono', monospace; color: var(--text-2);
 }
+
+/* ── Auth overlay ── */
+.auth-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background: oklch(10% 0.01 250 / 0.85);
+  backdrop-filter: blur(12px);
+}
+.auth-overlay.hidden { display: none; }
+.auth-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 40px;
+  width: 360px; max-width: 90vw;
+  box-shadow: 0 16px 64px rgba(0,0,0,0.4);
+}
+.auth-card h2 {
+  font: 500 22px/1.2 'DM Sans', sans-serif; margin-bottom: 24px; color: var(--text);
+}
+.auth-card .form-group { margin-bottom: 16px; }
+.auth-card label {
+  display: block; font-size: 12px; color: var(--text-2); margin-bottom: 6px; font-weight: 500;
+}
+.auth-card input {
+  width: 100%; padding: 10px 14px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--bg);
+  color: var(--text); font: 400 14px 'DM Sans', sans-serif;
+  outline: none; transition: border-color 0.2s;
+}
+.auth-card input:focus { border-color: var(--accent); }
+.auth-card .btn { width: 100%; margin-top: 8px; }
+.auth-card .auth-toggle {
+  display: block; text-align: center; margin-top: 16px;
+  color: var(--accent); font-size: 13px; cursor: pointer; text-decoration: none;
+}
+.auth-card .auth-toggle:hover { text-decoration: underline; }
+.auth-card .auth-error {
+  margin-top: 12px; padding: 8px 12px; border-radius: var(--radius-sm);
+  background: oklch(30% 0.08 25 / 0.3); color: var(--danger); font-size: 13px;
+}
+.auth-card .auth-error:empty { display: none; }
+
+/* ── User dock dropdown ── */
+.user-dropdown {
+  position: fixed; left: 72px; bottom: 24px; z-index: 400;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 8px 0; min-width: 160px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+  display: none;
+}
+.user-dropdown.open { display: block; }
+.user-dropdown .ud-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 16px; cursor: pointer; color: var(--text-2); font-size: 13px;
+  transition: background 0.15s;
+}
+.user-dropdown .ud-item:hover { background: var(--surface-h); color: var(--text); }
+.user-dropdown .ud-header {
+  padding: 8px 16px; font-size: 13px; color: var(--text); font-weight: 500;
+  border-bottom: 1px solid var(--border); margin-bottom: 4px;
+}
+.user-dropdown .ud-header span { color: var(--text-3); font-weight: 400; font-size: 12px; }
+
+/* ── Stats panel ── */
+.stats-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px; margin-bottom: 20px;
+}
+.stat-card {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px;
+}
+.stat-card .stat-value { font: 600 24px/1 'DM Sans', sans-serif; color: var(--text); }
+.stat-card .stat-label { font-size: 11px; color: var(--text-3); margin-top: 4px; }
+.stats-controls { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; }
+.stats-controls input[type="date"] {
+  padding: 6px 10px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--bg);
+  color: var(--text); font: 400 12px 'DM Sans', sans-serif; outline: none;
+}
+.stats-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.stats-chart-box {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 16px;
+}
+.stats-chart-box h4 { font-size: 13px; color: var(--text-2); margin-bottom: 12px; }
+.stats-chart-box canvas { max-height: 200px; }
+
+/* ── Users panel ── */
+.users-table {
+  width: 100%; border-collapse: collapse; font-size: 13px;
+}
+.users-table th {
+  text-align: left; padding: 8px 10px; color: var(--text-3); font-weight: 500;
+  border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase;
+}
+.users-table td {
+  padding: 8px 10px; border-bottom: 1px solid oklch(25% 0.01 250 / 0.5); color: var(--text-2);
+}
+.users-table .badge {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  font-size: 11px; font-weight: 500;
+}
+.badge-admin { background: oklch(68% 0.18 230 / 0.15); color: var(--accent); }
+.badge-user { background: oklch(50% 0.01 250 / 0.2); color: var(--text-2); }
+.badge-active { background: oklch(68% 0.16 158 / 0.15); color: var(--success); }
+.badge-inactive { background: oklch(58% 0.20 25 / 0.15); color: var(--danger); }
+.users-actions { display: flex; gap: 6px; }
+.users-actions button {
+  padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-2); font-size: 11px; cursor: pointer;
+}
+.users-actions button:hover { border-color: var(--accent); color: var(--accent); }
 </style>
 </head>
 <body>
@@ -502,6 +615,17 @@ body { min-height: 100vh; }
   </button>
   <button class="dock-btn" id="dockSettings" onclick="togglePanel('settings')" title="设置">
     <span>⚙</span><span class="dock-tooltip">下载设置</span>
+  </button>
+  <div class="dock-sep"></div>
+  <button class="dock-btn" id="dockStats" onclick="togglePanel('stats')" title="统计">
+    <span>📊</span><span class="dock-tooltip">使用统计</span>
+  </button>
+  <button class="dock-btn" id="dockUsers" onclick="togglePanel('users')" title="用户管理" style="display:none">
+    <span>👥</span><span class="dock-tooltip">用户管理</span>
+  </button>
+  <div class="dock-sep"></div>
+  <button class="dock-btn" id="dockUser" onclick="toggleUserDropdown()" title="用户">
+    <span>👤</span><span class="dock-tooltip">账户</span>
   </button>
 </nav>
 
@@ -651,6 +775,87 @@ body { min-height: 100vh; }
     <div class="kbd-row"><span>显示快捷键</span><span class="kbd-key"><kbd>?</kbd></span></div>
   </div>
 </div>
+
+<!-- Auth overlay -->
+<div class="auth-overlay" id="authOverlay">
+  <div class="auth-card">
+    <h2 id="authTitle">bzxz · 登录</h2>
+    <form id="authForm">
+      <div class="form-group">
+        <label>用户名</label>
+        <input id="authUsername" required autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label>密码</label>
+        <input id="authPassword" type="password" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-primary" id="authSubmitBtn">登录</button>
+      <a class="auth-toggle" id="authToggle">没有账号？注册</a>
+    </form>
+    <div class="auth-error" id="authError"></div>
+  </div>
+</div>
+
+<!-- User dropdown -->
+<div class="user-dropdown" id="userDropdown">
+  <div class="ud-header" id="udHeader"></div>
+  <div class="ud-item" id="udChangePwd" onclick="showChangePwd()">修改密码</div>
+  <div class="ud-item" id="udManageUsers" onclick="togglePanel('users')" style="display:none">用户管理</div>
+  <div class="ud-item" onclick="doLogout()">退出登录</div>
+</div>
+
+<!-- Stats panel -->
+<div class="float-panel" id="floatStats" style="display:none">
+  <div class="float-panel-header">
+    <span class="accent-batch"></span>
+    <span>使用统计</span>
+    <div class="float-panel-controls">
+      <button class="float-ctrl-btn" onclick="toggleMinimize('stats')">−</button>
+      <button class="float-ctrl-btn" onclick="togglePanel('stats')">×</button>
+    </div>
+  </div>
+  <div class="float-panel-body">
+    <div class="stats-controls">
+      <input type="date" id="statsFrom">
+      <span style="color:var(--text-3);font-size:12px">至</span>
+      <input type="date" id="statsTo">
+      <button class="btn btn-sm btn-ghost" onclick="loadStats()">刷新</button>
+    </div>
+    <div class="stats-grid" id="statsSummary"></div>
+    <div class="stats-charts">
+      <div class="stats-chart-box">
+        <h4>趋势</h4>
+        <canvas id="chartTrend"></canvas>
+      </div>
+      <div class="stats-chart-box">
+        <h4>来源分布</h4>
+        <canvas id="chartSource"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Users panel (admin only) -->
+<div class="float-panel" id="floatUsers" style="display:none">
+  <div class="float-panel-header">
+    <span class="accent-settings"></span>
+    <span>用户管理</span>
+    <div class="float-panel-controls">
+      <button class="float-ctrl-btn" onclick="toggleMinimize('users')">−</button>
+      <button class="float-ctrl-btn" onclick="togglePanel('users')">×</button>
+    </div>
+  </div>
+  <div class="float-panel-body">
+    <div style="margin-bottom:12px">
+      <button class="btn btn-sm btn-primary" onclick="showCreateUser()">新建用户</button>
+    </div>
+    <table class="users-table">
+      <thead><tr><th>用户名</th><th>显示名</th><th>角色</th><th>状态</th><th>操作</th></tr></thead>
+      <tbody id="usersBody"></tbody>
+    </table>
+  </div>
+</div>
+
 <script>
 const API = '';
 
@@ -763,6 +968,8 @@ function openPanel(id) {
   if (id === 'settings') renderSettings();
   if (id === 'history') renderDownloadHistory();
   if (id === 'batch') updateBatchSourceHint();
+  if (id === 'stats') loadStats();
+  if (id === 'users') loadUsers();
 
   // Bring to front
   panel.style.zIndex = 260;
@@ -1841,8 +2048,251 @@ document.getElementById('shortcutsOverlay').addEventListener('click', e => {
   }
 });
 
+// ── Auth ──
+let currentUser = null;
+let isRegisterMode = false;
+let trendChart = null;
+let sourceChart = null;
+
+// Global fetch 401 interceptor
+const _origFetch = window.fetch;
+window.fetch = function(...args) {
+  return _origFetch.apply(this, args).then(res => {
+    if (res.status === 401 && !args[0]?.toString().includes('/api/auth/')) {
+      currentUser = null;
+      document.getElementById('authOverlay').classList.remove('hidden');
+    }
+    return res;
+  });
+};
+
+async function apiFetch(url, options = {}) {
+  const res = await fetch(url, { ...options, credentials: 'same-origin' });
+  if (res.status === 401) {
+    currentUser = null;
+    document.getElementById('authOverlay').classList.remove('hidden');
+    throw new Error('未登录');
+  }
+  return res;
+}
+
+async function checkAuthStatus() {
+  try {
+    const res = await fetch('/api/auth/status');
+    const data = await res.json();
+    if (data.needsSetup) {
+      isRegisterMode = true;
+      document.getElementById('authTitle').textContent = 'bzxz · 初始化注册';
+      document.getElementById('authSubmitBtn').textContent = '注册';
+      document.getElementById('authToggle').textContent = '';
+      document.getElementById('authOverlay').classList.remove('hidden');
+    } else if (data.user) {
+      currentUser = data.user;
+      document.getElementById('authOverlay').classList.add('hidden');
+      onAuthReady();
+    } else {
+      document.getElementById('authOverlay').classList.remove('hidden');
+    }
+  } catch { document.getElementById('authOverlay').classList.remove('hidden'); }
+}
+
+function onAuthReady() {
+  document.getElementById('udHeader').innerHTML = `${currentUser.display_name || currentUser.username} <span>${currentUser.role}</span>`;
+  if (currentUser.role === 'admin') {
+    document.getElementById('dockUsers').style.display = '';
+    document.getElementById('udManageUsers').style.display = '';
+  }
+  // Default stats date range: last 30 days
+  const today = new Date().toISOString().slice(0, 10);
+  const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  document.getElementById('statsTo').value = today;
+  document.getElementById('statsFrom').value = monthAgo;
+  initPanels();
+  loadSettings();
+}
+
+// Close user dropdown on outside click
+document.addEventListener('click', (e) => {
+  const dd = document.getElementById('userDropdown');
+  const btn = document.getElementById('dockUser');
+  if (dd.classList.contains('open') && !dd.contains(e.target) && !btn.contains(e.target)) {
+    dd.classList.remove('open');
+  }
+});
+
+document.getElementById('authForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('authUsername').value.trim();
+  const password = document.getElementById('authPassword').value;
+  const errEl = document.getElementById('authError');
+  errEl.textContent = '';
+  const endpoint = isRegisterMode ? '/api/auth/register' : '/api/auth/login';
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.message || '操作失败'; return; }
+    currentUser = data.user;
+    document.getElementById('authOverlay').classList.add('hidden');
+    onAuthReady();
+  } catch { errEl.textContent = '网络错误'; }
+});
+
+document.getElementById('authToggle').addEventListener('click', () => {
+  if (!document.getElementById('authToggle').textContent) return;
+  isRegisterMode = !isRegisterMode;
+  document.getElementById('authTitle').textContent = isRegisterMode ? 'bzxz · 注册' : 'bzxz · 登录';
+  document.getElementById('authSubmitBtn').textContent = isRegisterMode ? '注册' : '登录';
+  document.getElementById('authToggle').textContent = isRegisterMode ? '已有账号？登录' : '没有账号？注册';
+  document.getElementById('authError').textContent = '';
+});
+
+async function doLogout() {
+  await fetch('/api/auth/session', { method: 'DELETE' });
+  currentUser = null;
+  document.getElementById('userDropdown').classList.remove('open');
+  document.getElementById('authOverlay').classList.remove('hidden');
+}
+
+function toggleUserDropdown() {
+  document.getElementById('userDropdown').classList.toggle('open');
+}
+
+function showChangePwd() {
+  document.getElementById('userDropdown').classList.remove('open');
+  const oldPwd = prompt('请输入原密码');
+  if (!oldPwd) return;
+  const newPwd = prompt('请输入新密码（至少6位）');
+  if (!newPwd || newPwd.length < 6) { alert('密码至少6位'); return; }
+  apiFetch('/api/auth/password', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ old_password: oldPwd, new_password: newPwd }),
+  }).then(r => r.json()).then(d => {
+    if (d.ok) alert('密码已修改');
+    else alert(d.message || '修改失败');
+  });
+}
+
+// ── Stats ──
+async function loadStats() {
+  const from = document.getElementById('statsFrom').value;
+  const to = document.getElementById('statsTo').value;
+  const params = new URLSearchParams();
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+
+  try {
+    const [summaryRes, tsRes, srcRes] = await Promise.all([
+      apiFetch(`/api/stats/summary?${params}`).then(r => r.json()),
+      apiFetch(`/api/stats/timeseries?${params}`).then(r => r.json()),
+      apiFetch(`/api/stats/by-source?${params}`).then(r => r.json()),
+    ]);
+
+    // Summary cards
+    const typeMap = { search: '搜索', download: '下载', batch_resolve: '批量解析', complete: '补全' };
+    let html = `<div class="stat-card"><div class="stat-value">${summaryRes.total}</div><div class="stat-label">总操作数</div></div>`;
+    html += `<div class="stat-card"><div class="stat-value">${summaryRes.uniqueUsers}</div><div class="stat-label">活跃用户</div></div>`;
+    for (const item of summaryRes.byType) {
+      html += `<div class="stat-card"><div class="stat-value">${item.count}</div><div class="stat-label">${typeMap[item.event_type] || item.event_type}</div></div>`;
+    }
+    document.getElementById('statsSummary').innerHTML = html;
+
+    // Trend chart
+    const dates = [...new Set(tsRes.data.map(r => r.date))].sort();
+    const types = [...new Set(tsRes.data.map(r => r.event_type))];
+    const colors = { search: '#3b82f6', download: '#10b981', batch_resolve: '#f59e0b', complete: '#8b5cf6' };
+    const datasets = types.map(t => ({
+      label: typeMap[t] || t,
+      data: dates.map(d => { const row = tsRes.data.find(r => r.date === d && r.event_type === t); return row ? row.count : 0; }),
+      borderColor: colors[t] || '#666',
+      backgroundColor: (colors[t] || '#666') + '33',
+      tension: 0.3, fill: true,
+    }));
+    if (trendChart) trendChart.destroy();
+    trendChart = new Chart(document.getElementById('chartTrend'), {
+      type: 'line',
+      data: { labels: dates, datasets },
+      options: { responsive: true, plugins: { legend: { labels: { color: '#aaa', font: { size: 11 } } } }, scales: { x: { ticks: { color: '#888', font: { size: 10 } } }, y: { beginAtZero: true, ticks: { color: '#888', font: { size: 10 }, stepSize: 1 } } } },
+    });
+
+    // Source pie chart
+    const srcLabels = srcRes.data.map(r => r.source);
+    const srcCounts = srcRes.data.map(r => r.count);
+    const srcColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+    if (sourceChart) sourceChart.destroy();
+    sourceChart = new Chart(document.getElementById('chartSource'), {
+      type: 'doughnut',
+      data: { labels: srcLabels, datasets: [{ data: srcCounts, backgroundColor: srcColors }] },
+      options: { responsive: true, plugins: { legend: { labels: { color: '#aaa', font: { size: 11 } } } } },
+    });
+  } catch (e) { console.error('Stats load error:', e); }
+}
+
+// ── Users management ──
+async function loadUsers() {
+  try {
+    const res = await apiFetch('/api/admin/users');
+    const data = await res.json();
+    let html = '';
+    for (const u of data.users) {
+      const roleBadge = u.role === 'admin' ? '<span class="badge badge-admin">管理员</span>' : '<span class="badge badge-user">用户</span>';
+      const statusBadge = u.is_active ? '<span class="badge badge-active">启用</span>' : '<span class="badge badge-inactive">禁用</span>';
+      const toggleLabel = u.is_active ? '禁用' : '启用';
+      const roleLabel = u.role === 'admin' ? '降为用户' : '升为管理员';
+      html += `<tr>
+        <td>${u.username}</td>
+        <td>${u.display_name || '—'}</td>
+        <td>${roleBadge}</td>
+        <td>${statusBadge}</td>
+        <td class="users-actions">
+          <button onclick="toggleUserActive(${u.id},${u.is_active ? 0 : 1})">${toggleLabel}</button>
+          <button onclick="changeUserRole(${u.id},'${u.role === 'admin' ? 'user' : 'admin'}')">${roleLabel}</button>
+        </td>
+      </tr>`;
+    }
+    document.getElementById('usersBody').innerHTML = html;
+  } catch (e) { console.error('Users load error:', e); }
+}
+
+async function toggleUserActive(id, active) {
+  await apiFetch(`/api/admin/users/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_active: !!active }),
+  });
+  loadUsers();
+}
+
+async function changeUserRole(id, role) {
+  await apiFetch(`/api/admin/users/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role }),
+  });
+  loadUsers();
+}
+
+function showCreateUser() {
+  const username = prompt('用户名（至少2位）');
+  if (!username || username.length < 2) return;
+  const password = prompt('密码（至少6位）');
+  if (!password || password.length < 6) { alert('密码至少6位'); return; }
+  apiFetch('/api/admin/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  }).then(r => r.json()).then(d => {
+    if (d.user) { alert('用户已创建'); loadUsers(); }
+    else alert(d.message || '创建失败');
+  });
+}
+
 // ── Init ──
-initPanels();
+checkAuthStatus();
 </script>
 </body>
 </html>

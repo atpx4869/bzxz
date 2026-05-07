@@ -32,9 +32,18 @@
       "node_modules/**/*"
     ],
     "extraResources": [
-      { "from": "public", "to": "public" },
-      { "from": "scripts/ocr_ddddocr.py", "to": "scripts/ocr_ddddocr.py" },
-      { "from": "data/accounts.json", "to": "data/accounts.json" }
+      {
+        "from": "public",
+        "to": "public"
+      },
+      {
+        "from": "scripts/ocr_ddddocr.py",
+        "to": "scripts/ocr_ddddocr.py"
+      },
+      {
+        "from": "data/accounts.json",
+        "to": "data/accounts.json"
+      }
     ],
     "win": {
       "target": [
@@ -45,6 +54,8 @@
     }
   },
   "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.6",
     "@types/multer": "^2.1.0",
     "@types/node": "^25.5.0",
@@ -59,6 +70,8 @@
   },
   "dependencies": {
     "@types/cheerio": "^0.22.35",
+    "bcrypt": "^6.0.0",
+    "better-sqlite3": "^12.9.0",
     "cheerio": "^1.2.0",
     "express": "^5.2.1",
     "multer": "^2.1.1",
