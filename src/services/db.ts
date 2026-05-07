@@ -4,16 +4,22 @@ import { getRootDir } from '../shared/fs';
 
 let _db: Database.Database | null = null;
 
-export function getDb(): Database.Database {
-  if (_db) return _db;
+export function getDb(dbPath?: string): Database.Database {
+  if (_db && !dbPath) return _db;
 
-  const dbPath = path.join(getRootDir(), 'data', 'bzxz.db');
-  _db = new Database(dbPath);
-  _db.pragma('journal_mode = WAL');
-  _db.pragma('foreign_keys = ON');
+  const resolved = dbPath || path.join(getRootDir(), 'data', 'bzxz.db');
+  const db = new Database(resolved);
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
 
-  migrate(_db);
-  return _db;
+  migrate(db);
+
+  if (!dbPath) _db = db;
+  return db;
+}
+
+export function resetDbForTesting(): void {
+  if (_db) { _db.close(); _db = null; }
 }
 
 function migrate(db: Database.Database): void {
