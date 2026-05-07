@@ -2,11 +2,33 @@ import { Router } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcrypt';
 import type Database from 'better-sqlite3';
+import { getSetting, setSetting } from '../services/db';
 
 const SALT_ROUNDS = 10;
 
 export function createAdminRoutes(db: Database.Database) {
   const router = Router();
+
+  // GET /api/admin/settings
+  router.get('/settings', (_req, res) => {
+    res.json({
+      registration_enabled: getSetting(db, 'registration_enabled', '1') === '1',
+    });
+  });
+
+  // PUT /api/admin/settings
+  router.put('/settings', (req, res) => {
+    const schema = z.object({
+      registration_enabled: z.boolean().optional(),
+    });
+    const updates = schema.parse(req.body);
+    if (updates.registration_enabled !== undefined) {
+      setSetting(db, 'registration_enabled', updates.registration_enabled ? '1' : '0');
+    }
+    res.json({
+      registration_enabled: getSetting(db, 'registration_enabled', '1') === '1',
+    });
+  });
 
   // GET /api/admin/users
   router.get('/users', (_req, res) => {

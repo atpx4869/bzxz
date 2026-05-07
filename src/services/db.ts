@@ -48,5 +48,25 @@ function migrate(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_events_user_date ON usage_events(user_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_events_type_date ON usage_events(event_type, created_at);
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL DEFAULT ''
+    );
   `);
+
+  // Seed defaults
+  const regEnabled = db.prepare("SELECT value FROM settings WHERE key = 'registration_enabled'").get();
+  if (!regEnabled) {
+    db.prepare("INSERT INTO settings (key, value) VALUES ('registration_enabled', '1')").run();
+  }
+}
+
+export function getSetting(db: Database.Database, key: string, defaultValue = ''): string {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined;
+  return row?.value ?? defaultValue;
+}
+
+export function setSetting(db: Database.Database, key: string, value: string): void {
+  db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?").run(key, value, value);
 }

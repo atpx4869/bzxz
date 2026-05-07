@@ -5,6 +5,7 @@ import bcrypt from 'bcrypt';
 import type Database from 'better-sqlite3';
 import type { Request, Response, NextFunction } from 'express';
 import type { AuthUser } from './auth-middleware';
+import { getSetting } from '../services/db';
 
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const COOKIE_OPTS = 'bzxz_session=TOKEN; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000';
@@ -28,7 +29,8 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
       if (row) user = row;
     }
 
-    res.json({ needsSetup: userCount === 0, user });
+    const registrationEnabled = getSetting(db, 'registration_enabled', '1') === '1';
+    res.json({ needsSetup: userCount === 0, user, registrationEnabled });
   });
 
   // POST /api/auth/register
@@ -41,14 +43,24 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
       });
       const { username, password, display_name } = schema.parse(req.body);
 
+      // Check if registration is enabled (skip check if no users exist — need to bootstrap)
+      const userCount = (db.prepare('SELECT COUNT(*) as cnt FROM users').get() as { cnt: number }).cnt;
+      if (userCount > 0) {
+        const regEnabled = getSetting(db, 'registration_enabled', '1') === '1';
+        if (!regEnabled) {
+          res.status(403).json({ code: 'FORBIDDEN', message: '注册已关闭，请联系管理员' });
+          return;
+        }
+      }
+
       const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
       if (existing) {
         res.status(409).json({ code: 'CONFLICT', message: '用户名已存在' });
         return;
       }
 
-      const userCount = (db.prepare('SELECT COUNT(*) as cnt FROM users').get() as { cnt: number }).cnt;
-      const role = userCount === 0 ? 'admin' : 'user';
+      const totalUsers = (db.prepare('SELECT COUNT(*) as cnt FROM users').get() as { cnt: number }).cnt;
+      const role = totalUsers === 0 ? 'admin' : 'user';
       const hash = await bcrypt.hash(password, SALT_ROUNDS);
 
       const result = db.prepare(

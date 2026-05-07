@@ -848,6 +848,9 @@ body { min-height: 100vh; }
   <div class="float-panel-body">
     <div style="margin-bottom:12px">
       <button class="btn btn-sm btn-primary" onclick="showCreateUser()">新建用户</button>
+      <label style="margin-left:16px;font-size:13px;color:var(--text-2);cursor:pointer;display:inline-flex;align-items:center;gap:6px">
+        <input type="checkbox" id="regEnabledToggle" onchange="toggleRegistration(this.checked)"> 允许注册
+      </label>
     </div>
     <table class="users-table">
       <thead><tr><th>用户名</th><th>显示名</th><th>角色</th><th>状态</th><th>操作</th></tr></thead>
@@ -2091,6 +2094,8 @@ async function checkAuthStatus() {
       document.getElementById('authOverlay').classList.add('hidden');
       onAuthReady();
     } else {
+      // Show/hide register toggle based on setting
+      document.getElementById('authToggle').textContent = data.registrationEnabled ? '没有账号？注册' : '';
       document.getElementById('authOverlay').classList.remove('hidden');
     }
   } catch { document.getElementById('authOverlay').classList.remove('hidden'); }
@@ -2235,8 +2240,12 @@ async function loadStats() {
 // ── Users management ──
 async function loadUsers() {
   try {
-    const res = await apiFetch('/api/admin/users');
-    const data = await res.json();
+    const [usersRes, settingsRes] = await Promise.all([
+      apiFetch('/api/admin/users').then(r => r.json()),
+      apiFetch('/api/admin/settings').then(r => r.json()),
+    ]);
+    document.getElementById('regEnabledToggle').checked = settingsRes.registration_enabled;
+    const data = usersRes;
     let html = '';
     for (const u of data.users) {
       const roleBadge = u.role === 'admin' ? '<span class="badge badge-admin">管理员</span>' : '<span class="badge badge-user">用户</span>';
@@ -2274,6 +2283,16 @@ async function changeUserRole(id, role) {
     body: JSON.stringify({ role }),
   });
   loadUsers();
+}
+
+function toggleRegistration(enabled) {
+  apiFetch('/api/admin/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ registration_enabled: enabled }),
+  }).then(r => r.json()).then(d => {
+    document.getElementById('regEnabledToggle').checked = d.registration_enabled;
+  });
 }
 
 function showCreateUser() {
