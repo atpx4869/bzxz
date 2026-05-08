@@ -16,7 +16,8 @@ import { createAuthMiddleware } from './auth-middleware';
 import { createAuthRoutes } from './auth-routes';
 import { createAdminRoutes } from './admin-routes';
 import { createStatsRoutes } from './stats-routes';
-import { AppError, BadRequestError, NotFoundError } from '../shared/errors';
+import { createQualificationRoutes } from './cnas-routes';
+import { AppError, BadRequestError, NotFoundError, normalizeError } from '../shared/errors';
 import { parseStandardId, VALID_SOURCES } from '../shared/id';
 import type { SourceName } from '../domain/standard';
 
@@ -88,6 +89,7 @@ export function createApp() {
   app.use('/api/auth', createAuthRoutes(db, requireAuth));
   app.use('/api/admin', requireAdmin, createAdminRoutes(db));
   app.use('/api/stats', createStatsRoutes(db, requireAuth));
+  app.use(createQualificationRoutes(db, requireAuth));
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, sources: sourceRegistry.list() });
@@ -377,7 +379,16 @@ export function createApp() {
       }
     }, 500);
 
-    req.on('close', () => clearInterval(interval));
+    // Timeout to prevent permanent timer for non-existent tasks
+    const timeout = setTimeout(() => {
+      clearInterval(interval);
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ id: taskId, status: 'failed', error: 'Task not found or expired' })}\n\n`);
+        res.end();
+      }
+    }, 10000);
+
+    req.on('close', () => { clearInterval(interval); clearTimeout(timeout); });
   });
 
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
@@ -406,16 +417,4 @@ export function createApp() {
   });
 
   return app;
-}
-
-function normalizeError(error: unknown): Error {
-  if (error instanceof z.ZodError) {
-    return new BadRequestError('Invalid request', error.flatten());
-  }
-
-  if (error instanceof Error) {
-    return error;
-  }
-
-  return new Error('Unknown error');
 }

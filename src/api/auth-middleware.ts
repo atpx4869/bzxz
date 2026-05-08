@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import type Database from 'better-sqlite3';
+import { parseCookie } from '../shared/errors';
 
 export interface AuthUser {
   id: number;
@@ -18,8 +19,15 @@ declare global {
 
 export function createAuthMiddleware(db: Database.Database) {
   const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+  let requestCount = 0;
+  const cleanExpiredSessions = db.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')");
 
   function requireAuth(req: Request, res: Response, next: NextFunction): void {
+    // Periodic cleanup: every 100 requests
+    if (++requestCount % 100 === 0) {
+      cleanExpiredSessions.run();
+    }
+
     const token = parseCookie(req.headers.cookie, 'bzxz_session');
     if (!token) {
       res.status(401).json({ code: 'UNAUTHORIZED', message: '请先登录' });
@@ -47,9 +55,12 @@ export function createAuthMiddleware(db: Database.Database) {
       return;
     }
 
-    // Sliding window: extend expiry on each request
-    const newExpiry = new Date(Date.now() + SESSION_MAX_AGE_MS).toISOString();
-    db.prepare('UPDATE sessions SET expires_at = ? WHERE token = ?').run(newExpiry, token);
+    // Sliding window: only update expiry when within 1 hour of expiring
+    const expiresAt = new Date(row.expires_at).getTime();
+    if (expiresAt - Date.now() < 60 * 60 * 1000) {
+      const newExpiry = new Date(Date.now() + SESSION_MAX_AGE_MS).toISOString();
+      db.prepare('UPDATE sessions SET expires_at = ? WHERE token = ?').run(newExpiry, token);
+    }
 
     req.user = {
       id: row.user_id,
@@ -74,8 +85,3 @@ export function createAuthMiddleware(db: Database.Database) {
   return { requireAuth, requireAdmin };
 }
 
-function parseCookie(header: string | undefined, name: string): string | undefined {
-  if (!header) return undefined;
-  const match = header.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
-  return match?.[1];
-}

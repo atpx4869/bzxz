@@ -2,6 +2,8 @@
 
 面向团队的标准检索与文档导出系统。Web 前端 + Express API + SQLite + Electron 桌面壳。
 
+支持标准搜索/下载，以及 **CNAS/CMA 实验室资质能力验证**（按标准号查询具备检测能力的实验室）。
+
 ## 支持的标准源
 
 | 源 | 代号 | 搜索 | 导出 |
@@ -46,6 +48,15 @@ start.bat
 | Electron 安装包 | `npm run electron:build:nsis` | NSIS 安装包 |
 | Electron 全量 | `npm run electron:build:all` | portable + nsis |
 
+## 资质能力验证
+
+支持查询 **CNAS**（中国合格评定国家认可委员会）和 **CMA**（检验检测机构资质认定）实验室的检测能力范围。
+
+- 按标准号批量查询：搜索结果自动标注具备该标准检测能力的实验室
+- 实验室管理：订阅/取消订阅实验室，自动同步资质数据
+- Playwright 自动采集：后台定时从 CNAS/CMA 官方系统拉取最新数据
+- 同步日志：记录每次同步的时间、状态、抓取记录数
+
 ## 账号管理
 
 基于 SQLite 的本地用户体系，无需外部数据库。
@@ -74,9 +85,12 @@ start.bat
 ├── public/              # 前端 SPA (index.html)
 ├── scripts/             # 勘察脚本 + 注册机 + OCR 桥接
 ├── src/
-│   ├── api/             # Express 路由（含 auth/admin/stats）
+│   ├── api/             # Express 路由（含 auth/admin/stats/资质）
 │   ├── domain/          # 领域模型 + SourceAdapter 接口
 │   ├── services/        # 业务逻辑 + SQLite 数据库 + 使用追踪
+│   │   ├── cnas-scraper.ts   # CNAS Playwright 采集器
+│   │   ├── cma-scraper.ts    # CMA 采集器
+│   │   └── qualification-service.ts  # 资质同步调度
 │   ├── shared/          # 工具函数（ID解析/错误/路径）
 │   └── sources/         # 数据源适配器
 │       ├── bz-zhenggui/ # BZ 标准在线
@@ -130,6 +144,26 @@ start.bat
 | GET | `/api/tasks/:taskId/stream` | SSE 实时任务进度 |
 | GET | `/api/downloads/:filename` | 下载导出文件 |
 
+### 资质能力验证（需登录）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/standards/qualifications` | 按标准号批量查询资质 |
+| GET | `/api/qualifications/search?q=&source=` | 搜索资质记录 |
+| GET | `/api/qualifications/settings` | 资质同步设置 |
+| PUT | `/api/qualifications/settings` | 更新同步设置 |
+| GET | `/api/qualifications/stats` | 资质数据统计 |
+| GET | `/api/cnas/labs` | CNAS 实验室列表 |
+| POST | `/api/cnas/labs` | 添加 CNAS 实验室 |
+| DELETE | `/api/cnas/labs/:labNo` | 删除 CNAS 实验室 |
+| POST | `/api/cnas/sync` | 触发 CNAS 数据同步 |
+| GET | `/api/cnas/sync-logs` | CNAS 同步日志 |
+| GET | `/api/cma/labs` | CMA 实验室列表 |
+| POST | `/api/cma/labs` | 添加 CMA 实验室 |
+| DELETE | `/api/cma/labs/:certNumber` | 删除 CMA 实验室 |
+| POST | `/api/cma/sync` | 触发 CMA 数据同步 |
+| GET | `/api/cma/sync-logs` | CMA 同步日志 |
+
 ### 管理（需 admin）
 
 | 方法 | 路径 | 说明 |
@@ -154,7 +188,9 @@ start.bat
 
 ## 前端功能
 
+- 现代深色毛玻璃主题（oklch 色彩空间 + backdrop-filter）
 - 多源并行搜索 + 去重 + 状态排序
+- 搜索结果自动标注 CNAS/CMA 资质能力（绿色徽章）
 - 卡片式结果展示（进场动画）
 - 批量勾选下载 + 进度条 + 完成通知
 - 行级下载反馈（spinner + 卡片高亮 + 成功/失败闪烁）
@@ -167,6 +203,7 @@ start.bat
 - 登录/注册界面 + 用户菜单
 - 使用统计仪表盘（Chart.js 图表）
 - 管理员用户管理面板（含使用明细）
+- 资质能力验证面板（CNAS/CMA 实验室管理 + 同步日志）
 
 ## Electron 桌面端
 

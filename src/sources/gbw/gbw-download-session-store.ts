@@ -6,6 +6,8 @@ export interface GbwDownloadSessionRecord extends DownloadSessionInfo {
   hcno: string;
 }
 
+const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
 export class GbwDownloadSessionStore {
   private readonly sessions = new Map<string, GbwDownloadSessionRecord>();
 
@@ -19,6 +21,7 @@ export class GbwDownloadSessionStore {
     };
 
     this.sessions.set(created.id, created);
+    this.evictExpired();
     return created;
   }
 
@@ -40,5 +43,14 @@ export class GbwDownloadSessionStore {
 
     this.sessions.set(id, next);
     return next;
+  }
+
+  private evictExpired(): void {
+    const cutoff = Date.now() - SESSION_TTL_MS;
+    for (const [id, session] of this.sessions) {
+      if (new Date(session.updatedAt).getTime() < cutoff) {
+        this.sessions.delete(id);
+      }
+    }
   }
 }

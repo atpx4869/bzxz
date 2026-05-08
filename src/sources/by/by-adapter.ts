@@ -74,7 +74,7 @@ export class ByAdapter implements SourceAdapter {
     const searchResults = await this.searchInternal(sourceId);
     const match = searchResults.find((item) => item.siid === sourceId || item.stdNo === sourceId);
 
-    if (!searchResults.length) {
+    if (!match && !searchResults.length) {
       throw new NotFoundError(`BY detail not found for ${id}`);
     }
 

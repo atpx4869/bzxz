@@ -6,6 +6,7 @@ import type Database from 'better-sqlite3';
 import type { Request, Response, NextFunction } from 'express';
 import type { AuthUser } from './auth-middleware';
 import { getSetting } from '../services/db';
+import { parseCookie } from '../shared/errors';
 
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const COOKIE_OPTS = 'bzxz_session=TOKEN; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000';
@@ -176,8 +177,3 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
   return router;
 }
 
-function parseCookie(header: string | undefined, name: string): string | undefined {
-  if (!header) return undefined;
-  const match = header.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
-  return match?.[1];
-}

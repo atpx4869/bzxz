@@ -2,7 +2,7 @@
 import type { StandardDetail, StandardSummary } from '../../domain/standard';
 import { createStandardId } from '../../shared/id';
 
-export const BZ_STATUS_MAP: Record<string, string> = {
+const BZ_STATUS_MAP: Record<string, string> = {
   '1': '现行有效', '2': '部分有效', '3': '即将实施',
   '4': '即将废止', '5': '已经废止', '6': '调整转号', '9': '其它',
 };

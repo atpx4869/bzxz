@@ -57,7 +57,7 @@ export function createAdminRoutes(db: Database.Database) {
       return;
     }
 
-    const limit = Math.min(parseInt((req.query.limit as string) || '50', 10), 200);
+    const limit = Math.max(1, Math.min(parseInt((req.query.limit as string) ?? '50', 10) || 50, 200));
 
     const summary = db.prepare(
       `SELECT event_type, COUNT(*) as count FROM usage_events WHERE user_id = ? GROUP BY event_type`

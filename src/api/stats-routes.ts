@@ -29,8 +29,10 @@ export function createStatsRoutes(db: Database.Database, requireAuth: (req: Requ
       conditions.push('e.user_id = ?');
       values.push(userId);
     } else if (params.user_id) {
+      const uid = parseInt(params.user_id, 10);
+      if (Number.isNaN(uid)) return { where: 'WHERE 0', values: [] };
       conditions.push('e.user_id = ?');
-      values.push(parseInt(params.user_id, 10));
+      values.push(uid);
     }
 
     return { where: conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '', values };
@@ -106,7 +108,7 @@ export function createStatsRoutes(db: Database.Database, requireAuth: (req: Requ
   // GET /api/stats/recent
   router.get('/recent', (req, res) => {
     const isAdmin = req.user!.role === 'admin';
-    const limit = Math.min(parseInt((req.query.limit as string) || '20', 10), 100);
+    const limit = Math.max(1, Math.min(parseInt((req.query.limit as string) ?? '20', 10) || 20, 100));
     const { where, values } = buildWhere(req.user!.id, isAdmin, querySchema.parse(req.query));
 
     const rows = db.prepare(`

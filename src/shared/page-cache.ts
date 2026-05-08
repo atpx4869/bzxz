@@ -1,5 +1,6 @@
 // Page count cache — persisted to file so survives restarts
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getRootDir } from './fs';
 
@@ -22,15 +23,14 @@ function load(): CacheData {
   return memoryCache!;
 }
 
-function save(data: CacheData): void {
+async function save(data: CacheData): Promise<void> {
   memoryCache = data;
   try {
     const dir = path.dirname(CACHE_FILE);
     if (!existsSync(dir)) {
-      const { mkdirSync } = require('node:fs');
-      mkdirSync(dir, { recursive: true });
+      await mkdir(dir, { recursive: true });
     }
-    writeFileSync(CACHE_FILE, JSON.stringify(data));
+    await writeFile(CACHE_FILE, JSON.stringify(data));
   } catch {}
 }
 
@@ -46,5 +46,5 @@ export function getCachedPageCount(standardNo: string): number | null {
 export function setCachedPageCount(standardNo: string, count: number): void {
   const data = load();
   data[standardNo] = { count, updatedAt: new Date().toISOString() };
-  save(data);
+  void save(data); // fire-and-forget: page counts are re-creatable
 }

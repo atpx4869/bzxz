@@ -14,7 +14,11 @@ export function getDb(dbPath?: string): Database.Database {
 
   migrate(db);
 
-  if (!dbPath) _db = db;
+  if (!dbPath) {
+    _db = db;
+    // Clean up expired sessions on startup
+    db.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')").run();
+  }
   return db;
 }
 
@@ -59,12 +63,123 @@ function migrate(db: Database.Database): void {
       key   TEXT PRIMARY KEY,
       value TEXT NOT NULL DEFAULT ''
     );
+
+    -- CNAS qualification tables
+    CREATE TABLE IF NOT EXISTS cnas_labs (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      lab_no              TEXT NOT NULL UNIQUE,
+      lab_name            TEXT DEFAULT '',
+      base_info_id        TEXT DEFAULT '',
+      cert_update_ts      TEXT DEFAULT '',
+      validate            TEXT DEFAULT '',
+      cached_cert_date    TEXT DEFAULT '',
+      last_check_at       TEXT,
+      last_sync_at        TEXT,
+      next_sync_at        TEXT,
+      sync_status         TEXT DEFAULT 'pending',
+      sync_error          TEXT,
+      record_count        INTEGER DEFAULT 0,
+      subscribed_at       TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS cnas_qualifications (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      lab_no          TEXT NOT NULL,
+      std_code        TEXT NOT NULL,
+      std_name        TEXT DEFAULT '',
+      qual_type       TEXT DEFAULT 'CNAS',
+      effective_date  TEXT DEFAULT '',
+      expiry_date     TEXT DEFAULT '',
+      category        TEXT DEFAULT '',
+      sub_category    TEXT DEFAULT '',
+      test_object     TEXT DEFAULT '',
+      test_param      TEXT DEFAULT '',
+      test_param_en   TEXT DEFAULT '',
+      test_standard   TEXT DEFAULT '',
+      std_code_en     TEXT DEFAULT '',
+      limit_desc      TEXT DEFAULT '',
+      branch_address  TEXT DEFAULT '',
+      synced_at       TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_cnas_qual_std_code ON cnas_qualifications(std_code);
+    CREATE INDEX IF NOT EXISTS idx_cnas_qual_lab_no ON cnas_qualifications(lab_no);
+    CREATE INDEX IF NOT EXISTS idx_cnas_qual_std_lab ON cnas_qualifications(std_code, lab_no);
+
+    CREATE TABLE IF NOT EXISTS cnas_sync_logs (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      lab_no          TEXT NOT NULL,
+      action          TEXT NOT NULL,
+      started_at      TEXT NOT NULL DEFAULT (datetime('now')),
+      finished_at     TEXT,
+      status          TEXT DEFAULT 'success',
+      records_fetched INTEGER DEFAULT 0,
+      error_message   TEXT
+    );
+
+    -- CMA qualification tables
+    CREATE TABLE IF NOT EXISTS cma_labs (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      cert_number         TEXT NOT NULL UNIQUE,
+      lab_name            TEXT DEFAULT '',
+      credit_code         TEXT DEFAULT '',
+      lic_sys_id          TEXT DEFAULT '',
+      cached_lic_date     TEXT DEFAULT '',
+      cached_update_time  INTEGER DEFAULT 0,
+      last_check_at       TEXT,
+      last_sync_at        TEXT,
+      next_sync_at        TEXT,
+      sync_status         TEXT DEFAULT 'pending',
+      sync_error          TEXT,
+      record_count        INTEGER DEFAULT 0,
+      subscribed_at       TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS cma_qualifications (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      cert_number     TEXT NOT NULL,
+      std_code        TEXT NOT NULL,
+      std_name        TEXT DEFAULT '',
+      qual_type       TEXT DEFAULT 'CMA',
+      effective_date  TEXT DEFAULT '',
+      expiry_date     TEXT DEFAULT '',
+      category        TEXT DEFAULT '',
+      sub_category    TEXT DEFAULT '',
+      test_item       TEXT DEFAULT '',
+      test_standard   TEXT DEFAULT '',
+      limit_desc      TEXT DEFAULT '',
+      note            TEXT DEFAULT '',
+      place_name      TEXT DEFAULT '',
+      synced_at       TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_cma_qual_std_code ON cma_qualifications(std_code);
+    CREATE INDEX IF NOT EXISTS idx_cma_qual_cert ON cma_qualifications(cert_number);
+    CREATE INDEX IF NOT EXISTS idx_cma_qual_std_cert ON cma_qualifications(std_code, cert_number);
+
+    CREATE TABLE IF NOT EXISTS cma_sync_logs (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      cert_number     TEXT NOT NULL,
+      action          TEXT NOT NULL,
+      started_at      TEXT NOT NULL DEFAULT (datetime('now')),
+      finished_at     TEXT,
+      status          TEXT DEFAULT 'success',
+      records_fetched INTEGER DEFAULT 0,
+      error_message   TEXT
+    );
   `);
 
   // Seed defaults
   const regEnabled = db.prepare("SELECT value FROM settings WHERE key = 'registration_enabled'").get();
   if (!regEnabled) {
     db.prepare("INSERT INTO settings (key, value) VALUES ('registration_enabled', '1')").run();
+  }
+  const qualDefaults: [string, string][] = [
+    ['qual_sync_enabled', '1'],
+    ['qual_sync_cron', '0 3 * * 0'],
+    ['qual_sync_concurrency', '1'],
+  ];
+  for (const [k, v] of qualDefaults) {
+    const existing = db.prepare('SELECT value FROM settings WHERE key = ?').get(k);
+    if (!existing) db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(k, v);
   }
 }
 

@@ -24,13 +24,6 @@ export interface PoolAccount {
   tokenObtainedAt?: string;
 }
 
-interface StoredAccount {
-  username: string; password: string; realName: string; phone: string;
-  accessToken?: string; refreshToken?: string; tokenType?: string;
-  expiresIn?: number; registeredAt: string; loggedInAt?: string;
-  downloadsUsed?: number; downloadMonth?: string; tokenObtainedAt?: string;
-}
-
 // --- HTTP helper ---
 
 const API_IP = '222.84.61.205';
@@ -130,7 +123,7 @@ export class AccountPoolManager {
   load(): void {
     if (!existsSync(getAccountsFile())) { this.accounts = []; return; }
     try {
-      const raw: StoredAccount[] = JSON.parse(readFileSync(getAccountsFile(), 'utf-8'));
+      const raw: PoolAccount[] = JSON.parse(readFileSync(getAccountsFile(), 'utf-8'));
       this.accounts = raw.map(a => ({
         ...a,
         downloadsUsed: a.downloadsUsed ?? 0,
@@ -215,17 +208,6 @@ export class AccountPoolManager {
     }
   }
 
-  /** Get pool statistics */
-  getStats(): { total: number; available: number; locked: number; exhausted: number } {
-    const now = new Date();
-    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const total = this.accounts.length;
-    const exhausted = this.accounts.filter(a => (a.downloadMonth === month && (a.downloadsUsed ?? 0) >= 15)).length;
-    const locked = this.locks.size;
-    const available = total - exhausted - locked;
-    return { total, available, locked, exhausted };
-  }
-
   private tokenValid(a: PoolAccount): boolean {
     if (!a.accessToken || !a.loggedInAt || !a.expiresIn) return false;
     const expiresAt = new Date(a.loggedInAt).getTime() + a.expiresIn * 1000;
@@ -260,7 +242,7 @@ export class AccountPoolManager {
         account.tokenType = res.data.token_type;
         account.expiresIn = res.data.expires_in;
         account.loggedInAt = new Date().toISOString();
-        this.save();
+        await this.save();
         return true;
       }
     } catch { /* fall through to login */ }
@@ -306,7 +288,7 @@ export class AccountPoolManager {
     account.tokenType = login.data.token_type;
     account.expiresIn = login.data.expires_in;
     account.loggedInAt = new Date().toISOString();
-    this.save();
+    await this.save();
   }
 }
 
