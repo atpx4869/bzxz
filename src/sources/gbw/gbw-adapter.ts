@@ -114,6 +114,12 @@ export class GbwAdapter implements SourceAdapter {
       throw new NotFoundError(`gbw detail not found for ${id}`);
     }
 
+    // Check openstd page for actual text availability (ck_btn/xz_btn = has text)
+    let hasText = false;
+    if (hcno) {
+      hasText = await this.checkOpenstdHasText(hcno);
+    }
+
     return {
       id,
       source: 'gbw',
@@ -125,7 +131,7 @@ export class GbwAdapter implements SourceAdapter {
       publishDate: extractBasicInfoField($, '发布日期') ?? null,
       implementDate: extractBasicInfoField($, '实施日期') ?? null,
       abolishedDate: null,
-      previewAvailable: Boolean(hcno),
+      previewAvailable: hasText,
       detailUrl: detailUrl.toString(),
       contentText: englishTitle || '',
       moreInfo: {
@@ -144,7 +150,7 @@ export class GbwAdapter implements SourceAdapter {
     const detail = await this.getStandardDetail(id);
     const hcno = asString(detail.moreInfo?.hcno);
 
-    if (!hcno) {
+    if (!hcno || !detail.previewAvailable) {
       return {
         standardId: id,
         pageUrls: [],
@@ -152,8 +158,8 @@ export class GbwAdapter implements SourceAdapter {
         downloadUrl: undefined,
         captchaRequired: false,
         meta: {
-          hcno: null,
-          openstdDetailUrl: null,
+          hcno: hcno ?? null,
+          openstdDetailUrl: hcno ? `${GBW_OPENSTD_BASE}/bzgk/std/newGbInfo?hcno=${hcno}` : null,
           capability: 'metadata_only',
         },
       };
@@ -431,6 +437,22 @@ export class GbwAdapter implements SourceAdapter {
     };
   }
 
+  private async checkOpenstdHasText(hcno: string): Promise<boolean> {
+    try {
+      const url = `${GBW_OPENSTD_BASE}/bzgk/std/newGbInfo?hcno=${hcno}`;
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': USER_AGENT },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!resp.ok) return false;
+      const html = await resp.text();
+      // ck_btn = 在线预览, xz_btn = 下载标准 — both only present when text is available
+      return html.includes('class="btn ck_btn') || html.includes('class="btn xz_btn');
+    } catch {
+      return false;
+    }
+  }
+
   private mapSearchRow(row: GbwSearchRow): StandardSummary {
     const sourceId = row.id ?? '';
     const standardNumber = parseStdCode(row.C_STD_CODE ?? '');
@@ -449,7 +471,7 @@ export class GbwAdapter implements SourceAdapter {
       publishDate: row.ISSUE_DATE ?? null,
       implementDate: row.ACT_DATE ?? null,
       abolishedDate: null,
-      previewAvailable: status === '现行' || status === '即将实施',
+      previewAvailable: false, // cannot determine from search API; needs detail page check
       detailUrl: `${GBW_STD_BASE}/gb/search/gbDetailed?id=${sourceId}`,
       meta: row as Record<string, unknown>,
     };

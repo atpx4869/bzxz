@@ -59,6 +59,15 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
     } catch (e) { next(normalizeError(e)); }
   });
 
+  router.put('/api/cnas/labs/:labNo', requireAuth, (req, res, next) => {
+    try {
+      const schema = z.object({ lab_name: z.string().trim().max(200) });
+      const { lab_name } = schema.parse(req.body);
+      db.prepare('UPDATE cnas_labs SET lab_name = ? WHERE lab_no = ?').run(lab_name, req.params.labNo);
+      res.json({ ok: true });
+    } catch (e) { next(normalizeError(e)); }
+  });
+
   // ─── CMA Labs ───
   router.get('/api/cma/labs', requireAuth, (_req, res) => {
     res.json(svc.listCmaLabs());
@@ -82,6 +91,15 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
   router.delete('/api/cma/labs/:certNumber', requireAuth, (req, res, next) => {
     try {
       svc.deleteCmaLab(req.params.certNumber as string);
+      res.json({ ok: true });
+    } catch (e) { next(normalizeError(e)); }
+  });
+
+  router.put('/api/cma/labs/:certNumber', requireAuth, (req, res, next) => {
+    try {
+      const schema = z.object({ lab_name: z.string().trim().max(200) });
+      const { lab_name } = schema.parse(req.body);
+      db.prepare('UPDATE cma_labs SET lab_name = ? WHERE cert_number = ?').run(lab_name, req.params.certNumber);
       res.json({ ok: true });
     } catch (e) { next(normalizeError(e)); }
   });

@@ -73,12 +73,38 @@ export class QualificationService {
 
   // ─── Query ───
 
+  /** Extract base standard number (prefix + number, no year/type): "GB/T 23440-2009" → "GB23440" */
+  private extractBaseCode(code: string): string {
+    return code
+      .replace(/\s*-\s*\d{4}$/, '')  // remove year suffix
+      .replace(/\/[A-Z]+(?=\s)/i, '') // remove type designation: /T, /Z, /TR etc.
+      .replace(/[\s]/g, '')           // remove spaces
+      .toUpperCase();
+  }
+
   /** Batch query qualifications by standard codes (for search result badges) */
   queryByStdCodes(stdCodes: string[]): Record<string, Qualification[]> {
     if (stdCodes.length === 0) return {};
 
     const placeholders = stdCodes.map(() => '?').join(',');
     const result: Record<string, Qualification[]> = {};
+
+    // Build base code → input codes mapping for fuzzy matching
+    const baseToInputs = new Map<string, string[]>();
+    for (const code of stdCodes) {
+      const base = this.extractBaseCode(code);
+      if (!baseToInputs.has(base)) baseToInputs.set(base, []);
+      baseToInputs.get(base)!.push(code);
+    }
+
+    // Helper: map a qualification row to result under all matching input codes
+    const addMatch = (key: string, qual: Qualification) => {
+      if (!result[key]) result[key] = [];
+      // Deduplicate by source+labNo
+      if (!result[key].some(q => q.source === qual.source && q.labNo === qual.labNo)) {
+        result[key].push(qual);
+      }
+    };
 
     // CNAS
     const cnasRows = this.db.prepare(`
@@ -90,22 +116,26 @@ export class QualificationService {
       WHERE q.std_code IN (${placeholders})
     `).all(...stdCodes) as any[];
 
+    const matchedCnasBases = new Set<string>();
     for (const row of cnasRows) {
-      const key = row.std_code;
-      if (!result[key]) result[key] = [];
-      result[key].push({
-        source: 'CNAS',
-        stdCode: row.std_code,
-        stdName: row.std_name,
-        labNo: row.lab_no,
-        labName: row.lab_name ?? '',
-        effectiveDate: row.effective_date,
-        expiryDate: row.expiry_date,
+      const qual: Qualification = {
+        source: 'CNAS', stdCode: row.std_code, stdName: row.std_name,
+        labNo: row.lab_no, labName: row.lab_name ?? '',
+        effectiveDate: row.effective_date, expiryDate: row.expiry_date,
         category: row.category,
         testItem: [row.test_object, row.test_param].filter(Boolean).join(' > '),
-        testStandard: row.test_standard,
-        limitDesc: row.limit_desc,
-      });
+        testStandard: row.test_standard, limitDesc: row.limit_desc,
+      };
+      // Exact match: add under exact code
+      for (const code of stdCodes) {
+        if (code === row.std_code) addMatch(code, qual);
+      }
+      // Fuzzy: add under all input codes with same base
+      const rowBase = this.extractBaseCode(row.std_code);
+      matchedCnasBases.add(rowBase);
+      for (const input of baseToInputs.get(rowBase) ?? []) {
+        addMatch(input, qual);
+      }
     }
 
     // CMA
@@ -119,21 +149,66 @@ export class QualificationService {
     `).all(...stdCodes) as any[];
 
     for (const row of cmaRows) {
-      const key = row.std_code;
-      if (!result[key]) result[key] = [];
-      result[key].push({
-        source: 'CMA',
-        stdCode: row.std_code,
-        stdName: row.std_name,
-        labNo: row.cert_number,
-        labName: row.lab_name ?? '',
-        effectiveDate: row.effective_date,
-        expiryDate: row.expiry_date,
-        category: row.category,
-        testItem: row.test_item,
-        testStandard: row.test_standard,
-        limitDesc: row.limit_desc,
-      });
+      const qual: Qualification = {
+        source: 'CMA', stdCode: row.std_code, stdName: row.std_name,
+        labNo: row.cert_number, labName: row.lab_name ?? '',
+        effectiveDate: row.effective_date, expiryDate: row.expiry_date,
+        category: row.category, testItem: row.test_item,
+        testStandard: row.test_standard, limitDesc: row.limit_desc,
+      };
+      // Exact match
+      for (const code of stdCodes) {
+        if (code === row.std_code) addMatch(code, qual);
+      }
+      // Fuzzy: add under all input codes with same base
+      const rowBase = this.extractBaseCode(row.std_code);
+      for (const input of baseToInputs.get(rowBase) ?? []) {
+        addMatch(input, qual);
+      }
+    }
+
+    // For any input codes with no results, try loading all and fuzzy matching
+    const unmatchedInputs = stdCodes.filter(code => !result[code]?.length);
+    if (unmatchedInputs.length > 0) {
+      const allCnas = this.db.prepare(`
+        SELECT q.std_code, q.std_name, q.lab_no, l.lab_name,
+               q.effective_date, q.expiry_date, q.category,
+               q.test_object, q.test_param, q.test_standard, q.limit_desc
+        FROM cnas_qualifications q LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
+      `).all() as any[];
+      const allCma = this.db.prepare(`
+        SELECT q.std_code, q.std_name, q.cert_number, l.lab_name,
+               q.effective_date, q.expiry_date, q.category,
+               q.test_item, q.test_standard, q.limit_desc
+        FROM cma_qualifications q LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
+      `).all() as any[];
+
+      for (const input of unmatchedInputs) {
+        const inputBase = this.extractBaseCode(input);
+        for (const row of allCnas) {
+          if (this.extractBaseCode(row.std_code) === inputBase) {
+            addMatch(input, {
+              source: 'CNAS', stdCode: row.std_code, stdName: row.std_name,
+              labNo: row.lab_no, labName: row.lab_name ?? '',
+              effectiveDate: row.effective_date, expiryDate: row.expiry_date,
+              category: row.category,
+              testItem: [row.test_object, row.test_param].filter(Boolean).join(' > '),
+              testStandard: row.test_standard, limitDesc: row.limit_desc,
+            });
+          }
+        }
+        for (const row of allCma) {
+          if (this.extractBaseCode(row.std_code) === inputBase) {
+            addMatch(input, {
+              source: 'CMA', stdCode: row.std_code, stdName: row.std_name,
+              labNo: row.cert_number, labName: row.lab_name ?? '',
+              effectiveDate: row.effective_date, expiryDate: row.expiry_date,
+              category: row.category, testItem: row.test_item,
+              testStandard: row.test_standard, limitDesc: row.limit_desc,
+            });
+          }
+        }
+      }
     }
 
     return result;
@@ -322,7 +397,7 @@ export class QualificationService {
             record_count = ?, sync_status = 'success', sync_error = NULL,
             last_sync_at = datetime('now'), last_check_at = datetime('now')
           WHERE cert_number = ?
-        `).run(detail.sysName, first.licSysId, first.licDate, capabilities.length, certNumber);
+        `).run(detail.sysName || detail.licUnitname || lab.cert_number, first.licSysId, first.licDate, capabilities.length, certNumber);
       });
       txn();
 
@@ -373,6 +448,15 @@ export class QualificationService {
       };
       const capabilities = await this.cnasScraper.fetchCapabilities(labInfo);
 
+      // Try to fetch lab name if missing or garbled
+      let labName = lab.lab_name;
+      if (!labName || /[�]/.test(labName)) {
+        try {
+          const fetched = await this.cnasScraper.fetchLabName(labInfo);
+          if (fetched) labName = fetched;
+        } catch { /* keep existing name */ }
+      }
+
       // Replace data atomically
       const txn = this.db.transaction(() => {
         this.db.prepare('DELETE FROM cnas_qualifications WHERE lab_no = ?').run(labNo);
@@ -389,8 +473,8 @@ export class QualificationService {
             labNo,
             stdCode,
             cap.stdAllDesc ?? cap.stdDescAndClause ?? '',
-            '', // effective_date from lab level
-            '', // expiry_date from lab level
+            '', // effective_date
+            '', // expiry_date
             cap.bigTypeName ?? '',
             cap.typeName ?? '',
             cap.objCh ?? '',
@@ -405,11 +489,11 @@ export class QualificationService {
 
         this.db.prepare(`
           UPDATE cnas_labs SET
-            record_count = ?, sync_status = 'success', sync_error = NULL,
+            lab_name = ?, record_count = ?, sync_status = 'success', sync_error = NULL,
             last_sync_at = datetime('now'), last_check_at = datetime('now'),
             cached_cert_date = ?
           WHERE lab_no = ?
-        `).run(capabilities.length, capabilities[0]?.startDate ?? '', labNo);
+        `).run(labName, capabilities.length, capabilities[0]?.startDate ?? '', labNo);
       });
       txn();
 

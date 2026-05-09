@@ -13,7 +13,6 @@
 
 :root {
   --bg:        oklch(14% 0.018 255);
-  --bg-hero:   oklch(16% 0.022 255);
   --surface:   oklch(19% 0.014 255);
   --surface-h: oklch(23% 0.018 255);
   --border:    oklch(27% 0.012 255);
@@ -33,55 +32,60 @@
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --glass-bg:    oklch(17% 0.016 255 / 0.72);
   --glass-border: oklch(32% 0.014 255 / 0.45);
+  --sidebar-w: 240px;
+  --sidebar-collapsed-w: 60px;
+  --topbar-h: 52px;
 }
 
 html { background: var(--bg); color: var(--text); font: 400 15px/1.65 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 body { min-height: 100vh; overflow-x: hidden; }
 
-/* ── Left Dock ── */
-.dock { position: fixed; left: 16px; top: 50%; transform: translateY(-50%); z-index: 300; display: flex; flex-direction: column; gap: 2px; background: var(--glass-bg); backdrop-filter: blur(24px) saturate(1.5); -webkit-backdrop-filter: blur(24px) saturate(1.5); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 10px 8px; box-shadow: 0 8px 40px rgba(0,0,0,0.4), 0 0 0 0.5px oklch(50% 0.02 255 / 0.1) inset; transition: box-shadow 0.4s var(--ease-out), border-color 0.4s var(--ease-out); }
-.dock:hover { box-shadow: 0 12px 56px rgba(0,0,0,0.5), 0 0 0 0.5px oklch(60% 0.03 255 / 0.18) inset; border-color: oklch(36% 0.016 255 / 0.5); }
-.dock-btn { position: relative; display: flex; align-items: center; justify-content: center; width: 46px; height: 46px; border: none; border-radius: var(--radius); background: transparent; color: var(--text-3); cursor: pointer; font-size: 18px; transition: all 0.2s var(--ease-out); }
-.dock-btn:hover { background: var(--surface-h); color: var(--text); transform: scale(1.08); }
-.dock-btn.active { background: var(--accent); color: #fff; box-shadow: 0 4px 16px oklch(66% 0.20 250 / 0.35); }
-.dock-btn .dock-tooltip { position: absolute; left: 58px; top: 50%; transform: translateY(-50%) scale(0.95); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 14px; font-size: 12px; font-weight: 500; color: var(--text); white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.15s var(--ease-out), transform 0.15s var(--ease-out); box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
-.dock-btn:hover .dock-tooltip { opacity: 1; transform: translateY(-50%) scale(1); }
-.dock-sep { height: 1px; background: oklch(30% 0.012 255 / 0.4); margin: 4px 8px; }
+/* ── Topbar ── */
+.topbar { position: fixed; top: 0; left: 0; right: 0; height: var(--topbar-h); background: var(--surface); border-bottom: 1px solid var(--border); z-index: 210; display: flex; align-items: center; padding: 0 16px; gap: 12px; }
+.topbar-toggle { width: 36px; height: 36px; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--text-2); cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; transition: all 0.15s var(--ease-out); flex-shrink: 0; }
+.topbar-toggle:hover { background: var(--surface-h); color: var(--text); }
+.topbar-title { font-size: 16px; font-weight: 600; color: var(--text); letter-spacing: -0.01em; flex: 1; }
+.topbar-actions { display: flex; gap: 6px; align-items: center; }
+.topbar-btn { width: 36px; height: 36px; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--text-3); cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; transition: all 0.15s var(--ease-out); }
+.topbar-btn:hover { background: var(--surface-h); color: var(--text); }
 
-/* ── Floating panels ── */
-.float-panel { position: fixed; z-index: 250; width: 740px; max-height: 85vh; background: oklch(17% 0.018 255 / 0.88); backdrop-filter: blur(32px) saturate(1.6); -webkit-backdrop-filter: blur(32px) saturate(1.6); border: 1px solid oklch(32% 0.016 255 / 0.5); border-radius: var(--radius-lg); box-shadow: 0 24px 80px rgba(0,0,0,0.55), 0 0 0 0.5px oklch(50% 0.02 255 / 0.08) inset; display: none; flex-direction: column; animation: panelIn 0.28s var(--ease-spring); overflow: hidden; }
-.float-panel.open { display: flex; }
-.float-panel.minimized { max-height: none; }
-@keyframes panelIn { from { opacity: 0; transform: scale(0.96) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
-.float-panel-header { display: flex; align-items: center; gap: 10px; padding: 14px 18px; cursor: grab; user-select: none; border-bottom: 1px solid oklch(28% 0.014 255 / 0.6); background: oklch(19% 0.016 255 / 0.5); flex-shrink: 0; }
-.float-panel-header:active { cursor: grabbing; }
-.float-panel-header .panel-accent { width: 4px; height: 22px; border-radius: 3px; flex-shrink: 0; }
-.float-panel-header .panel-icon { font-size: 16px; flex-shrink: 0; }
-.float-panel-header .panel-title { flex: 1; font-size: 14px; font-weight: 600; color: var(--text); letter-spacing: -0.01em; }
-.float-panel-header .panel-btn { width: 30px; height: 30px; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--text-3); cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; transition: all 0.12s var(--ease-out); flex-shrink: 0; }
-.float-panel-header .panel-btn:hover { background: var(--surface-h); color: var(--text); }
-.float-panel-header .panel-btn.close:hover { background: oklch(58% 0.20 25 / 0.15); color: var(--danger); }
-.float-panel-body { padding: 18px; overflow-y: auto; flex: 1; }
-.float-panel-body::-webkit-scrollbar { width: 5px; }
-.float-panel-body::-webkit-scrollbar-track { background: transparent; }
-.float-panel-body::-webkit-scrollbar-thumb { background: oklch(30% 0.014 255); border-radius: 3px; }
+/* ── Sidebar ── */
+.sidebar { position: fixed; left: 0; top: var(--topbar-h); bottom: 0; width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); z-index: 200; display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; transition: width 0.3s var(--ease-out); }
+.sidebar-nav { flex: 1; padding: 8px 0; }
+.sidebar-item { display: flex; align-items: center; gap: 10px; padding: 9px 16px; margin: 1px 8px; border-radius: var(--radius-sm); cursor: pointer; color: var(--text-2); font-size: 13px; font-weight: 500; transition: all 0.15s var(--ease-out); user-select: none; white-space: nowrap; border: none; background: none; width: calc(100% - 16px); text-align: left; }
+.sidebar-item:hover { background: var(--surface-h); color: var(--text); }
+.sidebar-item.active { background: oklch(66% 0.20 250 / 0.12); color: var(--accent); }
+.sidebar-item .sidebar-icon { font-size: 16px; flex-shrink: 0; width: 20px; text-align: center; }
+.sidebar-item .sidebar-text { flex: 1; overflow: hidden; transition: opacity 0.2s var(--ease-out), width 0.2s var(--ease-out); }
+.sidebar-item .sidebar-desc { font-size: 11px; color: var(--text-3); font-weight: 400; display: block; margin-top: 1px; }
+.sidebar-sep { height: 1px; background: oklch(30% 0.012 255 / 0.4); margin: 4px 16px; }
+.sidebar-user { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; cursor: pointer; transition: background 0.15s; }
+.sidebar-user:hover { background: var(--surface-h); }
+.sidebar-user-avatar { width: 32px; height: 32px; border-radius: 50%; background: oklch(66% 0.20 250 / 0.15); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+.sidebar-user-info { flex: 1; min-width: 0; overflow: hidden; }
+.sidebar-user-name { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sidebar-user-role { font-size: 11px; color: var(--text-3); }
 
-.accent-batch { background: var(--accent); }
-.accent-complete { background: var(--success); }
-.accent-settings { background: var(--warning); }
+/* Sidebar collapsed state */
+body.sidebar-collapsed .sidebar { width: var(--sidebar-collapsed-w); }
+body.sidebar-collapsed .content { margin-left: var(--sidebar-collapsed-w); }
+body.sidebar-collapsed .sidebar-text { opacity: 0; width: 0; overflow: hidden; }
+body.sidebar-collapsed .sidebar-desc { display: none; }
+body.sidebar-collapsed .sidebar-user-name { display: none; }
+body.sidebar-collapsed .sidebar-user-role { display: none; }
+body.sidebar-collapsed .sidebar-item { justify-content: center; padding: 9px 0; margin: 1px 6px; width: calc(100% - 12px); }
+body.sidebar-collapsed .sidebar-item .sidebar-icon { width: auto; }
+body.sidebar-collapsed .sidebar-user { justify-content: center; padding: 12px 8px; }
+body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 8px); }
 
-/* ── Hero ── */
-.hero { position: relative; padding: 72px 24px 56px; background: var(--bg-hero); overflow: hidden; }
-.hero::before { content: ''; position: absolute; inset: 0; background-image: linear-gradient(oklch(100% 0 0 / 0.018) 1px, transparent 1px), linear-gradient(90deg, oklch(100% 0 0 / 0.018) 1px, transparent 1px); background-size: 48px 48px; animation: gridShift 25s linear infinite; opacity: 0.6; }
-@keyframes gridShift { 0% { background-position: 0 0; } 100% { background-position: 48px 48px; } }
-.hero::after { content: ''; position: absolute; top: -60%; left: -30%; width: 160%; height: 200%; background: radial-gradient(ellipse 50% 50% at 50% 10%, oklch(66% 0.20 250 / 0.07) 0%, transparent 70%); animation: auraPulse 10s ease-in-out infinite alternate; }
-@keyframes auraPulse { 0% { opacity: 0.3; } 100% { opacity: 1; } }
-.hero-inner { position: relative; z-index: 1; max-width: 740px; margin: 0 auto; }
-.hero h1 { font: 500 34px/1.15 'DM Sans', sans-serif; letter-spacing: -0.025em; margin-bottom: 10px; color: var(--text); background: linear-gradient(135deg, var(--text) 60%, var(--accent) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-.hero p { color: var(--text-2); font-size: 15px; margin-bottom: 36px; letter-spacing: 0.04em; }
+/* ── Content ── */
+.content { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 32px 40px; min-height: calc(100vh - var(--topbar-h)); transition: margin-left 0.3s var(--ease-out); }
+.page { display: none; }
+.page:first-child { display: block; }
 
-/* Search bar */
-.search-row { position: relative; display: flex; gap: 10px; align-items: center; background: oklch(20% 0.014 255 / 0.7); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 6px 6px 20px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); transition: border-color 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out); }
+/* ── Search area ── */
+.search-area { margin-bottom: 24px; }
+.search-row { position: relative; display: flex; gap: 10px; align-items: center; background: oklch(20% 0.014 255 / 0.7); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 6px 6px 20px; transition: border-color 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out); }
 .search-row:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px oklch(66% 0.20 250 / 0.10), 0 4px 24px oklch(66% 0.20 250 / 0.08); }
 .search-row input { flex: 1; background: none; border: none; outline: none; color: var(--text); font: 400 15px/1.4 'DM Sans', sans-serif; padding: 11px 0; }
 .search-row input::placeholder { color: var(--text-3); letter-spacing: 0.02em; }
@@ -99,11 +103,9 @@ body { min-height: 100vh; overflow-x: hidden; }
 .btn-ghost:hover { border-color: var(--text-2); color: var(--text); background: oklch(22% 0.014 255 / 0.5); }
 .btn-sm { padding: 6px 14px; font-size: 12px; }
 
-/* ── Main content ── */
-.main { max-width: 980px; margin: 0 auto; padding: 0 32px 100px; }
-.summary { margin: 36px 0 20px; color: var(--text-2); font-size: 13px; letter-spacing: 0.01em; }
-
-.toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; padding: 10px 16px; background: oklch(18% 0.014 255 / 0.5); border: 1px solid oklch(26% 0.012 255 / 0.4); border-radius: var(--radius); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+/* Summary & toolbar */
+.summary { margin: 0 0 20px; color: var(--text-2); font-size: 13px; letter-spacing: 0.01em; }
+.toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; padding: 10px 16px; background: oklch(18% 0.014 255 / 0.5); border: 1px solid oklch(26% 0.012 255 / 0.4); border-radius: var(--radius); }
 .toolbar-left { display: flex; gap: 8px; align-items: center; }
 .toolbar-right { display: flex; gap: 8px; align-items: center; }
 .badge-count { font-size: 12px; color: var(--text-2); background: oklch(22% 0.014 255 / 0.6); padding: 5px 12px; border-radius: var(--radius-sm); border: 1px solid oklch(28% 0.012 255 / 0.4); font-weight: 500; }
@@ -118,7 +120,7 @@ body { min-height: 100vh; overflow-x: hidden; }
 .filter-chip .chip-count { opacity: 0.6; margin-left: 4px; font-weight: 400; }
 
 /* Result cards */
-.result-card { display: flex; align-items: center; gap: 16px; padding: 22px 24px; border: 1px solid oklch(26% 0.012 255 / 0.5); border-radius: var(--radius); margin-bottom: 10px; background: oklch(19% 0.014 255 / 0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out), transform 0.2s var(--ease-out); }
+.result-card { display: flex; align-items: center; gap: 16px; padding: 22px 24px; border: 1px solid oklch(26% 0.012 255 / 0.5); border-radius: var(--radius); margin-bottom: 10px; background: oklch(19% 0.014 255 / 0.6); transition: border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out), transform 0.2s var(--ease-out); }
 .result-card:hover { border-color: oklch(38% 0.016 255 / 0.6); box-shadow: 0 4px 24px rgba(0,0,0,0.2); transform: translateY(-1px); }
 .result-card .check-col { flex: 0 0 32px; }
 .result-card .check-col input { accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer; }
@@ -163,9 +165,36 @@ body { min-height: 100vh; overflow-x: hidden; }
 .source-by { background: oklch(70% 0.14 85 / 0.12); color: oklch(76% 0.10 85); }
 .source-bzvip { background: oklch(60% 0.20 25 / 0.12); color: oklch(70% 0.14 25); }
 
+/* Search history dropdown */
+.search-history { display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 16px 48px rgba(0,0,0,0.45); z-index: 350; overflow: hidden; }
+.search-history.open { display: block; animation: histIn 0.18s var(--ease-out); }
+@keyframes histIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+.search-history-item { display: flex; align-items: center; gap: 10px; padding: 11px 18px; cursor: pointer; font-size: 14px; color: var(--text-2); border-bottom: 1px solid oklch(26% 0.012 255 / 0.3); transition: background 0.1s var(--ease-out); }
+.search-history-item:last-child { border: none; }
+.search-history-item:hover { background: var(--surface-h); color: var(--text); }
+.search-history-item .hist-icon { color: var(--text-3); font-size: 12px; }
+.search-history-item .hist-query { flex: 1; }
+.search-history-empty { padding: 20px 18px; font-size: 13px; color: var(--text-3); text-align: center; }
+
+/* Batch result cards */
+.batch-result-card { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid oklch(26% 0.012 255 / 0.4); border-radius: var(--radius-sm); margin-bottom: 5px; background: oklch(21% 0.016 255 / 0.4); font-size: 13px; transition: border-color 0.15s; }
+.batch-result-card:hover { border-color: oklch(32% 0.014 255 / 0.5); }
+.batch-result-card .card-num { font: 500 12px 'DM Mono', monospace; color: var(--accent); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.batch-result-card .card-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.batch-result-card .card-src { font-size: 10px; color: var(--text-3); padding: 2px 8px; background: oklch(24% 0.016 255 / 0.5); border-radius: var(--radius-sm); flex-shrink: 0; font-weight: 500; }
+.batch-result-card.unmatched .card-num { color: var(--text-3); }
+.batch-result-card.unmatched .card-title { color: var(--text-3); font-style: italic; }
+
+.batch-textarea { width: 100%; min-height: 150px; padding: 16px 18px; background: oklch(21% 0.016 255 / 0.5); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font: 400 13px/1.9 'DM Mono', monospace; resize: vertical; outline: none; transition: border-color 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out); }
+.batch-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px oklch(66% 0.20 250 / 0.10); }
+.batch-textarea::placeholder { color: var(--text-3); }
+.batch-actions { display: flex; gap: 8px; margin-top: 14px; align-items: center; flex-wrap: wrap; }
+.batch-summary { margin-top: 14px; font-size: 13px; color: var(--text-2); }
+
 /* ── Log panel ── */
-.log-panel { position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; background: oklch(16% 0.016 255 / 0.92); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px); border-top: 1px solid oklch(28% 0.014 255 / 0.5); transition: transform 0.3s var(--ease-out); }
+.log-panel { position: fixed; bottom: 0; left: var(--sidebar-w); right: 0; z-index: 100; background: oklch(16% 0.016 255 / 0.92); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px); border-top: 1px solid oklch(28% 0.014 255 / 0.5); transition: transform 0.3s var(--ease-out), left 0.3s var(--ease-out); }
 .log-panel.collapsed { transform: translateY(calc(100% - 44px)); }
+body.sidebar-collapsed .log-panel { left: var(--sidebar-collapsed-w); }
 .log-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; cursor: pointer; user-select: none; font-size: 13px; font-weight: 500; }
 .log-header:hover { background: oklch(20% 0.016 255 / 0.4); }
 .log-body { max-height: 200px; overflow-y: auto; padding: 0 24px 14px; }
@@ -188,6 +217,7 @@ body { min-height: 100vh; overflow-x: hidden; }
 .modal-overlay { position: fixed; inset: 0; z-index: 400; background: rgba(0,0,0,0.55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); display: none; align-items: center; justify-content: center; }
 .modal-overlay.open { display: flex; }
 .modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 36px; max-width: 580px; width: calc(100% - 48px); max-height: 80vh; overflow-y: auto; position: relative; box-shadow: 0 24px 80px rgba(0,0,0,0.5); animation: panelIn 0.25s var(--ease-spring); }
+@keyframes panelIn { from { opacity: 0; transform: scale(0.96) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 .modal-close { position: absolute; top: 16px; right: 16px; background: none; border: none; cursor: pointer; color: var(--text-3); font-size: 22px; line-height: 1; transition: color 0.15s; }
 .modal-close:hover { color: var(--text); }
 .modal h3 { font: 500 20px 'DM Sans', sans-serif; margin-bottom: 18px; color: var(--accent); }
@@ -224,32 +254,6 @@ body { min-height: 100vh; overflow-x: hidden; }
 .sortable-drag { opacity: 0.7; }
 .drag-handle { cursor: grab; color: var(--text-3); padding: 0 4px; user-select: none; }
 .drag-handle:active { cursor: grabbing; }
-
-/* Batch result cards */
-.batch-result-card { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid oklch(26% 0.012 255 / 0.4); border-radius: var(--radius-sm); margin-bottom: 5px; background: oklch(21% 0.016 255 / 0.4); font-size: 13px; transition: border-color 0.15s; }
-.batch-result-card:hover { border-color: oklch(32% 0.014 255 / 0.5); }
-.batch-result-card .card-num { font: 500 12px 'DM Mono', monospace; color: var(--accent); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.batch-result-card .card-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
-.batch-result-card .card-src { font-size: 10px; color: var(--text-3); padding: 2px 8px; background: oklch(24% 0.016 255 / 0.5); border-radius: var(--radius-sm); flex-shrink: 0; font-weight: 500; }
-.batch-result-card.unmatched .card-num { color: var(--text-3); }
-.batch-result-card.unmatched .card-title { color: var(--text-3); font-style: italic; }
-
-.batch-textarea { width: 100%; min-height: 150px; padding: 16px 18px; background: oklch(21% 0.016 255 / 0.5); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font: 400 13px/1.9 'DM Mono', monospace; resize: vertical; outline: none; transition: border-color 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out); }
-.batch-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px oklch(66% 0.20 250 / 0.10); }
-.batch-textarea::placeholder { color: var(--text-3); }
-.batch-actions { display: flex; gap: 8px; margin-top: 14px; align-items: center; flex-wrap: wrap; }
-.batch-summary { margin-top: 14px; font-size: 13px; color: var(--text-2); }
-
-/* Search history dropdown */
-.search-history { display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 16px 48px rgba(0,0,0,0.45); z-index: 350; overflow: hidden; }
-.search-history.open { display: block; animation: histIn 0.18s var(--ease-out); }
-@keyframes histIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
-.search-history-item { display: flex; align-items: center; gap: 10px; padding: 11px 18px; cursor: pointer; font-size: 14px; color: var(--text-2); border-bottom: 1px solid oklch(26% 0.012 255 / 0.3); transition: background 0.1s var(--ease-out); }
-.search-history-item:last-child { border: none; }
-.search-history-item:hover { background: var(--surface-h); color: var(--text); }
-.search-history-item .hist-icon { color: var(--text-3); font-size: 12px; }
-.search-history-item .hist-query { flex: 1; }
-.search-history-empty { padding: 20px 18px; font-size: 13px; color: var(--text-3); text-align: center; }
 
 /* Toast */
 .toast-container { position: fixed; bottom: 160px; right: 24px; z-index: 500; display: flex; flex-direction: column-reverse; gap: 10px; pointer-events: none; transition: bottom 0.3s var(--ease-out); }
@@ -304,7 +308,8 @@ body { min-height: 100vh; overflow-x: hidden; }
 .auth-card .auth-error:empty { display: none; }
 
 /* User dropdown */
-.user-dropdown { position: fixed; left: 76px; bottom: 24px; z-index: 400; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 0; min-width: 170px; box-shadow: 0 12px 40px rgba(0,0,0,0.4); display: none; animation: panelIn 0.18s var(--ease-out); }
+.user-dropdown { position: fixed; z-index: 400; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 0; min-width: 170px; box-shadow: 0 12px 40px rgba(0,0,0,0.4); display: none; animation: panelIn 0.18s var(--ease-out); left: calc(var(--sidebar-w) + 8px); bottom: 24px; }
+body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 8px); }
 .user-dropdown.open { display: block; }
 .user-dropdown .ud-item { display: flex; align-items: center; gap: 8px; padding: 10px 18px; cursor: pointer; color: var(--text-2); font-size: 13px; transition: background 0.12s, color 0.12s; }
 .user-dropdown .ud-item:hover { background: var(--surface-h); color: var(--text); }
@@ -368,6 +373,9 @@ body { min-height: 100vh; overflow-x: hidden; }
 .qual-result-item .qual-expired { color: var(--danger); }
 .qual-result-item .qual-valid { color: var(--success); }
 .qual-empty { text-align: center; padding: 40px 16px; color: var(--text-3); font-size: 13px; }
+.qual-results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.qual-col { min-width: 0; }
+.qual-col-header { font-size: 13px; font-weight: 600; color: var(--text); padding: 6px 10px; margin-bottom: 8px; }
 
 .qual-lab-card { background: oklch(17% 0.014 255 / 0.4); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 16px; margin-bottom: 8px; font-size: 12px; }
 .qual-lab-card .qual-lab-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
@@ -393,83 +401,99 @@ body { min-height: 100vh; overflow-x: hidden; }
 </head>
 <body>
 
-<!-- Left Dock -->
-<nav class="dock" id="dock">
-  <button class="dock-btn active" id="dockSearch" onclick="activatePanel(null)" title="搜索">
-    <span>🔍</span><span class="dock-tooltip">搜索标准</span>
-  </button>
-  <div class="dock-sep"></div>
-  <button class="dock-btn" id="dockBatch" onclick="togglePanel('batch')" title="批量下载">
-    <span>📦</span><span class="dock-tooltip">批量下载</span>
-  </button>
-  <button class="dock-btn" id="dockComplete" onclick="togglePanel('complete')" title="标准补全">
-    <span>📋</span><span class="dock-tooltip">标准补全</span>
-  </button>
-  <div class="dock-sep"></div>
-  <button class="dock-btn" id="dockHistory" onclick="togglePanel('history')" title="下载历史">
-    <span>📥</span><span class="dock-tooltip">下载历史</span>
-  </button>
-  <button class="dock-btn" id="dockQual" onclick="togglePanel('qual')" title="资质">
-    <span>🛡</span><span class="dock-tooltip">资质查询</span>
-  </button>
-  <button class="dock-btn" id="dockSettings" onclick="togglePanel('settings')" title="设置">
-    <span>⚙</span><span class="dock-tooltip">下载设置</span>
-  </button>
-  <div class="dock-sep"></div>
-  <button class="dock-btn" id="dockStats" onclick="togglePanel('stats')" title="统计">
-    <span>📊</span><span class="dock-tooltip">使用统计</span>
-  </button>
-  <div class="dock-sep"></div>
-  <button class="dock-btn" id="dockUser" onclick="toggleUserDropdown()" title="用户">
-    <span>👤</span><span class="dock-tooltip">账户</span>
-  </button>
+<!-- Topbar -->
+<header class="topbar">
+  <button class="topbar-toggle" onclick="toggleSidebar()" title="切换侧栏">≡</button>
+  <span class="topbar-title">标准检索</span>
+  <div class="topbar-actions">
+    <button class="topbar-btn" onclick="switchTab('stats')" title="使用统计">📊</button>
+    <button class="topbar-btn" onclick="toggleUserDropdown()" id="sidebarUserToggle" title="用户">👤</button>
+  </div>
+</header>
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-nav">
+    <button class="sidebar-item active" data-tab="search" onclick="switchTab('search')">
+      <span class="sidebar-icon">🔍</span>
+      <span class="sidebar-text">标准检索<span class="sidebar-desc">搜索和下载标准</span></span>
+    </button>
+    <button class="sidebar-item" data-tab="batch" onclick="switchTab('batch')">
+      <span class="sidebar-icon">📦</span>
+      <span class="sidebar-text">批量下载<span class="sidebar-desc">批量解析和下载</span></span>
+    </button>
+    <button class="sidebar-item" data-tab="complete" onclick="switchTab('complete')">
+      <span class="sidebar-icon">📋</span>
+      <span class="sidebar-text">标准补全<span class="sidebar-desc">Excel/CSV 自动补全</span></span>
+    </button>
+    <button class="sidebar-item" data-tab="history" onclick="switchTab('history')">
+      <span class="sidebar-icon">📥</span>
+      <span class="sidebar-text">下载历史<span class="sidebar-desc">查看下载记录</span></span>
+    </button>
+    <button class="sidebar-item" data-tab="qual" onclick="switchTab('qual')">
+      <span class="sidebar-icon">🛡</span>
+      <span class="sidebar-text">资质查询<span class="sidebar-desc">CNAS/CMA 资质</span></span>
+    </button>
+    <div class="sidebar-sep"></div>
+    <button class="sidebar-item" data-tab="stats" onclick="switchTab('stats')">
+      <span class="sidebar-icon">📊</span>
+      <span class="sidebar-text">使用统计<span class="sidebar-desc">查看使用数据</span></span>
+    </button>
+    <button class="sidebar-item" data-tab="users" onclick="switchTab('users')" style="display:none" id="sidebarUsersBtn">
+      <span class="sidebar-icon">👥</span>
+      <span class="sidebar-text">用户管理<span class="sidebar-desc">管理账号权限</span></span>
+    </button>
+    <div class="sidebar-sep"></div>
+    <button class="sidebar-item" data-tab="settings" onclick="switchTab('settings')">
+      <span class="sidebar-icon">⚙</span>
+      <span class="sidebar-text">系统设置<span class="sidebar-desc">下载模式和参数</span></span>
+    </button>
+  </div>
+  <div class="sidebar-user" id="sidebarUserArea" onclick="toggleUserDropdown()">
+    <div class="sidebar-user-avatar">👤</div>
+    <div class="sidebar-user-info">
+      <div class="sidebar-user-name" id="sidebarUserName">—</div>
+      <div class="sidebar-user-role" id="sidebarUserRole">—</div>
+    </div>
+  </div>
 </nav>
 
-<section class="hero">
-  <div class="hero-inner">
-    <h1>标准检索</h1>
-    <p>多源搜索 · 批量下载 · 标准补全</p>
-    <div class="search-row" id="searchRow">
-      <input type="text" id="searchInput" placeholder="输入标准号或关键词…" autofocus>
-      <div class="source-tags">
-        <span class="source-tag active" data-source="bz">BZ</span>
-        <span class="source-tag active" data-source="gbw">BW</span>
-        <span class="source-tag active" data-source="by">BY</span>
-        <span class="source-tag active" data-source="bzvip">BZVIP</span>
+<!-- Main content -->
+<div class="content">
+  <!-- Page: Search -->
+  <div class="page" id="page-search">
+    <div class="search-area">
+      <div class="search-row" id="searchRow">
+        <input type="text" id="searchInput" placeholder="输入标准号或关键词…" autofocus>
+        <div class="source-tags">
+          <span class="source-tag active" data-source="bz">BZ</span>
+          <span class="source-tag active" data-source="gbw">BW</span>
+          <span class="source-tag active" data-source="by">BY</span>
+          <span class="source-tag active" data-source="bzvip">BZVIP</span>
+        </div>
+        <button class="btn btn-primary" id="searchBtn">搜索</button>
+        <div class="search-history" id="searchHistory"></div>
       </div>
-      <button class="btn btn-primary" id="searchBtn">搜索</button>
-      <div class="search-history" id="searchHistory"></div>
     </div>
+    <div id="summary" class="summary"></div>
+    <div class="toolbar" id="toolbar" style="display:none">
+      <div class="toolbar-left">
+        <span class="badge-count" id="selectedCount">已选 0</span>
+        <button class="btn btn-sm btn-primary" id="downloadSelected" disabled>下载选中</button>
+        <button class="btn btn-sm btn-ghost" id="stopDownload" style="display:none;color:var(--danger);border-color:var(--danger)">停止</button>
+        <button class="btn btn-sm btn-ghost" id="selectAll">全选</button>
+      </div>
+      <div class="toolbar-right">
+        <button class="btn btn-sm btn-ghost" id="exportResults">导出结果</button>
+      </div>
+    </div>
+    <div class="filter-bar" id="filterBar"></div>
+    <div id="results"></div>
   </div>
-</section>
 
-<main class="main">
-  <div id="summary" class="summary"></div>
-  <div class="toolbar" id="toolbar" style="display:none">
-    <div class="toolbar-left">
-      <span class="badge-count" id="selectedCount">已选 0</span>
-      <button class="btn btn-sm btn-primary" id="downloadSelected" disabled>下载选中</button>
-      <button class="btn btn-sm btn-ghost" id="stopDownload" style="display:none;color:var(--danger);border-color:var(--danger)">停止</button>
-      <button class="btn btn-sm btn-ghost" id="selectAll">全选</button>
-    </div>
-    <div class="toolbar-right">
-      <button class="btn btn-sm btn-ghost" id="exportResults">导出结果</button>
-    </div>
-  </div>
-  <div class="filter-bar" id="filterBar"></div>
-  <div id="results"></div>
-</main>
-
-<!-- Floating panel: Batch download -->
-<div class="float-panel" id="floatBatch" style="top:50%;left:50%;transform:translate(-50%,-50%)">
-  <div class="float-panel-header" id="floatBatchHeader">
-    <div class="panel-accent accent-batch"></div>
-    <span class="panel-icon">📦</span>
-    <span class="panel-title">批量下载</span>
-    <button class="panel-btn" onclick="minimizePanel('batch')" title="最小化">─</button>
-    <button class="panel-btn close" onclick="closePanel('batch')" title="关闭">&times;</button>
-  </div>
-  <div class="float-panel-body" id="floatBatchBody">
+  <!-- Page: Batch -->
+  <div class="page" id="page-batch">
+    <h2 style="font-size:20px;font-weight:600;margin-bottom:18px">批量下载</h2>
     <textarea class="batch-textarea" id="batchInput" placeholder="粘贴标准号，每行一个&#10;例如：&#10;GB/T 1.1&#10;GB/T 12345-2020&#10;YY/T 0287&#10;DB44/T 1234"></textarea>
     <div class="batch-actions">
       <button class="btn btn-primary btn-sm" id="batchResolveBtn" onclick="doBatchResolve()">解析标准号</button>
@@ -482,18 +506,10 @@ body { min-height: 100vh; overflow-x: hidden; }
       <span class="progress-text" id="batchProgressText"></span>
     </div>
   </div>
-</div>
 
-<!-- Floating panel: Spreadsheet completion -->
-<div class="float-panel" id="floatComplete" style="top:50%;left:50%;transform:translate(-50%,-50%)">
-  <div class="float-panel-header" id="floatCompleteHeader">
-    <div class="panel-accent accent-complete"></div>
-    <span class="panel-icon">📋</span>
-    <span class="panel-title">标准补全</span>
-    <button class="panel-btn" onclick="minimizePanel('complete')" title="最小化">─</button>
-    <button class="panel-btn close" onclick="closePanel('complete')" title="关闭">&times;</button>
-  </div>
-  <div class="float-panel-body">
+  <!-- Page: Complete -->
+  <div class="page" id="page-complete">
+    <h2 style="font-size:20px;font-weight:600;margin-bottom:18px">标准补全</h2>
     <div style="font-size:13px;color:var(--text-2);margin-bottom:16px;line-height:1.6">上传 Excel 或 CSV 文件，程序自动识别 <strong style="color:var(--accent)">A 列</strong> 标准号，输出 <strong style="color:var(--accent)">B 列</strong>（完整标准号）和 <strong style="color:var(--accent)">C 列</strong>（标准名称）。</div>
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <label class="btn btn-ghost btn-sm" style="cursor:pointer;position:relative">
@@ -506,65 +522,33 @@ body { min-height: 100vh; overflow-x: hidden; }
     <div class="batch-summary" id="completeSummary"></div>
     <div id="completeDownload" style="margin-top:8px"></div>
   </div>
-</div>
 
-<!-- Floating panel: Download history -->
-<div class="float-panel" id="floatHistory" style="top:50%;left:50%;transform:translate(-50%,-50%)">
-  <div class="float-panel-header" id="floatHistoryHeader">
-    <div class="panel-accent accent-batch"></div>
-    <span class="panel-icon">📥</span>
-    <span class="panel-title">下载历史</span>
-    <button class="panel-btn" onclick="minimizePanel('history')" title="最小化">─</button>
-    <button class="panel-btn close" onclick="closePanel('history')" title="关闭">&times;</button>
-  </div>
-  <div class="float-panel-body" id="floatHistoryBody">
+  <!-- Page: History -->
+  <div class="page" id="page-history">
+    <h2 style="font-size:20px;font-weight:600;margin-bottom:18px">下载历史</h2>
     <div id="historyList" style="max-height:400px;overflow-y:auto;font-size:13px"></div>
     <div style="text-align:right;margin-top:8px">
       <button class="btn btn-ghost btn-sm" onclick="clearDownloadHistory()">清空历史</button>
     </div>
   </div>
-</div>
 
-<!-- Floating panel: Settings -->
-<div class="float-panel" id="floatSettings" style="top:50%;left:50%;transform:translate(-50%,-50%)">
-  <div class="float-panel-header" id="floatSettingsHeader">
-    <div class="panel-accent accent-settings"></div>
-    <span class="panel-icon">⚙</span>
-    <span class="panel-title">下载设置</span>
-    <button class="panel-btn" onclick="minimizePanel('settings')" title="最小化">─</button>
-    <button class="panel-btn close" onclick="closePanel('settings')" title="关闭">&times;</button>
-  </div>
-  <div class="float-panel-body" id="settingsBody">
-    <span class="spinner"></span>加载中
-  </div>
-</div>
-
-<!-- Floating panel: Qualification -->
-<div class="float-panel" id="floatQual" style="top:50%;left:50%;transform:translate(-50%,-50%)">
-  <div class="float-panel-header" id="floatQualHeader">
-    <div class="panel-accent accent-batch"></div>
-    <span class="panel-icon">🛡</span>
-    <span class="panel-title">资质查询</span>
-    <button class="panel-btn" onclick="minimizePanel('qual')" title="最小化">─</button>
-    <button class="panel-btn close" onclick="closePanel('qual')" title="关闭">&times;</button>
-  </div>
-  <div class="float-panel-body">
+  <!-- Page: Qualification -->
+  <div class="page" id="page-qual">
+    <h2 style="font-size:20px;font-weight:600;margin-bottom:18px">资质查询</h2>
     <div class="qual-tab-bar" style="display:flex;gap:0;margin-bottom:14px;border-bottom:1px solid var(--border)">
       <button class="qual-tab active" data-qual-tab="search" onclick="switchQualTab('search')" style="padding:8px 16px;font-size:13px;border:none;background:none;color:var(--text);cursor:pointer;border-bottom:2px solid var(--accent);font-weight:500">搜索</button>
       <button class="qual-tab" data-qual-tab="labs" onclick="switchQualTab('labs')" style="padding:8px 16px;font-size:13px;border:none;background:none;color:var(--text-3);cursor:pointer;border-bottom:2px solid transparent;font-weight:500">订阅管理</button>
       <button class="qual-tab" data-qual-tab="logs" onclick="switchQualTab('logs')" style="padding:8px 16px;font-size:13px;border:none;background:none;color:var(--text-3);cursor:pointer;border-bottom:2px solid transparent;font-weight:500">同步日志</button>
     </div>
-    <!-- Search tab -->
-    <div id="qualSearchTab">
+    <div id="qualSearchTab" style="display:flex;flex-direction:column;height:calc(100vh - var(--topbar-h) - 140px)">
       <input class="qual-search-input" id="qualSearchInput" type="text" placeholder="输入标准号、实验室名称或关键词…" onkeydown="if(event.key==='Enter')doQualSearch()">
       <div class="qual-filters">
         <button class="qual-filter-btn active" data-qual-source="" onclick="setQualFilter(this,'')">全部</button>
         <button class="qual-filter-btn" data-qual-source="CNAS" onclick="setQualFilter(this,'CNAS')">CNAS</button>
         <button class="qual-filter-btn" data-qual-source="CMA" onclick="setQualFilter(this,'CMA')">CMA</button>
       </div>
-      <div id="qualResults" style="max-height:420px;overflow-y:auto"><div class="qual-empty">输入关键词搜索资质信息</div></div>
+      <div id="qualResults" style="flex:1;overflow-y:auto"><div class="qual-empty">输入关键词搜索资质信息</div></div>
     </div>
-    <!-- Labs management tab -->
     <div id="qualLabsTab" style="display:none">
       <div class="qual-section-title">CNAS 实验室</div>
       <div id="qualCnasLabs"></div>
@@ -581,14 +565,70 @@ body { min-height: 100vh; overflow-x: hidden; }
       <div style="text-align:right;margin-top:12px">
         <button class="btn btn-sm btn-ghost" onclick="syncAllQualLabs()">同步全部</button>
       </div>
+      <div class="qual-section-title" style="margin-top:24px">同步日志</div>
+      <div id="qualLabsSyncLogs" style="max-height:300px;overflow-y:auto;font-size:12px"></div>
     </div>
-    <!-- Sync logs tab -->
     <div id="qualLogsTab" style="display:none">
       <div style="display:flex;gap:8px;margin-bottom:12px">
         <button class="qual-filter-btn active" data-log-source="cnas" onclick="switchLogSource(this,'cnas')">CNAS</button>
         <button class="qual-filter-btn" data-log-source="cma" onclick="switchLogSource(this,'cma')">CMA</button>
       </div>
       <div id="qualSyncLogs" style="max-height:400px;overflow-y:auto;font-size:12px"></div>
+    </div>
+  </div>
+
+  <!-- Page: Stats -->
+  <div class="page" id="page-stats">
+    <h2 style="font-size:20px;font-weight:600;margin-bottom:18px">使用统计</h2>
+    <div class="stats-controls">
+      <input type="date" id="statsFrom">
+      <span style="color:var(--text-3);font-size:12px">至</span>
+      <input type="date" id="statsTo">
+      <button class="btn btn-sm btn-ghost" onclick="loadStats()">刷新</button>
+    </div>
+    <div class="stats-grid" id="statsSummary"></div>
+    <div class="stats-charts">
+      <div class="stats-chart-box">
+        <h4>趋势</h4>
+        <canvas id="chartTrend"></canvas>
+      </div>
+      <div class="stats-chart-box">
+        <h4>来源分布</h4>
+        <canvas id="chartSource"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Page: Users -->
+  <div class="page" id="page-users">
+    <h2 style="font-size:20px;font-weight:600;margin-bottom:18px">用户管理</h2>
+    <div style="margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-sm btn-primary" onclick="showCreateUser()">新建用户</button>
+      <button class="btn btn-sm btn-ghost" onclick="showDefaultPerms()">默认权限</button>
+      <label style="font-size:13px;color:var(--text-2);cursor:pointer;display:inline-flex;align-items:center;gap:6px">
+        <input type="checkbox" id="regEnabledToggle" onchange="toggleRegistration(this.checked)"> 允许注册
+      </label>
+      <label style="font-size:13px;color:var(--text-2);cursor:pointer;display:inline-flex;align-items:center;gap:6px">
+        <input type="checkbox" id="loginRequiredToggle" onchange="toggleLoginRequired(this.checked)"> 需要登录
+      </label>
+      <span id="usersBatchBar" style="display:none;margin-left:auto;align-items:center;gap:8px;font-size:13px;color:var(--text-2)">
+        已选 <strong id="usersSelectedCount" style="color:var(--text)">0</strong> 人
+        <button class="btn btn-sm btn-ghost" onclick="batchSetActive(1)">启用</button>
+        <button class="btn btn-sm btn-ghost" onclick="batchSetActive(0)">禁用</button>
+        <button class="btn btn-sm btn-ghost" style="color:var(--danger)" onclick="batchDeleteUsers()">删除</button>
+      </span>
+    </div>
+    <table class="users-table">
+      <thead><tr><th style="width:36px"><input type="checkbox" id="usersSelectAll" onchange="toggleSelectAllUsers(this.checked)"></th><th>用户名</th><th>显示名</th><th>角色</th><th>状态</th><th>搜索</th><th>下载</th><th>操作</th></tr></thead>
+      <tbody id="usersBody"></tbody>
+    </table>
+  </div>
+
+  <!-- Page: Settings -->
+  <div class="page" id="page-settings">
+    <h2 style="font-size:20px;font-weight:600;margin-bottom:18px">系统设置</h2>
+    <div id="settingsBody">
+      <span class="spinner"></span>加载中
     </div>
   </div>
 </div>
@@ -650,61 +690,8 @@ body { min-height: 100vh; overflow-x: hidden; }
 <div class="user-dropdown" id="userDropdown">
   <div class="ud-header" id="udHeader"></div>
   <div class="ud-item" id="udChangePwd" onclick="showChangePwd()">修改密码</div>
-  <div class="ud-item" id="udManageUsers" onclick="togglePanel('users')" style="display:none">用户管理</div>
+  <div class="ud-item" id="udManageUsers" onclick="switchTab('users')" style="display:none">用户管理</div>
   <div class="ud-item" onclick="doLogout()">退出登录</div>
-</div>
-
-<!-- Stats panel -->
-<div class="float-panel" id="floatStats" style="top:50%;left:50%;transform:translate(-50%,-50%)">
-  <div class="float-panel-header" id="floatStatsHeader">
-    <div class="panel-accent accent-batch"></div>
-    <span class="panel-icon">📊</span>
-    <span class="panel-title">使用统计</span>
-    <button class="panel-btn" onclick="minimizePanel('stats')" title="最小化">─</button>
-    <button class="panel-btn close" onclick="closePanel('stats')" title="关闭">&times;</button>
-  </div>
-  <div class="float-panel-body">
-    <div class="stats-controls">
-      <input type="date" id="statsFrom">
-      <span style="color:var(--text-3);font-size:12px">至</span>
-      <input type="date" id="statsTo">
-      <button class="btn btn-sm btn-ghost" onclick="loadStats()">刷新</button>
-    </div>
-    <div class="stats-grid" id="statsSummary"></div>
-    <div class="stats-charts">
-      <div class="stats-chart-box">
-        <h4>趋势</h4>
-        <canvas id="chartTrend"></canvas>
-      </div>
-      <div class="stats-chart-box">
-        <h4>来源分布</h4>
-        <canvas id="chartSource"></canvas>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Users panel (admin only) -->
-<div class="float-panel" id="floatUsers" style="top:50%;left:50%;transform:translate(-50%,-50%)">
-  <div class="float-panel-header" id="floatUsersHeader">
-    <div class="panel-accent accent-settings"></div>
-    <span class="panel-icon">👥</span>
-    <span class="panel-title">用户管理</span>
-    <button class="panel-btn" onclick="minimizePanel('users')" title="最小化">─</button>
-    <button class="panel-btn close" onclick="closePanel('users')" title="关闭">&times;</button>
-  </div>
-  <div class="float-panel-body">
-    <div style="margin-bottom:12px">
-      <button class="btn btn-sm btn-primary" onclick="showCreateUser()">新建用户</button>
-      <label style="margin-left:16px;font-size:13px;color:var(--text-2);cursor:pointer;display:inline-flex;align-items:center;gap:6px">
-        <input type="checkbox" id="regEnabledToggle" onchange="toggleRegistration(this.checked)"> 允许注册
-      </label>
-    </div>
-    <table class="users-table">
-      <thead><tr><th>用户名</th><th>显示名</th><th>角色</th><th>状态</th><th>搜索</th><th>下载</th><th>操作</th></tr></thead>
-      <tbody id="usersBody"></tbody>
-    </table>
-  </div>
 </div>
 
 <script>
@@ -750,122 +737,53 @@ let searchAborted = false;
 let activePanelId = null;
 let filterState = { sources: new Set(), statuses: new Set() };
 
-// ── Panel management ──
+
+// ── Panel management (sidebar/tab layout) ──
 let activeDrag = null;
 
-function initPanels() {
-  ['batch', 'complete', 'settings', 'history', 'stats', 'users', 'qual'].forEach(id => {
-    const panel = document.getElementById('float' + id.charAt(0).toUpperCase() + id.slice(1));
-    const header = document.getElementById(panel.id + 'Header');
-    if (!panel || !header) return;
-
-    // Restore position
-    if (panelPositions[id]) {
-      const { top, left } = panelPositions[id];
-      panel.style.top = top; panel.style.left = left;
-    }
-
-    // Drag start
-    header.addEventListener('mousedown', e => {
-      if (e.target.closest('.panel-btn')) return;
-      // Convert from transform centering to absolute positioning
-      if (panel.style.transform) {
-        const rect = panel.getBoundingClientRect();
-        panel.style.transform = 'none';
-        panel.style.left = rect.left + 'px';
-        panel.style.top = rect.top + 'px';
-      }
-      activeDrag = { panel, id, startX: e.clientX, startY: e.clientY, origLeft: panel.offsetLeft, origTop: panel.offsetTop };
-      panel.style.transition = 'none';
-    });
-  });
-
-  // Shared drag move/end (registered once)
-  document.addEventListener('mousemove', e => {
-    if (!activeDrag) return;
-    const { panel, startX, startY, origLeft, origTop } = activeDrag;
-    panel.style.left = Math.max(0, Math.min(window.innerWidth - panel.offsetWidth, origLeft + e.clientX - startX)) + 'px';
-    panel.style.top = Math.max(0, Math.min(window.innerHeight - 60, origTop + e.clientY - startY)) + 'px';
-  });
-  document.addEventListener('mouseup', () => {
-    if (!activeDrag) return;
-    const { panel, id } = activeDrag;
-    activeDrag = null;
-    panel.style.transition = '';
-    panelPositions[id] = { top: panel.style.top, left: panel.style.left };
-    savePanelPositions();
-  });
-}
-
-function togglePanel(id) {
-  const panel = document.getElementById('float' + id.charAt(0).toUpperCase() + id.slice(1));
-  if (!panel) return;
-  if (activePanelId === id) {
-    closePanel(id);
-    return;
+function switchTab(tab) {
+  // Permission check
+  if (currentUser && currentUser.allowed_tabs && tab !== 'users') {
+    if (currentUser.allowed_tabs.indexOf(tab) < 0) return;
   }
-  if (activePanelId) closePanel(activePanelId);
-  openPanel(id);
-}
-
-function openPanel(id) {
-  const panel = document.getElementById('float' + id.charAt(0).toUpperCase() + id.slice(1));
-  if (!panel) return;
-  panel.classList.add('open');
-  panel.classList.remove('minimized');
-  activePanelId = id;
-
-  // Update dock buttons
-  document.querySelectorAll('.dock-btn').forEach(b => b.classList.remove('active'));
-  const dockBtn = document.getElementById('dock' + id.charAt(0).toUpperCase() + id.slice(1));
-  if (dockBtn) dockBtn.classList.add('active');
-
-  // Restore minimized body
-  const body = panel.querySelector('.float-panel-body');
-  if (body) body.style.display = '';
-
-  // Render settings on open
-  if (id === 'settings') renderSettings();
-  if (id === 'history') renderDownloadHistory();
-  if (id === 'batch') updateBatchSourceHint();
-  if (id === 'stats') loadStats();
-  if (id === 'users') loadUsers();
-  if (id === 'qual') loadQualLabs();
-
-  // Bring to front
-  panel.style.zIndex = 260;
-  updatePanelZIndices(id);
-}
-
-function closePanel(id) {
-  const panel = document.getElementById('float' + id.charAt(0).toUpperCase() + id.slice(1));
-  if (!panel) return;
-  panel.classList.remove('open', 'minimized');
-  if (activePanelId === id) activePanelId = null;
-  document.querySelectorAll('.dock-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('dockSearch').classList.add('active');
-}
-
-function minimizePanel(id) {
-  const panel = document.getElementById('float' + id.charAt(0).toUpperCase() + id.slice(1));
-  if (!panel) return;
-  panel.classList.add('minimized');
-  const body = panel.querySelector('.float-panel-body');
-  if (body) body.style.display = 'none';
-}
-
-function activatePanel(id) {
-  if (activePanelId) closePanel(activePanelId);
-  document.querySelectorAll('.dock-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('dockSearch').classList.add('active');
-}
-
-function updatePanelZIndices(topId) {
-  ['batch', 'complete', 'settings', 'history', 'stats', 'users', 'qual'].forEach(id => {
-    const panel = document.getElementById('float' + id.charAt(0).toUpperCase() + id.slice(1));
-    if (panel) panel.style.zIndex = id === topId ? 260 : 250;
+  document.querySelectorAll('.page').forEach(function(p) { p.style.display = 'none'; });
+  var page = document.getElementById('page-' + tab);
+  if (page) page.style.display = 'block';
+  document.querySelectorAll('.sidebar-item[data-tab]').forEach(function(item) {
+    item.classList.toggle('active', item.dataset.tab === tab);
   });
+  var titleEl = document.querySelector('.topbar-title');
+  if (titleEl) titleEl.textContent = TAB_LABELS[tab] || '标准检索';
+  if (tab === 'stats') loadStats();
+  if (tab === 'users') loadUsers();
+  if (tab === 'history') renderDownloadHistory();
+  if (tab === 'settings') renderSettings();
+  if (tab === 'batch') updateBatchSourceHint();
+  if (tab === 'qual') loadQualLabs();
 }
+function initRouter() { switchTab("search"); }
+function toggleSidebar() { document.body.classList.toggle("sidebar-collapsed"); }
+
+function initPanels() { initRouter(); }
+
+function togglePanel(name) {
+  switchTab(name);
+}
+
+function openPanel(name) {
+  switchTab(name);
+}
+
+function closePanel(name) { /* no-op in tab layout */ }
+
+function minimizePanel(name) { /* no-op in tab layout */ }
+
+function activatePanel(name) {
+  switchTab(name || "search");
+}
+
+function updatePanelZIndices() { /* no-op in tab layout */ }
+
 
 // ── Source tag init ──
 document.querySelectorAll('.source-tag').forEach(tag => {
@@ -895,7 +813,7 @@ async function doSearch() {
   const sources = [...selectedSources];
   const promises = sources.map(src => {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 15000);
+    const timer = setTimeout(() => ctrl.abort(), 6000);
     return fetch(`${API}/api/standards/search?q=${encodeURIComponent(q)}&source=${src}`, { signal: ctrl.signal })
       .then(r => r.json()).then(data => ({ ok: true, src, items: (data.items || []).map(i => ({ ...i, _source: src })) }))
       .catch(e => ({ ok: false, src, error: e.name === 'AbortError' ? '超时' : e.message }))
@@ -903,6 +821,7 @@ async function doSearch() {
   });
 
   let receivedCount = 0; const receivedResults = [];
+  let qualFetched = false;
   for (const p of promises) {
     const outcome = await p; receivedCount++;
     if (searchAborted) break;
@@ -913,14 +832,20 @@ async function doSearch() {
     document.getElementById('toolbar').style.display = results.length > 0 ? 'flex' : 'none';
     if (results.length > 0) renderResults();
     updateToolbar();
+    // Fetch qual badges as soon as first source returns (non-blocking)
+    if (!qualFetched && results.length > 0) {
+      qualFetched = true;
+      const stdNums = results.map(r => r.standardNumber).filter(Boolean);
+      fetchQualBadges(stdNums).then(() => { if (results.length > 0) renderResults(); });
+    }
   }
   if (searchAborted) {
     addLog('搜索已取消', 'fail');
     document.getElementById('summary').innerHTML = `<span class="count-anim">已取消 (${results.length} 条结果)</span>`;
   }
   document.getElementById('searchBtn').innerHTML = '搜索'; document.getElementById('searchBtn').disabled = false;
-  // Fetch qualification badges (non-blocking)
-  if (results.length > 0) {
+  // If qual badges weren't fetched yet (no results on first source), fetch now
+  if (!qualFetched && results.length > 0) {
     const stdNums = results.map(r => r.standardNumber).filter(Boolean);
     fetchQualBadges(stdNums).then(() => { if (results.length > 0) renderResults(); });
   }
@@ -1146,7 +1071,7 @@ document.getElementById('exportResults').addEventListener('click', () => {
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `搜索结果_${new Date().toISOString().slice(0,10)}.csv`;
+  a.download = `搜索结果_${beijingDate()}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
   showToast(`已导出 ${data.length} 条结果`);
@@ -1399,39 +1324,50 @@ async function doCascadeDownload() {
     progressText.textContent = `${completed}/${total} · ${downloadConcurrency}并发 · ${elapsed}s`;
   }
 
-  for (let round = 0; round < sources.length; round++) {
-    if (batchAborted) break;
-    const source = sources[round];
-    const remaining = items.filter(it => !successItems.some(s => s.standardId === it.standardId));
-    if (remaining.length === 0) break;
-    addLog(`━━ 第${round + 1}轮: ${srcLabel(source)} (${remaining.length}条待下载)`, 'pending');
-    const queue = [...remaining];
-    async function worker() {
-      while (queue.length > 0 && !batchAborted) {
-        const item = queue.shift();
-        setRowDownloadState(item.standardId, 'downloading');
-        const logId = addLog(`${item.standardNumber} ${srcLabel(source)} 下载中...`, 'pending');
-        try {
-          const winner = await raceSourceWithTimeout(item.standardId, source, item.standardNumber, downloadTimeout * 1000, (msg) => updateLog(logId, msg, 'pending'));
-          const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
-          updateLog(logId, `${item.standardNumber} ✅ ${srcLabel(source)} ${winner.fileName}${sizeStr}`, 'success');
+  addLog(`━━ 后端自动切源下载 (${items.length}条, 优先级: ${sources.map(s => srcLabel(s)).join(' → ')})`, 'pending');
+  const queue = [...items];
+  async function worker() {
+    while (queue.length > 0 && !batchAborted) {
+      const item = queue.shift();
+      setRowDownloadState(item.standardId, 'downloading');
+      const logId = addLog(`${item.standardNumber} 下载中...`, 'pending');
+      try {
+        // Build sourceIds map for this item
+        const r = results.find(r => r.id === item.standardId);
+        const sourceIds = {};
+        sources.forEach(s => {
+          const srcId = (r && r._sourceIds && r._sourceIds[s]) || (s === item.source ? item.standardId : null);
+          if (srcId) sourceIds[s] = srcId;
+        });
+        const resp = await fetch(`${API}/api/standards/multi-download`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sourceIds, sources }),
+        });
+        const data = await resp.json();
+        if (resp.ok && data.status === 'downloaded') {
+          const sizeStr = data.fileSize ? ` ${formatSize(data.fileSize)}` : '';
+          updateLog(logId, `${item.standardNumber} ✅ ${srcLabel(data.source)} ${data.fileName || ''}${sizeStr}`, 'success');
           setRowDownloadState(item.standardId, 'success');
           success++; successItems.push(item);
-          if (winner.fileName) { triggerDownload(winner.fileName); recordDownload(winner.source, winner.fileName, item.standardNumber); }
-        } catch (e) {
-          updateLog(logId, `${item.standardNumber} ⚠ ${srcLabel(source)} ${(e && e.message) || 'fail'}`, 'fail');
+          if (data.fileName) { triggerDownload(data.fileName); recordDownload(data.source, data.fileName, item.standardNumber); }
+        } else {
+          const errMsg = data.message || (data.errors ? Object.values(data.errors).join('; ') : '下载失败');
+          updateLog(logId, `${item.standardNumber} ❌ ${errMsg}`, 'fail');
           setRowDownloadState(item.standardId, 'fail');
+          allFailedItems.push(item);
         }
-        completed++; updateProgress();
+      } catch (e) {
+        updateLog(logId, `${item.standardNumber} ❌ ${(e && e.message) || '请求失败'}`, 'fail');
+        setRowDownloadState(item.standardId, 'fail');
+        allFailedItems.push(item);
       }
+      completed++; updateProgress();
     }
-    const workers = Array.from({ length: downloadConcurrency }, () => worker());
-    await Promise.all(workers);
-    if (remaining.filter(it => !successItems.some(s => s.standardId === it.standardId)).length === 0) break;
-    progressText.textContent = '';
   }
+  const workers = Array.from({ length: downloadConcurrency }, () => worker());
+  await Promise.all(workers);
   const finalFailed = items.filter(it => !successItems.some(s => s.standardId === it.standardId));
-  finalFailed.forEach(it => { allFailedItems.push(it); addLog(`${it.standardNumber} ❌ 所有源均失败`, 'fail'); });
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
   addLog(`━━ 批量下载完成: ${success}/${total} 成功 (${elapsed}s)`, 'success');
   if (success > 0) showToast(`批量完成 ${success}/${total} · ${elapsed}s`);
@@ -1644,10 +1580,71 @@ function renderSettings() {
       <div class="field-label" style="margin-bottom:8px">搜索记录条数</div>
       <div style="display:flex;gap:6px">${historyOpts}</div>
     </div>
+    <div class="setting-section" style="margin-bottom:20px">
+      <div class="field-label" style="margin-bottom:8px;display:flex;align-items:center;gap:8px">数据源状态 <button class="btn btn-sm btn-ghost" onclick="checkAllSources()" id="checkSourcesBtn">全部检测</button></div>
+      <div id="sourceStatusList" style="font-size:13px;color:var(--text-3)">点击"全部检测"或单个源的"重试"按钮</div>
+    </div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-ghost btn-sm" onclick="resetSettings();renderSettings()">恢复默认</button>
     </div>`;
   initDragSort();
+}
+
+var sourceStatusCache = {};
+async function checkAllSources() {
+  var btn = document.getElementById('checkSourcesBtn');
+  btn.textContent = '检测中...'; btn.disabled = true;
+  document.getElementById('sourceStatusList').innerHTML = renderSourceStatusLoading();
+  try {
+    var res = await fetch('/api/standards/check-sources');
+    var data = await res.json();
+    sourceStatusCache = data.results || {};
+    document.getElementById('sourceStatusList').innerHTML = renderSourceStatusList();
+  } catch (e) {
+    document.getElementById('sourceStatusList').innerHTML = '<span style="color:var(--danger)">检测请求失败</span>';
+  }
+  btn.textContent = '全部检测'; btn.disabled = false;
+}
+
+async function checkSingleSource(src) {
+  var el = document.getElementById('ss-' + src);
+  if (el) el.innerHTML = '<span class="spinner" style="width:12px;height:12px"></span>';
+  try {
+    var res = await fetch('/api/standards/check-sources?sources=' + src);
+    var data = await res.json();
+    Object.assign(sourceStatusCache, data.results || {});
+  } catch { sourceStatusCache[src] = { status: 'error', ms: 0, error: '请求失败' }; }
+  if (el) el.innerHTML = renderSourceStatusItem(src);
+}
+
+function renderSourceStatusLoading() {
+  return ALL_SOURCES.map(function(s) {
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">'
+      + '<span style="font-weight:500;color:var(--text);min-width:80px">' + srcLabel(s) + '</span>'
+      + '<span class="spinner" style="width:12px;height:12px"></span>'
+      + '<span style="color:var(--text-3)">检测中...</span></div>';
+  }).join('');
+}
+
+function renderSourceStatusItem(src) {
+  var r = sourceStatusCache[src];
+  if (!r) return '<span style="color:var(--text-3)">未检测</span>';
+  if (r.status === 'ok') {
+    return '<span style="color:var(--success)">● 正常</span> <span style="color:var(--text-3)">' + r.ms + 'ms</span>';
+  }
+  return '<span style="color:var(--danger)">● 异常</span> <span style="color:var(--text-3)">' + escapeHtml(r.error || '未知错误') + '</span>';
+}
+
+function renderSourceStatusList() {
+  return ALL_SOURCES.map(function(s) {
+    var r = sourceStatusCache[s];
+    var statusHtml = renderSourceStatusItem(s);
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">'
+      + '<span style="font-weight:500;color:var(--text);min-width:80px">' + srcLabel(s) + '</span>'
+      + '<span id="ss-' + s + '" style="flex:1">' + statusHtml + '</span>'
+      + '<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px" onclick="checkSingleSource(\'' + s + '\')">重试</button>'
+      + '</div>';
+  }).join('');
 }
 function toggleDownloadSource(source, enabled) {
   if (enabled) { if (!downloadSources.includes(source)) downloadSources.push(source); }
@@ -1736,8 +1733,8 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') document.get
 let logIdCounter = 0;
 let logRenderScheduled = false;
 function addLog(msg, status) {
-  const now = new Date();
-  const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const now = new Date(new Date().getTime() + 8*3600000);
+  const time = `${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}`;
   const id = ++logIdCounter;
   logEntries.unshift({ id, time, msg, status });
   if (!logRenderScheduled) {
@@ -1793,8 +1790,8 @@ function triggerDownload(fileName) {
   setTimeout(() => document.body.removeChild(a), 1000);
 }
 function recordDownload(source, fileName, standardNumber) {
-  const now = new Date();
-  const time = `${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  const now = new Date(new Date().getTime() + 8*3600000);
+  const time = `${now.getUTCMonth()+1}/${now.getUTCDate()} ${String(now.getUTCHours()).padStart(2,'0')}:${String(now.getUTCMinutes()).padStart(2,'0')}`;
   addDownloadHistory({ source, fileName, standardNumber: standardNumber || fileName, name: fileName, time });
 }
 
@@ -1957,6 +1954,11 @@ async function checkAuthStatus() {
       currentUser = data.user;
       document.getElementById('authOverlay').classList.add('hidden');
       onAuthReady();
+    } else if (!data.loginRequired) {
+      // Login not required — use guest
+      currentUser = { id: 0, username: '_guest', display_name: '访客', role: 'admin', allowed_tabs: null };
+      document.getElementById('authOverlay').classList.add('hidden');
+      onAuthReady();
     } else {
       // Show/hide register toggle based on setting
       document.getElementById('authToggle').textContent = data.registrationEnabled ? '没有账号？注册' : '';
@@ -1967,26 +1969,54 @@ async function checkAuthStatus() {
 
 function onAuthReady() {
   document.getElementById('udHeader').innerHTML = `${currentUser.display_name || currentUser.username} <span>${currentUser.role}</span>`;
+  document.getElementById('sidebarUserName').textContent = currentUser.display_name || currentUser.username;
+  document.getElementById('sidebarUserRole').textContent = currentUser.role;
   if (currentUser.role === 'admin') {
     document.getElementById('udManageUsers').style.display = '';
+    var sb = document.getElementById('sidebarUsersBtn');
+    if (sb) sb.style.display = '';
   }
+  // Apply per-user tab permissions
+  applyTabPermissions();
   // Default stats date range: last 30 days
-  const today = new Date().toISOString().slice(0, 10);
-  const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const today = beijingDate();
+  const monthAgo = new Date(new Date().getTime() + 8*3600000 - 30 * 86400000).toISOString().slice(0, 10);
   document.getElementById('statsTo').value = today;
   document.getElementById('statsFrom').value = monthAgo;
   initPanels();
-  loadSettings();
 }
 
+var TAB_LABELS = {search:'标准检索',batch:'批量下载',complete:'标准补全',history:'下载历史',qual:'资质查询',stats:'使用统计',users:'用户管理',settings:'系统设置'};
+
+function applyTabPermissions() {
+  var allowed = currentUser.allowed_tabs; // null = all allowed
+  document.querySelectorAll('.sidebar-item[data-tab]').forEach(function(item) {
+    var tab = item.dataset.tab;
+    if (tab === 'users') return; // admin-only handled separately
+    if (allowed === null || allowed.indexOf(tab) >= 0) {
+      item.style.display = '';
+    } else {
+      item.style.display = 'none';
+    }
+  });
+  // If current tab is hidden, switch to first allowed
+  var activeTab = document.querySelector('.sidebar-item.active');
+  if (activeTab && activeTab.style.display === 'none') {
+    var first = document.querySelector('.sidebar-item[data-tab]:not([style*="display: none"])');
+    if (first) switchTab(first.dataset.tab);
+  }
+}
+
+
 // Close user dropdown on outside click
-document.addEventListener('click', (e) => {
-  const dd = document.getElementById('userDropdown');
-  const btn = document.getElementById('dockUser');
-  if (dd.classList.contains('open') && !dd.contains(e.target) && !btn.contains(e.target)) {
-    dd.classList.remove('open');
+document.addEventListener("click", (e) => {
+  const dd = document.getElementById("userDropdown");
+  const btn = document.getElementById("sidebarUserToggle");
+  if (dd.classList.contains("open") && !dd.contains(e.target) && (!btn || !btn.contains(e.target))) {
+    dd.classList.remove("open");
   }
 });
+
 
 document.getElementById('authForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -2101,6 +2131,8 @@ async function loadStats() {
 }
 
 // ── Users management ──
+var selectedUserIds = new Set();
+
 async function loadUsers() {
   try {
     const [usersRes, settingsRes] = await Promise.all([
@@ -2108,6 +2140,7 @@ async function loadUsers() {
       apiFetch('/api/admin/settings').then(r => r.json()),
     ]);
     document.getElementById('regEnabledToggle').checked = settingsRes.registration_enabled;
+    document.getElementById('loginRequiredToggle').checked = settingsRes.login_required;
     const data = usersRes;
     let html = '';
     for (const u of data.users) {
@@ -2115,7 +2148,9 @@ async function loadUsers() {
       const statusBadge = u.is_active ? '<span class="badge badge-active">启用</span>' : '<span class="badge badge-inactive">禁用</span>';
       const toggleLabel = u.is_active ? '禁用' : '启用';
       const roleLabel = u.role === 'admin' ? '降为用户' : '升为管理员';
+      const checked = selectedUserIds.has(u.id) ? 'checked' : '';
       html += `<tr>
+        <td><input type="checkbox" data-uid="${u.id}" ${checked} onchange="toggleUserSelect(${u.id},this.checked)"></td>
         <td>${u.username}</td>
         <td>${u.display_name || '—'}</td>
         <td>${roleBadge}</td>
@@ -2124,13 +2159,103 @@ async function loadUsers() {
         <td>${u.download_count}</td>
         <td class="users-actions">
           <button onclick="showUserDetail(${u.id},'${u.username}')">明细</button>
+          <button onclick="showUserPerms(${u.id},'${u.username}',${encodeURIComponent(JSON.stringify(u.allowed_tabs))})">权限</button>
           <button onclick="toggleUserActive(${u.id},${u.is_active ? 0 : 1})">${toggleLabel}</button>
           <button onclick="changeUserRole(${u.id},'${u.role === 'admin' ? 'user' : 'admin'}')">${roleLabel}</button>
+          <button style="color:var(--danger)" onclick="deleteUser(${u.id},'${u.username}')">删除</button>
         </td>
       </tr>`;
     }
     document.getElementById('usersBody').innerHTML = html;
+    updateBatchBar();
   } catch (e) { console.error('Users load error:', e); }
+}
+
+function toggleUserSelect(id, checked) {
+  if (checked) selectedUserIds.add(id); else selectedUserIds.delete(id);
+  updateBatchBar();
+}
+
+function toggleSelectAllUsers(checked) {
+  document.querySelectorAll('#usersBody [data-uid]').forEach(cb => {
+    cb.checked = checked;
+    const id = parseInt(cb.dataset.uid);
+    if (checked) selectedUserIds.add(id); else selectedUserIds.delete(id);
+  });
+  updateBatchBar();
+}
+
+function updateBatchBar() {
+  const bar = document.getElementById('usersBatchBar');
+  const count = selectedUserIds.size;
+  document.getElementById('usersSelectedCount').textContent = count;
+  bar.style.display = count > 0 ? 'inline-flex' : 'none';
+}
+
+async function batchSetActive(active) {
+  const ids = [...selectedUserIds];
+  if (!ids.length) return;
+  const label = active ? '启用' : '禁用';
+  if (!confirm('确定' + label + '选中的 ' + ids.length + ' 个用户？')) return;
+  await Promise.all(ids.map(id =>
+    apiFetch('/api/admin/users/' + id, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: !!active }),
+    })
+  ));
+  selectedUserIds.clear();
+  showToast('已' + label + ' ' + ids.length + ' 个用户');
+  loadUsers();
+}
+
+async function batchDeleteUsers() {
+  const ids = [...selectedUserIds];
+  if (!ids.length) return;
+  if (!confirm('确定删除选中的 ' + ids.length + ' 个用户？此操作不可恢复')) return;
+  await Promise.all(ids.map(id => apiFetch('/api/admin/users/' + id, { method: 'DELETE' })));
+  selectedUserIds.clear();
+  showToast('已删除 ' + ids.length + ' 个用户');
+  loadUsers();
+}
+
+function showDefaultPerms() {
+  var modal = document.getElementById('modalBody');
+  var overlay = document.getElementById('modalOverlay');
+  // Load current default from settings
+  apiFetch('/api/admin/settings').then(r => r.json()).then(function(s) {
+    var defaults = s.default_allowed_tabs; // null = all allowed
+    var html = '<h3 style="margin-bottom:12px;font-size:16px">新用户默认权限</h3>';
+    html += '<p style="font-size:12px;color:var(--text-3);margin-bottom:12px">新建用户时自动应用的权限，用户创建后可单独调整</p>';
+    html += '<div id="defaultPermCheckboxes">';
+    TAB_ITEMS.forEach(function(t) {
+      var checked = (defaults === null || defaults.indexOf(t.key) >= 0) ? 'checked' : '';
+      html += '<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background=\'var(--surface-h)\'" onmouseout="this.style.background=\'\'">';
+      html += '<input type="checkbox" data-defperm="' + t.key + '" ' + checked + ' style="accent-color:var(--accent);width:16px;height:16px">';
+      html += '<span style="font-size:14px;font-weight:500">' + t.label + '</span>';
+      html += '<span style="font-size:12px;color:var(--text-3)">' + t.desc + '</span>';
+      html += '</label>';
+    });
+    html += '</div>';
+    html += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">';
+    html += '<button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'modalOverlay\').classList.remove(\'open\')">取消</button>';
+    html += '<button class="btn btn-primary btn-sm" onclick="saveDefaultPerms()">保存</button>';
+    html += '</div>';
+    modal.innerHTML = html;
+    overlay.classList.add('open');
+  });
+}
+
+async function saveDefaultPerms() {
+  var checks = document.querySelectorAll('#defaultPermCheckboxes [data-defperm]');
+  var tabs = [];
+  checks.forEach(function(cb) { if (cb.checked) tabs.push(cb.dataset.defperm); });
+  await apiFetch('/api/admin/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ default_allowed_tabs: tabs }),
+  });
+  document.getElementById('modalOverlay').classList.remove('open');
+  showToast('默认权限已保存');
 }
 
 async function toggleUserActive(id, active) {
@@ -2151,6 +2276,14 @@ async function changeUserRole(id, role) {
   loadUsers();
 }
 
+async function deleteUser(id, username) {
+  if (!confirm('确定删除用户「' + username + '」？此操作不可恢复')) return;
+  const res = await apiFetch('/api/admin/users/' + id, { method: 'DELETE' });
+  const d = await res.json();
+  if (d.ok) { showToast('用户已删除'); loadUsers(); }
+  else showToast(d.message || '删除失败', 'fail');
+}
+
 function toggleRegistration(enabled) {
   apiFetch('/api/admin/settings', {
     method: 'PUT',
@@ -2161,19 +2294,82 @@ function toggleRegistration(enabled) {
   });
 }
 
-function showCreateUser() {
+function toggleLoginRequired(enabled) {
+  apiFetch('/api/admin/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login_required: enabled }),
+  }).then(r => r.json()).then(d => {
+    document.getElementById('loginRequiredToggle').checked = d.login_required;
+  });
+}
+
+async function showCreateUser() {
   const username = prompt('用户名（至少2位）');
   if (!username || username.length < 2) return;
   const password = prompt('密码（至少6位）');
   if (!password || password.length < 6) { alert('密码至少6位'); return; }
+  // Fetch default permissions
+  let allowed_tabs = null;
+  try {
+    const s = await apiFetch('/api/admin/settings').then(r => r.json());
+    allowed_tabs = s.default_allowed_tabs; // null = all
+  } catch { /* keep null */ }
   apiFetch('/api/admin/users', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password, allowed_tabs }),
   }).then(r => r.json()).then(d => {
-    if (d.user) { alert('用户已创建'); loadUsers(); }
-    else alert(d.message || '创建失败');
+    if (d.user) { showToast('用户已创建'); loadUsers(); }
+    else showToast(d.message || '创建失败', 'fail');
   });
+}
+
+var TAB_ITEMS = [
+  { key: 'search', label: '标准检索', desc: '搜索和下载标准' },
+  { key: 'batch', label: '批量下载', desc: '批量解析和下载' },
+  { key: 'complete', label: '标准补全', desc: 'Excel/CSV 自动补全' },
+  { key: 'history', label: '下载历史', desc: '查看下载记录' },
+  { key: 'qual', label: '资质查询', desc: 'CNAS/CMA 资质' },
+  { key: 'stats', label: '使用统计', desc: '查看使用数据' },
+  { key: 'settings', label: '系统设置', desc: '下载模式和参数' },
+];
+
+function showUserPerms(userId, username, encodedTabs) {
+  var allowed = JSON.parse(decodeURIComponent(encodedTabs)); // null = all allowed
+  var modal = document.getElementById('modalBody');
+  var overlay = document.getElementById('modalOverlay');
+  var html = '<h3 style="margin-bottom:12px;font-size:16px">功能权限 — ' + username + '</h3>';
+  html += '<p style="font-size:12px;color:var(--text-3);margin-bottom:12px">勾选用户可使用的功能，未勾选的功能在侧边栏中不显示</p>';
+  html += '<div id="permCheckboxes">';
+  TAB_ITEMS.forEach(function(t) {
+    var checked = (allowed === null || allowed.indexOf(t.key) >= 0) ? 'checked' : '';
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background=\'var(--surface-h)\'" onmouseout="this.style.background=\'\'">';
+    html += '<input type="checkbox" data-perm-tab="' + t.key + '" ' + checked + ' style="accent-color:var(--accent);width:16px;height:16px">';
+    html += '<span style="font-size:14px;font-weight:500">' + t.label + '</span>';
+    html += '<span style="font-size:12px;color:var(--text-3)">' + t.desc + '</span>';
+    html += '</label>';
+  });
+  html += '</div>';
+  html += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">';
+  html += '<button class="btn btn-ghost btn-sm" onclick="document.getElementById(\'modalOverlay\').classList.remove(\'open\')">取消</button>';
+  html += '<button class="btn btn-primary btn-sm" onclick="saveUserPerms(' + userId + ')">保存</button>';
+  html += '</div>';
+  modal.innerHTML = html;
+  overlay.classList.add('open');
+}
+
+async function saveUserPerms(userId) {
+  var checks = document.querySelectorAll('#permCheckboxes [data-perm-tab]');
+  var tabs = [];
+  checks.forEach(function(cb) { if (cb.checked) tabs.push(cb.dataset.permTab); });
+  await apiFetch('/api/admin/users/' + userId, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ allowed_tabs: tabs }),
+  });
+  document.getElementById('modalOverlay').classList.remove('open');
+  loadUsers();
 }
 
 async function showUserDetail(userId, username) {
@@ -2209,7 +2405,7 @@ async function showUserDetail(userId, username) {
     if (d.recent.length > 0) {
       listHtml = '<div style="max-height:320px;overflow-y:auto;margin-top:8px"><table class="users-table"><thead><tr><th>时间</th><th>类型</th><th>来源</th><th>标准号</th></tr></thead><tbody>';
       for (const e of d.recent) {
-        const time = e.created_at ? e.created_at.slice(0, 16).replace('T', ' ') : '—';
+        const time = e.created_at ? utcToBeijing(e.created_at) : '—';
         const typeLabel = typeLabels[e.event_type] || e.event_type;
         const color = typeColors[e.event_type] || 'var(--text-2)';
         listHtml += `<tr>
@@ -2235,6 +2431,9 @@ async function showUserDetail(userId, username) {
 // ── Qualification ──
 let qualSearchSource = '';
 let qualData = {}; // stdCode -> Qualification[] (from search result badges)
+function beijingDate() { const d = new Date(new Date().getTime() + 8*3600000); return d.toISOString().slice(0, 10); }
+function beijingTime() { const d = new Date(new Date().getTime() + 8*3600000); return d.toISOString().slice(0, 19).replace('T', ' '); }
+function utcToBeijing(utcStr) { if (!utcStr) return ''; const d = new Date(utcStr); d.setTime(d.getTime() + 8*3600000); return d.toISOString().slice(0, 16).replace('T', ' '); }
 
 function switchQualTab(tab) {
   document.querySelectorAll('.qual-tab').forEach(t => {
@@ -2246,7 +2445,7 @@ function switchQualTab(tab) {
   document.getElementById('qualSearchTab').style.display = tab === 'search' ? '' : 'none';
   document.getElementById('qualLabsTab').style.display = tab === 'labs' ? '' : 'none';
   document.getElementById('qualLogsTab').style.display = tab === 'logs' ? '' : 'none';
-  if (tab === 'labs') loadQualLabs();
+  if (tab === 'labs') { loadQualLabs(); loadLabsSyncLogs(); }
   if (tab === 'logs') loadQualSyncLogs('cnas');
 }
 
@@ -2273,56 +2472,101 @@ async function doQualSearch() {
 
 function renderQualSearchResults(items) {
   if (!items.length) { document.getElementById('qualResults').innerHTML = '<div class="qual-empty">未找到匹配的资质信息</div>'; return; }
-  // Group by stdCode, deduplicate by category+testItem
-  const groups = {};
-  for (const it of items) {
-    if (!groups[it.stdCode]) groups[it.stdCode] = { stdName: it.stdName, items: [] };
-    const g = groups[it.stdCode];
-    const key = (it.source || '') + '|' + (it.category || '') + '|' + (it.testItem || '') + '|' + (it.testStandard || '');
-    if (!g.seen) g.seen = new Set();
-    if (g.seen.has(key)) continue;
-    g.seen.add(key);
-    g.items.push(it);
-  }
-  const now = new Date().toISOString().slice(0, 10);
-  const html = Object.entries(groups).map(([code, g]) => {
-    const rows = g.items.map(it => {
-      const expired = it.expiryDate && it.expiryDate < now;
-      const parts = [];
-      // Category
-      if (it.category) {
-        const cats = it.category.split('-').map(s => s.trim()).filter(Boolean);
-        parts.push(`<div style="margin-bottom:4px">${cats.map(c => '<span style="display:inline-block;padding:1px 6px;background:var(--surface-h);border-radius:3px;font-size:10px;color:var(--text-2);margin-right:4px;margin-bottom:2px">' + escapeHtml(c) + '</span>').join('')}</div>`);
-      }
-      // Test item
-      if (it.testItem) {
-        parts.push(`<div style="font-size:12px;color:var(--text);line-height:1.5"><span style="color:var(--text-3);font-size:11px">检测项目</span> ${escapeHtml(it.testItem.length > 60 ? it.testItem.slice(0, 60) + '…' : it.testItem)}</div>`);
-      }
-      // Limit
-      if (it.limitDesc && it.limitDesc !== '/' && it.limitDesc !== '—') {
-        parts.push(`<div style="font-size:11px;color:var(--warning);margin-top:2px">限定: ${escapeHtml(it.limitDesc.length > 50 ? it.limitDesc.slice(0, 50) + '…' : it.limitDesc)}</div>`);
-      }
-      // Dates
-      const dates = [];
-      if (it.effectiveDate) dates.push('<span style="color:' + (expired ? 'var(--danger)' : 'var(--success)') + '">生效 ' + escapeHtml(it.effectiveDate) + '</span>');
-      if (it.expiryDate) dates.push('<span style="color:' + (expired ? 'var(--danger)' : 'var(--text-2)') + '">' + (expired ? '已过期 ' : '到期 ') + escapeHtml(it.expiryDate) + '</span>');
-      if (dates.length) parts.push('<div style="font-size:11px;margin-top:4px">' + dates.join(' · ') + '</div>');
 
-      return `<div class="qual-result-item">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:${parts.length ? '6px' : '0'}">
-          <span class="qual-badge qual-badge-${it.source.toLowerCase()}" style="display:inline-flex"><span class="qual-dot"></span>${it.source}</span>
-          ${it.stdName ? '<span style="font-size:12px;color:var(--text-2)">' + escapeHtml(it.stdName.length > 30 ? it.stdName.slice(0, 30) + '…' : it.stdName) + '</span>' : ''}
-        </div>
-        ${parts.join('')}
-      </div>`;
-    }).join('');
-    return `<div class="qual-result-group">
-      <div class="qual-result-std">${escapeHtml(code)}<span class="qual-std-name">${escapeHtml(g.stdName || '')}</span></div>
-      ${rows}
-    </div>`;
-  }).join('');
-  const totalCount = Object.values(groups).reduce((s, g) => s + g.items.length, 0);
-  document.getElementById('qualResults').innerHTML = `<div style="font-size:11px;color:var(--text-3);margin-bottom:8px">共 ${totalCount} 条资质</div>${html}`;
+  // Split by source
+  const cnasItems = items.filter(it => it.source === 'CNAS');
+  const cmaItems = items.filter(it => it.source === 'CMA');
+
+  const now = beijingDate();
+
+  function buildColumn(title, color, colItems) {
+    if (!colItems.length) return '<div class="qual-col"><div class="qual-col-header" style="border-left:3px solid ' + color + '">' + title + '</div><div class="qual-empty" style="padding:20px 0">无匹配结果</div></div>';
+    // Group by stdCode
+    const groups = {};
+    for (const it of colItems) {
+      if (!groups[it.stdCode]) groups[it.stdCode] = { stdName: it.stdName, items: [] };
+      const g = groups[it.stdCode];
+      const key = (it.category || '') + '|' + (it.testItem || '') + '|' + (it.testStandard || '');
+      if (!g.seen) g.seen = new Set();
+      if (g.seen.has(key)) continue;
+      g.seen.add(key);
+      g.items.push(it);
+    }
+    let html = '';
+    let groupIdx = 0;
+    // Strip duplicated standard code from stdName (e.g. "家具... GB 18584-2024" -> "家具...")
+    function cleanStdName(code, name) {
+      if (!name) return '';
+      // Remove trailing standard code like " GB 18584-2024" or " GB/T 1234-2020"
+      var escaped = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return name.replace(new RegExp('\\s*' + escaped + '\\s*$', 'i'), '').trim()
+                 .replace(new RegExp('^\\s*' + escaped + '\\s*', 'i'), '').trim() || name;
+    }
+    for (const [code, g] of Object.entries(groups)) {
+      const gid = 'qg_' + title + '_' + (groupIdx++);
+      const cleanName = cleanStdName(code, g.stdName);
+      const rows = g.items.map(it => {
+        const expired = it.expiryDate && it.expiryDate < now;
+        const parts = [];
+        if (it.category) {
+          const cats = it.category.split('-').map(s => s.trim()).filter(Boolean);
+          parts.push('<div style="margin-bottom:3px">' + cats.map(c => '<span style="display:inline-block;padding:1px 5px;background:var(--surface-h);border-radius:3px;font-size:10px;color:var(--text-2);margin-right:3px;margin-bottom:2px">' + escapeHtml(c) + '</span>').join('') + '</div>');
+        }
+        if (it.testItem) {
+          parts.push('<div style="font-size:12px;color:var(--text);line-height:1.4"><span style="color:var(--text-3);font-size:10px">检测项目 </span>' + escapeHtml(it.testItem.length > 80 ? it.testItem.slice(0, 80) + '…' : it.testItem) + '</div>');
+        }
+        if (it.limitDesc && it.limitDesc !== '/' && it.limitDesc !== '—') {
+          parts.push('<div style="font-size:11px;color:var(--warning);margin-top:2px">限定: ' + escapeHtml(it.limitDesc.length > 60 ? it.limitDesc.slice(0, 60) + '…' : it.limitDesc) + '</div>');
+        }
+        const dates = [];
+        if (it.effectiveDate) dates.push('<span style="color:' + (expired ? 'var(--danger)' : 'var(--success)') + '">生效 ' + escapeHtml(it.effectiveDate) + '</span>');
+        if (it.expiryDate) dates.push('<span style="color:' + (expired ? 'var(--danger)' : 'var(--text-2)') + '">' + (expired ? '已过期 ' : '到期 ') + escapeHtml(it.expiryDate) + '</span>');
+        if (dates.length) parts.push('<div style="font-size:11px;margin-top:3px">' + dates.join(' · ') + '</div>');
+        return '<div class="qual-result-item">' + parts.join('') + '</div>';
+      }).join('');
+      html += '<div class="qual-result-group">'
+        + '<div class="qual-result-std" onclick="toggleQualGroup(\'' + gid + '\')" style="cursor:pointer">'
+        + '<span class="qual-group-arrow" id="' + gid + '_arrow" style="display:inline-block;width:16px;font-size:10px;color:var(--text-3);transition:transform 0.2s">▶</span>'
+        + escapeHtml(code) + '<span class="qual-std-name">' + escapeHtml(cleanName) + '</span>'
+        + '<span style="float:right;font-size:11px;color:var(--text-3)">' + g.items.length + ' 项</span>'
+        + '</div>'
+        + '<div id="' + gid + '_body" style="display:none">' + rows + '</div>'
+        + '</div>';
+    }
+    return '<div class="qual-col"><div class="qual-col-header" style="border-left:3px solid ' + color + '">' + title + ' <span style="font-size:11px;color:var(--text-3)">' + Object.keys(groups).length + ' 个标准 · ' + colItems.length + ' 条</span></div>' + html + '</div>';
+  }
+
+  const totalCount = items.length;
+  const header = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
+    + '<span style="font-size:11px;color:var(--text-3)">共 ' + totalCount + ' 条资质</span>'
+    + '<span style="display:flex;gap:8px">'
+    + '<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px" onclick="toggleAllQualGroups(true)">全部展开</button>'
+    + '<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px" onclick="toggleAllQualGroups(false)">全部收起</button>'
+    + '</span></div>';
+  const content = '<div class="qual-results-grid">' + buildColumn('CMA', '#f59e0b', cmaItems) + buildColumn('CNAS', '#3b82f6', cnasItems) + '</div>';
+  document.getElementById('qualResults').innerHTML = header + content;
+}
+
+function toggleAllQualGroups(expand) {
+  document.querySelectorAll('#qualResults [id$="_body"]').forEach(function(el) {
+    el.style.display = expand ? '' : 'none';
+  });
+  document.querySelectorAll('#qualResults .qual-group-arrow').forEach(function(el) {
+    el.style.transform = expand ? 'rotate(90deg)' : '';
+  });
+}
+
+function toggleQualGroup(gid) {
+  var body = document.getElementById(gid + '_body');
+  var arrow = document.getElementById(gid + '_arrow');
+  if (!body) return;
+  if (body.style.display === 'none') {
+    body.style.display = '';
+    arrow.style.transform = 'rotate(90deg)';
+  } else {
+    body.style.display = 'none';
+    arrow.style.transform = '';
+  }
 }
 
 // ── Qual Lab Management ──
@@ -2344,17 +2588,17 @@ function renderQualLabs(type, labs) {
   const statusColors = { success: 'var(--success)', syncing: 'var(--warning)', error: 'var(--danger)' };
   container.innerHTML = labs.map(lab => {
     const statusColor = statusColors[lab.sync_status] || 'var(--text-3)';
-    const syncInfo = lab.last_sync_at ? `<span>${lab.last_sync_at.slice(0, 16).replace('T', ' ')}</span>` : '<span style="color:var(--text-3)">未同步</span>';
+    const syncInfo = lab.last_sync_at ? `<span>${utcToBeijing(lab.last_sync_at)}</span>` : '<span style="color:var(--text-3)">未同步</span>';
     return `<div class="qual-lab-card">
       <div class="qual-lab-header">
-        <div class="qual-lab-name">${escapeHtml(lab[nameField] || lab[idField])}</div>
+        <div class="qual-lab-name">${escapeHtml((lab[nameField] && !/^[?]+$/.test(lab[nameField]) && lab[nameField].length > 1) ? lab[nameField] + '（' + lab[idField] + '）' : lab[idField])}</div>
         <div class="qual-lab-actions">
+          <button onclick="editQualLabName('${type}','${escapeHtml(lab[idField])}',${JSON.stringify(lab[nameField] || '').replace(/"/g, '&quot;')})">编辑</button>
           <button onclick="syncQualLab('${type}','${escapeHtml(lab[idField])}')">同步</button>
           <button class="danger" onclick="deleteQualLab('${type}','${escapeHtml(lab[idField])}')">删除</button>
         </div>
       </div>
       <div class="qual-lab-meta">
-        <div>${type === 'cnas' ? '实验室号' : '证书号'}: <span>${escapeHtml(lab[idField])}</span></div>
         <div>状态: <span style="color:${statusColor}">${lab.sync_status || '—'}</span> | 记录: <span>${lab.record_count}</span> | 上次同步: ${syncInfo}</div>
         ${lab.sync_error ? `<div style="color:var(--danger);font-size:11px">${escapeHtml(lab.sync_error)}</div>` : ''}
       </div>
@@ -2391,6 +2635,24 @@ async function addQualLab(type) {
   }
 }
 
+async function editQualLabName(type, id, currentName) {
+  const newName = prompt('输入机构名称', currentName || '');
+  if (newName === null) return;
+  const url = type === 'cnas' ? `/api/cnas/labs/${encodeURIComponent(id)}` : `/api/cma/labs/${encodeURIComponent(id)}`;
+  try {
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lab_name: newName }),
+    });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.message); }
+    loadQualLabs();
+    showToast('名称已更新');
+  } catch (e) {
+    showToast(`更新失败: ${e.message}`, 'fail');
+  }
+}
+
 function CnasScraper_parseUrl(url) {
   try {
     const u = new URL(url);
@@ -2421,6 +2683,7 @@ async function syncQualLab(type, id) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.message);
     loadQualLabs();
+    loadLabsSyncLogs();
     showToast(`同步完成: ${data.records} 条记录`);
   } catch (e) { showToast(`同步失败: ${e.message}`, 'fail'); }
 }
@@ -2434,6 +2697,7 @@ async function syncAllQualLabs() {
     ]);
     await cnasRes.json(); await cmaRes.json();
     loadQualLabs();
+    loadLabsSyncLogs();
     showToast('全部同步完成');
   } catch (e) { showToast(`同步失败: ${e.message}`, 'fail'); }
 }
@@ -2457,7 +2721,7 @@ async function loadQualSyncLogs(source) {
     if (!logs.length) { container.innerHTML = '<div style="color:var(--text-3);padding:16px 0;text-align:center">暂无同步记录</div>'; return; }
     const statusColors = { success: 'var(--success)', error: 'var(--danger)' };
     container.innerHTML = logs.map(l => {
-      const time = l.started_at ? l.started_at.slice(0, 16).replace('T', ' ') : '';
+      const time = utcToBeijing(l.started_at);
       const idField = l.lab_no || l.cert_number || '';
       return `<div class="qual-sync-log">
         <div style="display:flex;justify-content:space-between;align-items:center">
@@ -2468,6 +2732,36 @@ async function loadQualSyncLogs(source) {
       </div>`;
     }).join('');
   } catch (e) { /* silent */ }
+}
+
+async function loadLabsSyncLogs() {
+  const container = document.getElementById('qualLabsSyncLogs');
+  if (!container) return;
+  try {
+    const [cnasRes, cmaRes] = await Promise.all([
+      fetch('/api/cnas/sync-logs?limit=15'),
+      fetch('/api/cma/sync-logs?limit=15'),
+    ]);
+    const cnasLogs = await cnasRes.json();
+    const cmaLogs = await cmaRes.json();
+    const allLogs = [
+      ...cnasLogs.map(l => ({ ...l, _src: 'CNAS' })),
+      ...cmaLogs.map(l => ({ ...l, _src: 'CMA' })),
+    ].sort((a, b) => (b.started_at || '').localeCompare(a.started_at || ''));
+    if (!allLogs.length) { container.innerHTML = '<div style="color:var(--text-3);padding:16px 0;text-align:center">暂无同步记录</div>'; return; }
+    const statusColors = { success: 'var(--success)', error: 'var(--danger)' };
+    container.innerHTML = allLogs.slice(0, 30).map(l => {
+      const time = utcToBeijing(l.started_at);
+      const idField = l.lab_no || l.cert_number || '';
+      return `<div class="qual-sync-log">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span><span style="color:var(--text-2);font-size:10px;margin-right:4px">${l._src}</span><span style="color:var(--text)">${escapeHtml(idField)}</span> ${escapeHtml(l.action)}</span>
+          <span style="color:${statusColors[l.status] || 'var(--text-3)'}">${l.status}</span>
+        </div>
+        <div class="log-time">${time} | ${l.records_fetched} 条${l.error_message ? ' | <span style="color:var(--danger)">' + escapeHtml(l.error_message) + '</span>' : ''}</div>
+      </div>`;
+    }).join('');
+  } catch (e) { container.innerHTML = ''; }
 }
 
 // ── Qual badges for search results ──
@@ -2493,7 +2787,7 @@ function qualBadgeHtml(standardNumber) {
 }
 
 function buildQualTooltip(quals, source) {
-  const now = new Date().toISOString().slice(0, 10);
+  const now = beijingDate();
   const parts = [];
 
   // Deduplicate by testStandard + category
@@ -2515,6 +2809,7 @@ function buildQualTooltip(quals, source) {
     if (q.limitDesc && q.limitDesc !== '/' && q.limitDesc !== '—') {
       lines.push('<span style="color:var(--warning)">限定</span> ' + escapeHtml(q.limitDesc.length > 30 ? q.limitDesc.slice(0, 30) + '…' : q.limitDesc));
     }
+    // Authorization dates
     const dates = [];
     if (q.effectiveDate) {
       const expired = q.expiryDate && q.expiryDate < now;

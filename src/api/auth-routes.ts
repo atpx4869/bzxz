@@ -9,7 +9,10 @@ import { getSetting } from '../services/db';
 import { parseCookie } from '../shared/errors';
 
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
-const COOKIE_OPTS = 'bzxz_session=TOKEN; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000';
+function cookieOpts(token: string): string {
+  const expires = new Date(Date.now() + SESSION_MAX_AGE_MS).toUTCString();
+  return `bzxz_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000; Expires=${expires}`;
+}
 const SALT_ROUNDS = 10;
 
 export function createAuthRoutes(db: Database.Database, requireAuth: (req: Request, res: Response, next: NextFunction) => void) {
@@ -23,15 +26,16 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
     let user: AuthUser | null = null;
     if (token) {
       const row = db.prepare(`
-        SELECT u.id, u.username, u.display_name, u.role
+        SELECT u.id, u.username, u.display_name, u.role, u.allowed_tabs
         FROM sessions s JOIN users u ON u.id = s.user_id
         WHERE s.token = ? AND s.expires_at > ? AND u.is_active = 1
-      `).get(token, new Date().toISOString()) as AuthUser | undefined;
-      if (row) user = row;
+      `).get(token, new Date().toISOString()) as (AuthUser & { allowed_tabs: string | null }) | undefined;
+      if (row) user = { ...row, allowed_tabs: row.allowed_tabs ? JSON.parse(row.allowed_tabs) : null };
     }
 
     const registrationEnabled = getSetting(db, 'registration_enabled', '1') === '1';
-    res.json({ needsSetup: userCount === 0, user, registrationEnabled });
+    const loginRequired = getSetting(db, 'login_required', '0') === '1';
+    res.json({ needsSetup: userCount === 0, user, registrationEnabled, loginRequired });
   });
 
   // POST /api/auth/register
@@ -73,9 +77,9 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
       const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_MS).toISOString();
       db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, result.lastInsertRowid, expiresAt);
 
-      res.setHeader('Set-Cookie', COOKIE_OPTS.replace('TOKEN', token));
+      res.setHeader('Set-Cookie', cookieOpts(token));
       res.status(201).json({
-        user: { id: result.lastInsertRowid, username, display_name: display_name || '', role },
+        user: { id: result.lastInsertRowid, username, display_name: display_name || '', role, allowed_tabs: null },
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -95,8 +99,8 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
       });
       const { username, password } = schema.parse(req.body);
 
-      const row = db.prepare('SELECT id, username, password, display_name, role, is_active FROM users WHERE username = ?').get(username) as {
-        id: number; username: string; password: string; display_name: string; role: string; is_active: number;
+      const row = db.prepare('SELECT id, username, password, display_name, role, is_active, allowed_tabs FROM users WHERE username = ?').get(username) as {
+        id: number; username: string; password: string; display_name: string; role: string; is_active: number; allowed_tabs: string | null;
       } | undefined;
 
       if (!row || !row.is_active) {
@@ -114,8 +118,8 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
       const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_MS).toISOString();
       db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, row.id, expiresAt);
 
-      res.setHeader('Set-Cookie', COOKIE_OPTS.replace('TOKEN', token));
-      res.json({ user: { id: row.id, username: row.username, display_name: row.display_name, role: row.role } });
+      res.setHeader('Set-Cookie', cookieOpts(token));
+      res.json({ user: { id: row.id, username: row.username, display_name: row.display_name, role: row.role, allowed_tabs: row.allowed_tabs ? JSON.parse(row.allowed_tabs) : null } });
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({ code: 'BAD_REQUEST', message: '参数无效' });

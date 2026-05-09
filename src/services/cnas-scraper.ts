@@ -93,6 +93,25 @@ export class CnasScraper {
     return page;
   }
 
+  /** Fetch the lab/organization name from the CNAS page */
+  async fetchLabName(labInfo: CnasLabInfo): Promise<string> {
+    const page = await this.navigateToLab(labInfo);
+    try {
+      const name = await page.evaluate(() => {
+        // Try common selectors for the organization name on the CNAS page
+        const el = document.querySelector('.orgName, .lab-name, h2, h3, .title');
+        if (el) return el.textContent?.trim() ?? '';
+        // Try page title
+        const t = document.title;
+        if (t && !t.includes('__jsl')) return t;
+        return '';
+      });
+      return name;
+    } catch {
+      return '';
+    }
+  }
+
   /** Fetch a single page of capabilities, returns null if anti-bot triggered */
   private async fetchPage(
     page: Page,

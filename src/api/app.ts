@@ -95,6 +95,31 @@ export function createApp() {
     res.json({ ok: true, sources: sourceRegistry.list() });
   });
 
+  // Source detection: test each source with a quick search
+  app.get('/api/standards/check-sources', requireAuth, async (req, res) => {
+    const sources = (req.query.sources as string || '').split(',').filter(Boolean) as SourceName[];
+    const targets = sources.length ? sources : sourceRegistry.list();
+    const results: Record<string, { status: string; ms: number; error?: string }> = {};
+    await Promise.all(targets.map(async (src) => {
+      const start = Date.now();
+      try {
+        const adapter = sourceRegistry.get(src);
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 5000);
+        await adapter.searchStandards({ query: 'GB/T 1.1' });
+        clearTimeout(timer);
+        results[src] = { status: 'ok', ms: Date.now() - start };
+      } catch (e: any) {
+        results[src] = { status: 'error', ms: Date.now() - start, error: e.name === 'AbortError' ? '超时' : (e.message || '连接失败') };
+      }
+    }));
+    res.json({ results });
+  });
+
+  // Search cache: key = "source:query", value = { items, expires }
+  const searchCache = new Map<string, { items: any[]; expires: number }>();
+  const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
   app.get('/api/standards/search', requireAuth, async (req, res, next) => {
     try {
       const querySchema = z.object({
@@ -104,8 +129,20 @@ export function createApp() {
 
       const { q, source } = querySchema.parse(req.query);
       const selectedSource = (source ?? 'bz') as SourceName;
+      const cacheKey = `${selectedSource}:${q}`;
+
+      // Check cache
+      const cached = searchCache.get(cacheKey);
+      if (cached && cached.expires > Date.now()) {
+        trackEvent(db, req.user!.id, 'search', selectedSource, undefined, { query: q, resultCount: cached.items.length, cached: true });
+        res.json({ items: cached.items, total: cached.items.length, sourceSummary: { requested: 1, succeeded: 1, failed: 0, source: selectedSource } });
+        return;
+      }
+
       const service = new StandardService(sourceRegistry.get(selectedSource));
       const results = await service.searchStandards({ query: q });
+      // Store in cache
+      searchCache.set(cacheKey, { items: results, expires: Date.now() + CACHE_TTL_MS });
       trackEvent(db, req.user!.id, 'search', selectedSource, undefined, { query: q, resultCount: results.length });
 
       res.json({
@@ -209,6 +246,50 @@ export function createApp() {
       const result = await adapter.autoDownload(id, 5);
       trackEvent(db, req.user!.id, 'download', parsed.source, id);
       res.json(result);
+    } catch (error) {
+      next(normalizeError(error));
+    }
+  });
+
+  // Multi-source download with auto-fallback
+  app.post('/api/standards/multi-download', requireAuth, async (req, res, next) => {
+    try {
+      const bodySchema = z.object({
+        sourceIds: z.record(z.string(), z.string()), // { gbw: 'gbw:xxx', bz: 'bz:yyy', ... }
+        sources: z.array(sourceEnum).min(1),          // priority order: ['bzvip','gbw','by','bz']
+      });
+      const { sourceIds, sources } = bodySchema.parse(req.body);
+
+      const errors: Record<string, string> = {};
+      for (const src of sources) {
+        const standardId = sourceIds[src];
+        if (!standardId) { errors[src] = '未提供此源的ID'; continue; }
+
+        const adapter = sourceRegistry.get(src as SourceName);
+        try {
+          if (adapter.autoDownload) {
+            const result = await adapter.autoDownload(standardId, 3);
+            if (result.status === 'downloaded') {
+              trackEvent(db, req.user!.id, 'download', src, standardId);
+              res.json({ source: src, ...result });
+              return;
+            }
+            errors[src] = result.status;
+          } else if (adapter.exportStandard) {
+            // Async adapter (bz, by) — use export and wait
+            const exportResult = await adapter.exportStandard(standardId);
+            trackEvent(db, req.user!.id, 'download', src, standardId);
+            res.json({ source: src, status: 'downloaded', fileName: exportResult.fileName, fileSize: exportResult.fileSize });
+            return;
+          } else {
+            errors[src] = '不支持下载';
+          }
+        } catch (e: any) {
+          errors[src] = e.message || '下载失败';
+        }
+      }
+
+      res.status(404).json({ status: 'failed', errors, message: '所有源均下载失败' });
     } catch (error) {
       next(normalizeError(error));
     }

@@ -27,7 +27,9 @@ npm run build
 node dist/src/index.js
 ```
 
-打开 `http://localhost:3000`，首次访问自动进入注册页面（首个用户为管理员）。
+打开 `http://localhost:3000`。默认免登录模式，直接使用。首次注册用户自动成为管理员。
+
+如需启用登录验证，在「用户管理」中勾选「需要登录」。
 
 ### 一键启动 (Windows)
 
@@ -61,11 +63,15 @@ start.bat
 
 基于 SQLite 的本地用户体系，无需外部数据库。
 
+- **免登录模式**：默认开启，无需注册即可使用所有功能（管理员权限）
 - **注册**：首个注册用户自动成为管理员，后续默认普通用户
 - **登录**：Session Cookie（HttpOnly，30 天滑动续期）
 - **管理员功能**：
   - 开启/关闭公开注册
-  - 用户增删改查（角色、启用/禁用）
+  - 开启/关闭登录验证（需要登录）
+  - 用户增删改查（角色、启用/禁用、权限）
+  - 用户级功能权限控制（按 Tab 配置可访问功能）
+  - 新用户默认权限设置
   - 查看用户使用明细（搜索/下载次数、来源分布、事件列表）
 
 ## 使用统计
@@ -135,6 +141,8 @@ start.bat
 | POST | `/api/standards/:id/preview/detect` | 探测预览 |
 | POST | `/api/standards/:id/export` | 导出（bz/bvip） |
 | POST | `/api/standards/:id/auto-download` | BW 自动验证码下载 |
+| POST | `/api/standards/multi-download` | 多源自动切源下载（按优先级依次尝试） |
+| GET | `/api/standards/check-sources` | 检测各数据源连接状态 |
 | POST | `/api/standards/:id/download-session` | 创建下载会话 |
 | POST | `/api/download-sessions/:id/verify` | 提交验证码 |
 | GET | `/api/download-sessions/:id` | 查询下载会话 |
@@ -189,20 +197,23 @@ start.bat
 ## 前端功能
 
 - 现代深色毛玻璃主题（oklch 色彩空间 + backdrop-filter）
+- 免登录模式（默认开启，无需注册即可使用）
 - 多源并行搜索 + 去重 + 状态排序
 - 搜索结果自动标注 CNAS/CMA 资质能力（绿色徽章）
 - 卡片式结果展示（进场动画）
 - 批量勾选下载 + 进度条 + 完成通知
+- **后端自动切源下载**：批量下载时后端按优先级自动尝试多个源，失败自动切换
 - 行级下载反馈（spinner + 卡片高亮 + 成功/失败闪烁）
 - BZ 页级实时进度
 - 搜索历史（可配置条数 3~20，localStorage 持久化）
 - 键盘快捷键（`Ctrl+K` 搜索 / `Ctrl+Enter` 确认 / `Esc` 关闭 / `?` 查看）
-- BW 自动 OCR 验证码
+- BW 自动 OCR 验证码 + 有文本检测修复
 - 下载优先级设置（持久化）
+- 数据源健康检测（设置页手动检测 + 单源重试）
 - 底部日志面板 + 执行历史
 - 登录/注册界面 + 用户菜单
 - 使用统计仪表盘（Chart.js 图表）
-- 管理员用户管理面板（含使用明细）
+- 管理员用户管理面板（批量操作、权限控制、使用明细）
 - 资质能力验证面板（CNAS/CMA 实验室管理 + 同步日志）
 
 ## Electron 桌面端

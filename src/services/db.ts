@@ -35,6 +35,7 @@ function migrate(db: Database.Database): void {
       display_name  TEXT NOT NULL DEFAULT '',
       role          TEXT NOT NULL DEFAULT 'user',
       is_active     INTEGER NOT NULL DEFAULT 1,
+      allowed_tabs  TEXT DEFAULT NULL,
       created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
       updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
@@ -166,6 +167,9 @@ function migrate(db: Database.Database): void {
       error_message   TEXT
     );
   `);
+
+  // Migration: add allowed_tabs column if missing (existing DBs)
+  try { db.exec("ALTER TABLE users ADD COLUMN allowed_tabs TEXT DEFAULT NULL"); } catch { /* column exists */ }
 
   // Seed defaults
   const regEnabled = db.prepare("SELECT value FROM settings WHERE key = 'registration_enabled'").get();

@@ -6,13 +6,24 @@ import { getSetting, setSetting } from '../services/db';
 
 const SALT_ROUNDS = 10;
 
+const ALL_TABS = ['search', 'batch', 'complete', 'history', 'qual', 'stats', 'settings'] as const;
+export { ALL_TABS };
+
+function parseAllowedTabs(raw: string | null): string[] | null {
+  if (!raw) return null; // null = all tabs allowed
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
 export function createAdminRoutes(db: Database.Database) {
   const router = Router();
 
   // GET /api/admin/settings
   router.get('/settings', (_req, res) => {
+    const defaultTabsRaw = getSetting(db, 'default_allowed_tabs', '');
     res.json({
       registration_enabled: getSetting(db, 'registration_enabled', '1') === '1',
+      login_required: getSetting(db, 'login_required', '0') === '1',
+      default_allowed_tabs: defaultTabsRaw ? parseAllowedTabs(defaultTabsRaw) : null,
     });
   });
 
@@ -20,27 +31,40 @@ export function createAdminRoutes(db: Database.Database) {
   router.put('/settings', (req, res) => {
     const schema = z.object({
       registration_enabled: z.boolean().optional(),
+      login_required: z.boolean().optional(),
+      default_allowed_tabs: z.array(z.enum(['search', 'batch', 'complete', 'history', 'qual', 'stats', 'settings'])).nullable().optional(),
     });
     const updates = schema.parse(req.body);
     if (updates.registration_enabled !== undefined) {
       setSetting(db, 'registration_enabled', updates.registration_enabled ? '1' : '0');
     }
+    if (updates.login_required !== undefined) {
+      setSetting(db, 'login_required', updates.login_required ? '1' : '0');
+    }
+    if (updates.default_allowed_tabs !== undefined) {
+      setSetting(db, 'default_allowed_tabs', updates.default_allowed_tabs ? JSON.stringify(updates.default_allowed_tabs) : '');
+    }
+    const defaultTabsRaw = getSetting(db, 'default_allowed_tabs', '');
     res.json({
       registration_enabled: getSetting(db, 'registration_enabled', '1') === '1',
+      login_required: getSetting(db, 'login_required', '0') === '1',
+      default_allowed_tabs: defaultTabsRaw ? parseAllowedTabs(defaultTabsRaw) : null,
     });
   });
 
   // GET /api/admin/users
   router.get('/users', (_req, res) => {
     const users = db.prepare(
-      `SELECT u.id, u.username, u.display_name, u.role, u.is_active, u.created_at, u.updated_at,
+      `SELECT u.id, u.username, u.display_name, u.role, u.is_active, u.allowed_tabs, u.created_at, u.updated_at,
         COALESCE(s.cnt, 0) as search_count, COALESCE(d.cnt, 0) as download_count
        FROM users u
        LEFT JOIN (SELECT user_id, COUNT(*) as cnt FROM usage_events WHERE event_type = 'search' GROUP BY user_id) s ON s.user_id = u.id
        LEFT JOIN (SELECT user_id, COUNT(*) as cnt FROM usage_events WHERE event_type = 'download' GROUP BY user_id) d ON d.user_id = u.id
        ORDER BY u.id`
-    ).all();
-    res.json({ users });
+    ).all() as any[];
+    res.json({
+      users: users.map(u => ({ ...u, allowed_tabs: parseAllowedTabs(u.allowed_tabs) })),
+    });
   });
 
   // GET /api/admin/users/:id/events — user usage details
@@ -87,8 +111,9 @@ export function createAdminRoutes(db: Database.Database) {
         password: z.string().min(6).max(128),
         display_name: z.string().trim().max(64).optional(),
         role: z.enum(['user', 'admin']).optional(),
+        allowed_tabs: z.array(z.enum(['search', 'batch', 'complete', 'history', 'qual', 'stats', 'settings'])).nullable().optional(),
       });
-      const { username, password, display_name, role } = schema.parse(req.body);
+      const { username, password, display_name, role, allowed_tabs } = schema.parse(req.body);
 
       const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
       if (existing) {
@@ -97,12 +122,13 @@ export function createAdminRoutes(db: Database.Database) {
       }
 
       const hash = await bcrypt.hash(password, SALT_ROUNDS);
+      const tabsJson = allowed_tabs ? JSON.stringify(allowed_tabs) : null;
       const result = db.prepare(
-        'INSERT INTO users (username, password, display_name, role) VALUES (?, ?, ?, ?)'
-      ).run(username, hash, display_name || '', role || 'user');
+        'INSERT INTO users (username, password, display_name, role, allowed_tabs) VALUES (?, ?, ?, ?, ?)'
+      ).run(username, hash, display_name || '', role || 'user', tabsJson);
 
       res.status(201).json({
-        user: { id: result.lastInsertRowid, username, display_name: display_name || '', role: role || 'user' },
+        user: { id: result.lastInsertRowid, username, display_name: display_name || '', role: role || 'user', allowed_tabs: allowed_tabs ?? null },
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -127,6 +153,7 @@ export function createAdminRoutes(db: Database.Database) {
         role: z.enum(['user', 'admin']).optional(),
         is_active: z.boolean().optional(),
         password: z.string().min(6).max(128).optional(),
+        allowed_tabs: z.array(z.enum(['search', 'batch', 'complete', 'history', 'qual', 'stats', 'settings'])).nullable().optional(),
       });
       const updates = schema.parse(req.body);
 
@@ -146,6 +173,10 @@ export function createAdminRoutes(db: Database.Database) {
         const hash = await bcrypt.hash(updates.password, SALT_ROUNDS);
         sets.push('password = ?'); values.push(hash);
       }
+      if (updates.allowed_tabs !== undefined) {
+        sets.push('allowed_tabs = ?');
+        values.push(updates.allowed_tabs ? JSON.stringify(updates.allowed_tabs) : null);
+      }
 
       if (sets.length === 0) {
         res.status(400).json({ code: 'BAD_REQUEST', message: '没有要更新的字段' });
@@ -164,10 +195,10 @@ export function createAdminRoutes(db: Database.Database) {
       }
 
       const updated = db.prepare(
-        'SELECT id, username, display_name, role, is_active, created_at, updated_at FROM users WHERE id = ?'
-      ).get(userId);
+        'SELECT id, username, display_name, role, is_active, allowed_tabs, created_at, updated_at FROM users WHERE id = ?'
+      ).get(userId) as any;
 
-      res.json({ user: updated });
+      res.json({ user: { ...updated, allowed_tabs: parseAllowedTabs(updated.allowed_tabs) } });
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({ code: 'BAD_REQUEST', message: '参数无效', details: error.flatten() });
