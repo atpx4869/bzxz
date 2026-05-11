@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcrypt';
 import type Database from 'better-sqlite3';
-import { getSetting, setSetting } from '../services/db';
+import { getSetting, setSetting, GUEST_USERNAME } from '../services/db';
 
 const SALT_ROUNDS = 10;
 
@@ -114,6 +114,10 @@ export function createAdminRoutes(db: Database.Database) {
         allowed_tabs: z.array(z.enum(['search', 'batch', 'complete', 'history', 'qual', 'stats', 'settings'])).nullable().optional(),
       });
       const { username, password, display_name, role, allowed_tabs } = schema.parse(req.body);
+      if (username.toLowerCase() === GUEST_USERNAME) {
+        res.status(400).json({ code: 'BAD_REQUEST', message: 'Guest username is reserved' });
+        return;
+      }
 
       const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
       if (existing) {
@@ -157,9 +161,13 @@ export function createAdminRoutes(db: Database.Database) {
       });
       const updates = schema.parse(req.body);
 
-      const user = db.prepare('SELECT id FROM users WHERE id = ?').get(userId);
+      const user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(userId) as { id: number; username: string } | undefined;
       if (!user) {
         res.status(404).json({ code: 'NOT_FOUND', message: '用户不存在' });
+        return;
+      }
+      if (user.username === GUEST_USERNAME && (updates.role !== undefined || updates.is_active !== undefined || updates.password !== undefined)) {
+        res.status(400).json({ code: 'BAD_REQUEST', message: 'Guest user must remain a normal active user' });
         return;
       }
 
@@ -216,9 +224,13 @@ export function createAdminRoutes(db: Database.Database) {
       return;
     }
 
-    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(userId);
+    const user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(userId) as { id: number; username: string } | undefined;
     if (!user) {
       res.status(404).json({ code: 'NOT_FOUND', message: '用户不存在' });
+      return;
+    }
+    if (user.username === GUEST_USERNAME) {
+      res.status(400).json({ code: 'BAD_REQUEST', message: 'Guest user cannot be deleted' });
       return;
     }
 

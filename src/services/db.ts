@@ -4,6 +4,10 @@ import { getRootDir } from '../shared/fs';
 
 let _db: Database.Database | null = null;
 
+export const GUEST_USERNAME = '_guest';
+const GUEST_PASSWORD_SENTINEL = 'guest-login-disabled';
+const GUEST_DISPLAY_NAME = '访客';
+
 export function getDb(dbPath?: string): Database.Database {
   if (_db && !dbPath) return _db;
 
@@ -171,6 +175,8 @@ function migrate(db: Database.Database): void {
   // Migration: add allowed_tabs column if missing (existing DBs)
   try { db.exec("ALTER TABLE users ADD COLUMN allowed_tabs TEXT DEFAULT NULL"); } catch { /* column exists */ }
 
+  ensureGuestUser(db);
+
   // Seed defaults
   const regEnabled = db.prepare("SELECT value FROM settings WHERE key = 'registration_enabled'").get();
   if (!regEnabled) {
@@ -185,6 +191,24 @@ function migrate(db: Database.Database): void {
     const existing = db.prepare('SELECT value FROM settings WHERE key = ?').get(k);
     if (!existing) db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(k, v);
   }
+}
+
+function ensureGuestUser(db: Database.Database): void {
+  const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(GUEST_USERNAME);
+  if (!existing) {
+    db.prepare(
+      'INSERT INTO users (username, password, display_name, role, is_active, allowed_tabs) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(GUEST_USERNAME, GUEST_PASSWORD_SENTINEL, GUEST_DISPLAY_NAME, 'user', 1, null);
+    return;
+  }
+
+  db.prepare(
+    'UPDATE users SET display_name = ?, role = ?, is_active = 1, allowed_tabs = NULL WHERE username = ?'
+  ).run(GUEST_DISPLAY_NAME, 'user', GUEST_USERNAME);
+}
+
+export function getRealUserCount(db: Database.Database): number {
+  return (db.prepare('SELECT COUNT(*) as cnt FROM users WHERE username <> ?').get(GUEST_USERNAME) as { cnt: number }).cnt;
 }
 
 export function getSetting(db: Database.Database, key: string, defaultValue = ''): string {

@@ -32,10 +32,22 @@ describe('createApp', () => {
     expect(response.body.code).toBe('BAD_REQUEST');
   });
 
-  it('returns 401 without auth', async () => {
+  it('uses guest auth when login is not required', async () => {
+    const status = await request(app()).get('/api/auth/status');
+    expect(status.status).toBe(200);
+    expect(status.body.user).toMatchObject({ username: '_guest', role: 'user' });
+
     const response = await request(app()).get('/api/standards/search');
 
-    expect(response.status).toBe(401);
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('BAD_REQUEST');
+  });
+
+  it('does not allow guest to access admin routes', async () => {
+    const response = await request(app()).get('/api/admin/users');
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('FORBIDDEN');
   });
 
   it('returns not found for unknown export task', async () => {
@@ -52,6 +64,16 @@ describe('createApp', () => {
       .post('/api/download-sessions/unknown/verify')
       .set('Cookie', cookie)
       .send({ source: 'gbw' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('BAD_REQUEST');
+  });
+
+  it('validates source check body', async () => {
+    const response = await request(app())
+      .post('/api/standards/source-check')
+      .set('Cookie', cookie)
+      .send({});
 
     expect(response.status).toBe(400);
     expect(response.body.code).toBe('BAD_REQUEST');

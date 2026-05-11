@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import type Database from 'better-sqlite3';
 import { parseCookie } from '../shared/errors';
-import { getSetting } from '../services/db';
+import { getSetting, GUEST_USERNAME } from '../services/db';
 
 export interface AuthUser {
   id: number;
@@ -11,20 +11,45 @@ export interface AuthUser {
   allowed_tabs: string[] | null;
 }
 
-const GUEST_USER: AuthUser = {
-  id: 0,
-  username: '_guest',
-  display_name: '访客',
-  role: 'admin',
-  allowed_tabs: null,
-};
-
 declare global {
   namespace Express {
     interface Request {
       user?: AuthUser;
     }
   }
+}
+
+type AuthUserRow = {
+  id?: number;
+  user_id?: number;
+  username: string;
+  display_name: string;
+  role: string;
+  allowed_tabs: string | null;
+};
+
+function toAuthUser(row: AuthUserRow): AuthUser {
+  return {
+    id: row.user_id ?? row.id!,
+    username: row.username,
+    display_name: row.display_name,
+    role: row.role,
+    allowed_tabs: row.allowed_tabs ? JSON.parse(row.allowed_tabs) : null,
+  };
+}
+
+export function getGuestAuthUser(db: Database.Database): AuthUser {
+  const row = db.prepare(`
+    SELECT id, username, display_name, role, allowed_tabs
+    FROM users
+    WHERE username = ? AND is_active = 1
+  `).get(GUEST_USERNAME) as AuthUserRow | undefined;
+
+  if (!row) {
+    throw new Error('Guest user is not initialized');
+  }
+
+  return toAuthUser(row);
 }
 
 export function createAuthMiddleware(db: Database.Database) {
@@ -59,17 +84,13 @@ export function createAuthMiddleware(db: Database.Database) {
         } | undefined;
 
         if (row && row.expires_at >= now && row.is_active) {
-          req.user = {
-            id: row.user_id, username: row.username,
-            display_name: row.display_name, role: row.role,
-            allowed_tabs: row.allowed_tabs ? JSON.parse(row.allowed_tabs) : null,
-          };
+          req.user = toAuthUser(row);
           next();
           return;
         }
       }
-      // No valid session — use guest
-      req.user = GUEST_USER;
+      // No valid session: use the persisted guest account as a normal user.
+      req.user = getGuestAuthUser(db);
       next();
       return;
     }
@@ -108,11 +129,7 @@ export function createAuthMiddleware(db: Database.Database) {
       db.prepare('UPDATE sessions SET expires_at = ? WHERE token = ?').run(newExpiry, token);
     }
 
-    req.user = {
-      id: row.user_id, username: row.username,
-      display_name: row.display_name, role: row.role,
-      allowed_tabs: row.allowed_tabs ? JSON.parse(row.allowed_tabs) : null,
-    };
+    req.user = toAuthUser(row);
 
     next();
   }
@@ -129,4 +146,3 @@ export function createAuthMiddleware(db: Database.Database) {
 
   return { requireAuth, requireAdmin, isLoginRequired };
 }
-

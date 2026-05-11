@@ -5,7 +5,8 @@ import bcrypt from 'bcrypt';
 import type Database from 'better-sqlite3';
 import type { Request, Response, NextFunction } from 'express';
 import type { AuthUser } from './auth-middleware';
-import { getSetting } from '../services/db';
+import { getGuestAuthUser } from './auth-middleware';
+import { getSetting, getRealUserCount, GUEST_USERNAME } from '../services/db';
 import { parseCookie } from '../shared/errors';
 
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -20,7 +21,7 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
 
   // GET /api/auth/status — check setup + current user
   router.get('/status', (req, res) => {
-    const userCount = (db.prepare('SELECT COUNT(*) as cnt FROM users').get() as { cnt: number }).cnt;
+    const userCount = getRealUserCount(db);
     const token = parseCookie(req.headers.cookie, 'bzxz_session');
 
     let user: AuthUser | null = null;
@@ -35,6 +36,9 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
 
     const registrationEnabled = getSetting(db, 'registration_enabled', '1') === '1';
     const loginRequired = getSetting(db, 'login_required', '0') === '1';
+    if (!user && !loginRequired) {
+      user = getGuestAuthUser(db);
+    }
     res.json({ needsSetup: userCount === 0, user, registrationEnabled, loginRequired });
   });
 
@@ -47,9 +51,13 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
         display_name: z.string().trim().max(64).optional(),
       });
       const { username, password, display_name } = schema.parse(req.body);
+      if (username.toLowerCase() === GUEST_USERNAME) {
+        res.status(400).json({ code: 'BAD_REQUEST', message: 'Guest username is reserved' });
+        return;
+      }
 
       // Check if registration is enabled (skip check if no users exist — need to bootstrap)
-      const userCount = (db.prepare('SELECT COUNT(*) as cnt FROM users').get() as { cnt: number }).cnt;
+      const userCount = getRealUserCount(db);
       if (userCount > 0) {
         const regEnabled = getSetting(db, 'registration_enabled', '1') === '1';
         if (!regEnabled) {
@@ -64,7 +72,7 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
         return;
       }
 
-      const totalUsers = (db.prepare('SELECT COUNT(*) as cnt FROM users').get() as { cnt: number }).cnt;
+      const totalUsers = getRealUserCount(db);
       const role = totalUsers === 0 ? 'admin' : 'user';
       const hash = await bcrypt.hash(password, SALT_ROUNDS);
 
@@ -98,6 +106,10 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
         password: z.string().min(1),
       });
       const { username, password } = schema.parse(req.body);
+      if (username.toLowerCase() === GUEST_USERNAME) {
+        res.status(401).json({ code: 'UNAUTHORIZED', message: '用户名或密码错误' });
+        return;
+      }
 
       const row = db.prepare('SELECT id, username, password, display_name, role, is_active, allowed_tabs FROM users WHERE username = ?').get(username) as {
         id: number; username: string; password: string; display_name: string; role: string; is_active: number; allowed_tabs: string | null;
@@ -152,6 +164,10 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
         new_password: z.string().min(6).max(128),
       });
       const { old_password, new_password } = schema.parse(req.body);
+      if (req.user!.username === GUEST_USERNAME) {
+        res.status(403).json({ code: 'FORBIDDEN', message: 'Guest user cannot change password' });
+        return;
+      }
 
       const row = db.prepare('SELECT password FROM users WHERE id = ?').get(req.user!.id) as { password: string } | undefined;
       if (!row) {
@@ -180,4 +196,3 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
 
   return router;
 }
-
