@@ -146,18 +146,53 @@
 
   <!-- Page: Complete -->
   <div class="page" id="page-complete">
-    <h2 style="font-size:20px;font-weight:600;margin-bottom:18px">标准补全</h2>
-    <div style="font-size:13px;color:var(--text-2);margin-bottom:16px;line-height:1.6">上传 Excel 或 CSV 文件，程序自动识别 <strong style="color:var(--accent)">A 列</strong> 标准号，输出 <strong style="color:var(--accent)">B 列</strong>（完整标准号）和 <strong style="color:var(--accent)">C 列</strong>（标准名称）。</div>
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <label class="btn btn-ghost btn-sm" style="cursor:pointer;position:relative">
-        📁 选择文件
-        <input type="file" id="completeFileInput" accept=".xlsx,.xls,.csv" style="position:absolute;opacity:0;width:0;height:0" onchange="onCompleteFileSelected()">
-      </label>
-      <span id="completeFileName" style="font-size:13px;color:var(--text-3)">未选择文件</span>
-      <button class="btn btn-primary btn-sm" id="completeUploadBtn" disabled onclick="doComplete()">上传并补全</button>
+    <div class="page-heading">
+      <div>
+        <h2>标准补全</h2>
+        <p>上传 Excel 或 CSV，识别 A 列标准号，并输出完整标准号与标准名称。</p>
+      </div>
     </div>
-    <div class="batch-summary" id="completeSummary"></div>
-    <div id="completeDownload" style="margin-top:8px"></div>
+    <div class="complete-workspace">
+      <section class="complete-card">
+        <div class="complete-steps" id="completeSteps">
+          <div class="complete-step active" data-complete-step="file">
+            <span>1</span>
+            <div><strong>选择文件</strong><em>Excel / CSV</em></div>
+          </div>
+          <div class="complete-step" data-complete-step="process">
+            <span>2</span>
+            <div><strong>补全处理</strong><em>多源匹配</em></div>
+          </div>
+          <div class="complete-step" data-complete-step="download">
+            <span>3</span>
+            <div><strong>下载结果</strong><em>B/C 列输出</em></div>
+          </div>
+        </div>
+        <div class="complete-dropzone">
+          <label class="btn btn-ghost btn-sm complete-file-btn">
+            选择文件
+            <input type="file" id="completeFileInput" accept=".xlsx,.xls,.csv" onchange="onCompleteFileSelected()">
+          </label>
+          <div>
+            <div id="completeFileName" class="complete-file-name">未选择文件</div>
+            <div class="complete-file-hint">读取 A 列标准号，结果写入 B 列和 C 列。</div>
+          </div>
+        </div>
+        <div class="complete-actions">
+          <button class="btn btn-primary btn-sm" id="completeUploadBtn" disabled onclick="doComplete()">上传并补全</button>
+        </div>
+      </section>
+      <section class="complete-card">
+        <div class="complete-card-head">
+          <div>
+            <div class="batch-kicker">结果</div>
+            <h3>补全摘要</h3>
+          </div>
+        </div>
+        <div class="complete-status idle" id="completeSummary">等待选择文件</div>
+        <div id="completeDownload" class="complete-download"></div>
+      </section>
+    </div>
   </div>
 
   <!-- Page: History -->

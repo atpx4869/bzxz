@@ -213,6 +213,46 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
 .batch-actions { display: flex; gap: 8px; margin-top: 14px; align-items: center; flex-wrap: wrap; }
 .batch-summary { color: var(--text-2); font-size: 12px; text-align: right; }
 
+/* Standard completion */
+.complete-workspace { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(300px, 0.9fr); gap: 14px; align-items: start; }
+.complete-card { border: 1px solid oklch(26% 0.012 255 / 0.48); border-radius: var(--radius); background: oklch(17% 0.014 255 / 0.46); padding: 16px; }
+.complete-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
+.complete-card-head h3 { font-size: 15px; font-weight: 650; color: var(--text); }
+.complete-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+.complete-step { display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid oklch(26% 0.012 255 / 0.44); border-radius: var(--radius-sm); background: oklch(16% 0.014 255 / 0.44); color: var(--text-3); }
+.complete-step > span { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 999px; background: oklch(24% 0.014 255 / 0.72); color: var(--text-3); font-size: 12px; font-weight: 700; flex-shrink: 0; }
+.complete-step strong { display: block; color: var(--text-2); font-size: 13px; }
+.complete-step em { display: block; margin-top: 2px; color: var(--text-3); font-style: normal; font-size: 11px; }
+.complete-step.active { border-color: oklch(66% 0.20 250 / 0.45); background: oklch(22% 0.05 250 / 0.35); }
+.complete-step.active > span { background: var(--accent); color: #fff; }
+.complete-step.done { border-color: oklch(70% 0.16 158 / 0.36); }
+.complete-step.done > span { background: oklch(70% 0.16 158 / 0.18); color: var(--success); }
+.complete-step.error { border-color: oklch(60% 0.20 25 / 0.45); }
+.complete-step.error > span { background: oklch(60% 0.20 25 / 0.18); color: var(--danger); }
+.complete-dropzone { display: flex; align-items: center; gap: 14px; padding: 18px; border: 1px dashed oklch(32% 0.014 255 / 0.66); border-radius: var(--radius-sm); background: oklch(15% 0.014 255 / 0.42); }
+.complete-file-btn { position: relative; cursor: pointer; overflow: hidden; flex-shrink: 0; }
+.complete-file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.complete-file-name { color: var(--text); font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.complete-file-hint { margin-top: 3px; color: var(--text-3); font-size: 12px; }
+.complete-actions { display: flex; gap: 8px; margin-top: 14px; align-items: center; flex-wrap: wrap; }
+.complete-status { min-height: 92px; padding: 16px; border-radius: var(--radius-sm); border: 1px dashed oklch(30% 0.012 255 / 0.55); color: var(--text-3); background: oklch(15% 0.014 255 / 0.42); font-size: 13px; }
+.complete-status strong { display: block; color: var(--text); margin-bottom: 4px; }
+.complete-status span { color: var(--text-3); }
+.complete-status.ready { border-style: solid; border-color: oklch(66% 0.20 250 / 0.34); }
+.complete-status.working { border-style: solid; border-color: oklch(70% 0.14 85 / 0.35); }
+.complete-status.success { border-style: solid; border-color: oklch(70% 0.16 158 / 0.35); }
+.complete-status.fail { border-style: solid; border-color: oklch(60% 0.20 25 / 0.35); }
+.complete-result-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.complete-result-stats div { padding: 10px; border-radius: var(--radius-sm); background: oklch(21% 0.014 255 / 0.58); }
+.complete-result-stats strong { font-size: 22px; line-height: 1; color: var(--success); }
+.complete-result-stats .warn strong { color: var(--warning); }
+.complete-result-stats span { display: block; margin-top: 5px; font-size: 11px; }
+.complete-download { margin-top: 10px; }
+.complete-download-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid oklch(70% 0.16 158 / 0.28); border-radius: var(--radius-sm); background: oklch(18% 0.05 158 / 0.18); }
+.complete-download-card strong { display: block; color: var(--text); font-size: 13px; overflow-wrap: anywhere; }
+.complete-download-card span { display: block; margin-top: 3px; color: var(--text-3); font-size: 12px; }
+.complete-download-card a { text-decoration: none; flex-shrink: 0; }
+
 /* ── Log panel ── */
 .log-panel { position: fixed; bottom: 0; left: var(--sidebar-w); right: 0; z-index: 100; background: oklch(16% 0.016 255 / 0.92); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px); border-top: 1px solid oklch(28% 0.014 255 / 0.5); transition: transform 0.3s var(--ease-out), left 0.3s var(--ease-out); }
 .log-panel.collapsed { transform: translateY(calc(100% - 44px)); }
@@ -506,6 +546,8 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
   .detail-grid { grid-template-columns: 1fr; }
   .batch-card-head { flex-direction: column; align-items: stretch; }
   .batch-mode-pill, .batch-summary { text-align: left; }
+  .complete-workspace { grid-template-columns: 1fr; }
+  .complete-steps { grid-template-columns: 1fr; }
   .batch-result-card { grid-template-columns: 20px minmax(104px, 34%) minmax(0, 1fr); }
   .batch-result-card .card-src { grid-column: 2 / -1; width: max-content; }
   .batch-result-card.unmatched { grid-template-columns: minmax(104px, 34%) minmax(0, 1fr); }
@@ -529,6 +571,8 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
   .detail-title-row { align-items: flex-start; flex-direction: column; }
   .detail-title-row h3 { white-space: normal; }
   .detail-chips { gap: 6px; }
+  .complete-dropzone, .complete-download-card { align-items: flex-start; flex-direction: column; }
+  .complete-result-stats { grid-template-columns: 1fr; }
   .batch-stats { grid-template-columns: 1fr; }
   .source-priority-row { grid-template-columns: 24px 20px minmax(0, 1fr) auto; }
   .source-priority-row .source-pill { display: none; }
