@@ -16,7 +16,9 @@
 <header class="topbar">
   <button class="topbar-toggle" onclick="toggleSidebar()" title="切换侧栏">≡</button>
   <span class="topbar-title">标准检索</span>
+  <div class="source-health-strip" id="sourceHealthStrip"></div>
   <div class="topbar-actions">
+    <button class="topbar-btn download-center-toggle" id="downloadCenterToggle" onclick="toggleDownloadCenter()" title="下载中心">下载 <span id="downloadCenterBadge">0</span></button>
     <button class="topbar-btn" onclick="switchTab('stats')" title="使用统计">📊</button>
     <button class="topbar-btn" onclick="toggleUserDropdown()" id="sidebarUserToggle" title="用户">👤</button>
   </div>
@@ -365,6 +367,19 @@
   <div class="ud-item" id="udManageUsers" onclick="switchTab('users')" style="display:none">用户管理</div>
   <div class="ud-item" onclick="doLogout()">退出登录</div>
 </div>
+
+<!-- Download center -->
+<aside class="download-center" id="downloadCenterPanel">
+  <div class="download-center-head">
+    <div>
+      <div class="download-center-kicker">任务中心</div>
+      <h3>下载中心</h3>
+    </div>
+    <button class="btn btn-sm btn-ghost" onclick="toggleDownloadCenter(false)">关闭</button>
+  </div>
+  <div class="download-center-summary" id="downloadCenterSummary">暂无下载任务</div>
+  <div class="download-center-body" id="downloadCenterBody"></div>
+</aside>
 
 <script src="/js/app-core.js"></script>
 <script src="/js/app-search.js"></script>

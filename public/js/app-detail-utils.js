@@ -103,6 +103,7 @@ function renderSourceDownloadPanel(id, detail) {
   const orderedSources = [...downloadPriority, ...ALL_SOURCES.filter(s => !downloadPriority.includes(s))];
   const defaultId = result?.id || id;
   const defaultPath = downloadPriority.filter(s => downloadSources.includes(s)).map(s => srcLabel(s)).join(' → ') || '未启用';
+  const sourceStats = { text: 0, noText: 0, missing: 0, error: 0, unknown: 0 };
   const rows = orderedSources.map(source => {
     const check = checked[source];
     const matched = Boolean(sourceIds[source]);
@@ -114,6 +115,11 @@ function renderSourceDownloadPanel(id, detail) {
       previewKnown === true ? '有文本' :
       previewKnown === false ? '无文本' :
       matched ? '未确认' : '未检测';
+    if (previewKnown === true) sourceStats.text++;
+    else if (previewKnown === false) sourceStats.noText++;
+    else if (check?.status === 'not_found') sourceStats.missing++;
+    else if (check?.status === 'error') sourceStats.error++;
+    else sourceStats.unknown++;
     const statusClass = previewKnown === true ? 'ok' : check?.status === 'error' ? 'bad' : (matched || isChecking) ? 'warn' : 'muted';
     const note = source === 'gbw' ? '自动验证码' : source === 'bzvip' ? '账号池' : source === 'by' ? '直链PDF' : '合成PDF';
     const timeText = relativeCheckTime(check?.checkedAt);
@@ -125,8 +131,9 @@ function renderSourceDownloadPanel(id, detail) {
       <div class="modal-source-row ${matched ? '' : 'disabled'} ${isChecking ? 'checking' : ''}">
         <div class="modal-source-main">
           <span class="source-badge source-${escapeHtml(source)}">${escapeHtml(srcLabel(source))}</span>
-          <span class="modal-source-note" title="${escapeHtml(extraText || note)}">${note}${extraText ? ` · ${escapeHtml(extraText)}` : ''}</span>
+          <span class="modal-source-note" title="${escapeHtml(extraText || note)}">${note}</span>
         </div>
+        <span class="modal-source-note extra" title="${escapeHtml(extraText || '')}">${extraText ? escapeHtml(extraText) : '—'}</span>
         <span class="modal-source-status ${statusClass}">${statusText}</span>
         <div class="modal-source-actions">
           <button class="btn btn-sm btn-ghost" data-action="modal-source-check" data-source="${escapeHtml(source)}" ${canCheck ? '' : 'disabled'}>${isChecking ? '检测中' : '检测'}</button>
@@ -136,7 +143,17 @@ function renderSourceDownloadPanel(id, detail) {
   }).join('');
   return `
     <div class="modal-source-panel" id="modalSourcePanel">
-      <div class="modal-source-title">来源下载</div>
+      <div class="modal-source-title-row">
+        <div>
+          <div class="modal-source-title">来源下载</div>
+          <div class="modal-source-subtitle">检测后可按指定来源下载，也可继续使用默认策略。</div>
+        </div>
+        <div class="modal-source-stats">
+          <span class="ok">${sourceStats.text} 有文本</span>
+          <span class="${sourceStats.noText ? 'bad' : ''}">${sourceStats.noText} 无文本</span>
+          <span>${sourceStats.unknown + sourceStats.missing} 未确认</span>
+        </div>
+      </div>
       <div class="modal-source-default">
         <div>
           <strong>默认下载</strong>
@@ -147,6 +164,7 @@ function renderSourceDownloadPanel(id, detail) {
           <button class="btn btn-sm btn-primary" data-action="modal-download" data-id="${escapeHtml(defaultId)}">按默认策略下载</button>
         </div>
       </div>
+      <div class="modal-source-table-head"><span>来源</span><span>最近信息</span><span>状态</span><span>操作</span></div>
       <div class="modal-source-list">${rows}</div>
     </div>`;
 }
@@ -230,6 +248,7 @@ document.getElementById('modalOverlay').addEventListener('click', e => {
     else if (btn.dataset.action === 'modal-source-download') downloadSpecificSource(btn.dataset.id, btn.dataset.source, btn);
     else if (btn.dataset.action === 'modal-source-check') checkModalSources(btn.dataset.source, btn);
     else if (btn.dataset.action === 'modal-source-check-all') checkModalSources('', btn);
+    else if (btn.dataset.action === 'modal-retry-batch-failed') retryFailedBatchDownload();
     else if (btn.dataset.action === 'modal-copy-standard') { navigator.clipboard.writeText(btn.dataset.standard || ''); showToast('已复制标准号'); }
     else if (btn.dataset.action === 'modal-close') document.getElementById('modalOverlay').classList.remove('open');
   }

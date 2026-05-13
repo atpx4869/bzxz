@@ -62,7 +62,9 @@ async function doSearch() {
     const stdNums = results.map(r => r.standardNumber).filter(Boolean);
     fetchQualBadges(stdNums).then(() => { if (results.length > 0) renderResults(); });
   }
-  filterState.sources.clear(); filterState.statuses.clear(); renderFilterBar();
+  filterState.sources.clear(); filterState.statuses.clear();
+  filterState.onlyDownloadable = false; filterState.onlyQualified = false; filterState.sort = 'smart';
+  renderFilterBar();
   if (results.length === 0 && !searchAborted) {
     document.getElementById('results').innerHTML = `<div class="empty"><p>—</p><p>未找到相关标准</p><p style="font-size:13px;color:var(--text-3)">尝试更换关键词或数据源</p></div>`;
     document.getElementById('toolbar').style.display = 'none';
@@ -140,8 +142,7 @@ function statusCategory(s) {
 }
 
 function getFilteredResults() {
-  if (filterState.sources.size === 0 && filterState.statuses.size === 0) return results;
-  return results.filter(r => {
+  const filtered = results.filter(r => {
     if (filterState.sources.size > 0) {
       const rSources = r.sources || [r._source];
       if (!rSources.some(s => filterState.sources.has(s))) return false;
@@ -149,8 +150,34 @@ function getFilteredResults() {
     if (filterState.statuses.size > 0) {
       if (!filterState.statuses.has(statusCategory(r.status))) return false;
     }
+    if (filterState.onlyDownloadable && !r.previewAvailable) return false;
+    if (filterState.onlyQualified && !hasQualificationBadge(r.standardNumber)) return false;
     return true;
   });
+  return sortFilteredResults(filtered);
+}
+
+function hasQualificationBadge(standardNumber) {
+  const items = qualData?.[standardNumber] || [];
+  return Array.isArray(items) && items.length > 0;
+}
+
+function sortFilteredResults(items) {
+  const sorted = [...items];
+  const dateValue = (value) => {
+    const t = value ? new Date(value).getTime() : 0;
+    return Number.isNaN(t) ? 0 : t;
+  };
+  if (filterState.sort === 'date') {
+    sorted.sort((a, b) => dateValue(b.implementDate || b.publishDate) - dateValue(a.implementDate || a.publishDate));
+  } else if (filterState.sort === 'downloadable') {
+    sorted.sort((a, b) => Number(Boolean(b.previewAvailable)) - Number(Boolean(a.previewAvailable)) || sortByStatus(a, b));
+  } else if (filterState.sort === 'sourceCount') {
+    sorted.sort((a, b) => ((b.sources || [b._source]).length - (a.sources || [a._source]).length) || sortByStatus(a, b));
+  } else {
+    sorted.sort(sortByStatus);
+  }
+  return sorted;
 }
 
 function renderFilterBar() {
@@ -158,9 +185,12 @@ function renderFilterBar() {
   if (!results.length) { bar.classList.remove('visible'); bar.innerHTML = ''; return; }
 
   const srcCounts = {}; const statusCounts = {};
+  let downloadableCount = 0; let qualifiedCount = 0;
   for (const r of results) {
     for (const s of (r.sources || [r._source])) { srcCounts[s] = (srcCounts[s] || 0) + 1; }
     statusCounts[statusCategory(r.status)] = (statusCounts[statusCategory(r.status)] || 0) + 1;
+    if (r.previewAvailable) downloadableCount++;
+    if (hasQualificationBadge(r.standardNumber)) qualifiedCount++;
   }
 
   const srcChips = [
@@ -183,7 +213,20 @@ function renderFilterBar() {
     }).join('');
   }
 
-  bar.innerHTML = chipHtml(srcChips, filterState.sources) + '<span class="filter-sep"></span>' + chipHtml(statusChips, filterState.statuses);
+  const quickTools = `
+    <span class="filter-sep"></span>
+    <button class="filter-chip filter-toggle${filterState.onlyDownloadable ? ' active' : ''}" data-filter-toggle="downloadable">可下载<span class="chip-count">${downloadableCount}</span></button>
+    <button class="filter-chip filter-toggle${filterState.onlyQualified ? ' active' : ''}" data-filter-toggle="qualified">有资质<span class="chip-count">${qualifiedCount}</span></button>
+    <label class="filter-sort">
+      <span>排序</span>
+      <select id="resultSortSelect">
+        <option value="smart" ${filterState.sort === 'smart' ? 'selected' : ''}>智能</option>
+        <option value="downloadable" ${filterState.sort === 'downloadable' ? 'selected' : ''}>可下载优先</option>
+        <option value="date" ${filterState.sort === 'date' ? 'selected' : ''}>日期最新</option>
+        <option value="sourceCount" ${filterState.sort === 'sourceCount' ? 'selected' : ''}>来源最多</option>
+      </select>
+    </label>`;
+  bar.innerHTML = chipHtml(srcChips, filterState.sources) + '<span class="filter-sep"></span>' + chipHtml(statusChips, filterState.statuses) + quickTools;
   bar.classList.add('visible');
 }
 
@@ -249,6 +292,13 @@ function renderResults() {
 
 // Filter bar chip clicks
 document.getElementById('filterBar').addEventListener('click', e => {
+  const toggle = e.target.closest('[data-filter-toggle]');
+  if (toggle) {
+    if (toggle.dataset.filterToggle === 'downloadable') filterState.onlyDownloadable = !filterState.onlyDownloadable;
+    if (toggle.dataset.filterToggle === 'qualified') filterState.onlyQualified = !filterState.onlyQualified;
+    renderFilterBar(); renderResults(); updateToolbar();
+    return;
+  }
   const chip = e.target.closest('.filter-chip');
   if (!chip) return;
   const type = chip.dataset.filterType;
@@ -257,6 +307,12 @@ document.getElementById('filterBar').addEventListener('click', e => {
   if (key === '') { set.clear(); }
   else if (set.has(key)) { set.delete(key); }
   else { set.add(key); }
+  renderFilterBar(); renderResults(); updateToolbar();
+});
+
+document.getElementById('filterBar').addEventListener('change', e => {
+  if (e.target.id !== 'resultSortSelect') return;
+  filterState.sort = e.target.value;
   renderFilterBar(); renderResults(); updateToolbar();
 });
 

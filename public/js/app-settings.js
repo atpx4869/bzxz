@@ -86,19 +86,56 @@ function renderSettings() {
 }
 
 var sourceStatusCache = {};
-async function checkAllSources() {
-  var btn = document.getElementById('checkSourcesBtn');
-  btn.textContent = '检测中...'; btn.disabled = true;
-  document.getElementById('sourceStatusList').innerHTML = renderSourceStatusLoading();
+var sourceHealthCheckedAt = 0;
+
+function renderTopSourceHealth() {
+  var el = document.getElementById('sourceHealthStrip');
+  if (!el) return;
+  var known = Object.keys(sourceStatusCache).length;
+  if (!known) {
+    el.innerHTML = '<button class="source-health-mini muted" onclick="refreshSourceHealth()">检测来源</button>';
+    return;
+  }
+  el.innerHTML = ALL_SOURCES.map(function(s) {
+    var r = sourceStatusCache[s];
+    var cls = !r ? 'unknown' : r.status === 'ok' ? 'ok' : 'bad';
+    var text = !r ? '—' : r.status === 'ok' ? (r.ms + 'ms') : '异常';
+    var title = r?.error ? srcLabel(s) + ': ' + r.error : srcLabel(s) + ': ' + text;
+    return '<button class="source-health-mini ' + cls + '" data-health-source="' + escapeHtml(s) + '" title="' + escapeHtml(title) + '"><b>' + srcLabel(s) + '</b><span>' + escapeHtml(text) + '</span></button>';
+  }).join('');
+}
+
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('[data-health-source]');
+  if (!btn) return;
+  checkSingleSource(btn.dataset.healthSource);
+});
+
+async function refreshSourceHealth() {
+  var el = document.getElementById('sourceHealthStrip');
+  if (el) el.innerHTML = ALL_SOURCES.map(function(s) {
+    return '<span class="source-health-mini loading"><b>' + srcLabel(s) + '</b><span>...</span></span>';
+  }).join('');
   try {
     var res = await fetch('/api/standards/check-sources');
     var data = await res.json();
     sourceStatusCache = data.results || {};
-    document.getElementById('sourceStatusList').innerHTML = renderSourceStatusList();
-  } catch (e) {
-    document.getElementById('sourceStatusList').innerHTML = '<span style="color:var(--danger)">检测请求失败</span>';
+    sourceHealthCheckedAt = Date.now();
+  } catch {
+    ALL_SOURCES.forEach(function(s) { sourceStatusCache[s] = { status: 'error', ms: 0, error: '请求失败' }; });
   }
-  btn.textContent = '全部检测'; btn.disabled = false;
+  renderTopSourceHealth();
+  var list = document.getElementById('sourceStatusList');
+  if (list) list.innerHTML = renderSourceStatusList();
+}
+
+async function checkAllSources() {
+  var btn = document.getElementById('checkSourcesBtn');
+  if (btn) { btn.textContent = '检测中...'; btn.disabled = true; }
+  var list = document.getElementById('sourceStatusList');
+  if (list) list.innerHTML = renderSourceStatusLoading();
+  await refreshSourceHealth();
+  if (btn) { btn.textContent = '全部检测'; btn.disabled = false; }
 }
 
 async function checkSingleSource(src) {
@@ -109,7 +146,9 @@ async function checkSingleSource(src) {
     var data = await res.json();
     Object.assign(sourceStatusCache, data.results || {});
   } catch { sourceStatusCache[src] = { status: 'error', ms: 0, error: '请求失败' }; }
+  sourceHealthCheckedAt = Date.now();
   if (el) el.innerHTML = renderSourceStatusItem(src);
+  renderTopSourceHealth();
 }
 
 function renderSourceStatusLoading() {

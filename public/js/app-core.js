@@ -50,7 +50,7 @@ let logEntries = [];
 let isDownloading = false;
 let searchAborted = false;
 let activePanelId = null;
-let filterState = { sources: new Set(), statuses: new Set() };
+let filterState = { sources: new Set(), statuses: new Set(), onlyDownloadable: false, onlyQualified: false, sort: 'smart' };
 let sourceCheckCache = {};
 let currentDetailContext = null;
 
