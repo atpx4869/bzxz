@@ -88,6 +88,14 @@
         <div class="search-history" id="searchHistory"></div>
       </div>
     </div>
+    <div class="search-templates" id="searchTemplates">
+      <button data-template="GB/T ">GB/T</button>
+      <button data-template="GB ">GB</button>
+      <button data-template="YY/T ">YY/T</button>
+      <button data-template="JJG ">JJG</button>
+      <button data-template="DB44/T ">DB44/T</button>
+      <button data-template="ISO ">ISO</button>
+    </div>
     <div id="summary" class="summary"></div>
     <div class="toolbar" id="toolbar" style="display:none">
       <div class="toolbar-left">
@@ -97,6 +105,9 @@
         <button class="btn btn-sm btn-ghost" id="selectAll">全选</button>
       </div>
       <div class="toolbar-right">
+        <span class="badge-count" id="savedCount">收藏 0</span>
+        <button class="btn btn-sm btn-ghost" id="savedOnlyToggle">只看收藏</button>
+        <button class="btn btn-sm btn-ghost" id="densityToggle">紧凑</button>
         <button class="btn btn-sm btn-ghost" id="exportResults">导出结果</button>
       </div>
     </div>
@@ -311,6 +322,7 @@
 <div class="log-panel collapsed" id="logPanel">
   <div class="log-header" id="logToggle">
     <span id="logTitle">📋 下载日志</span>
+    <button class="log-export-btn" id="exportLogs" title="导出日志">导出</button>
     <span id="logChevron" style="font-size:12px">▲</span>
   </div>
   <div class="progress-wrap" id="progressWrap">
@@ -335,6 +347,10 @@
     <div class="kbd-row"><span>聚焦搜索</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>K</kbd></span></div>
     <div class="kbd-row"><span>执行搜索</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span></div>
     <div class="kbd-row"><span>全选结果</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>A</kbd></span></div>
+    <div class="kbd-row"><span>下载选中</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>D</kbd></span></div>
+    <div class="kbd-row"><span>打开下载中心</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd></span></div>
+    <div class="kbd-row"><span>切换结果密度</span><span class="kbd-key"><kbd>Ctrl</kbd>+<kbd>J</kbd></span></div>
+    <div class="kbd-row"><span>页面切换</span><span class="kbd-key"><kbd>Alt</kbd>+<kbd>1</kbd>~<kbd>6</kbd></span></div>
     <div class="kbd-row"><span>关闭面板/弹窗</span><span class="kbd-key"><kbd>Esc</kbd></span></div>
     <div class="kbd-row"><span>显示快捷键</span><span class="kbd-key"><kbd>?</kbd></span></div>
   </div>

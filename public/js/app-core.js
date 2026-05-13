@@ -29,6 +29,10 @@ let downloadTimeout = (v => VALID_TIMEOUTS.includes(v) ? v : 15)(parseInt(localS
 let downloadMode = localStorage.getItem('bzxz_download_mode') || 'cascade';
 if (!['cascade', 'race'].includes(downloadMode)) downloadMode = 'cascade';
 let panelPositions = safeJsonParse(localStorage.getItem('bzxz_panel_positions'), {});
+let resultDensity = localStorage.getItem('bzxz_result_density') || 'comfortable';
+if (!['comfortable', 'compact'].includes(resultDensity)) resultDensity = 'comfortable';
+let savedStandards = safeJsonParse(localStorage.getItem('bzxz_saved_standards'), []);
+if (!Array.isArray(savedStandards)) savedStandards = [];
 
 function saveSettings() {
   localStorage.setItem('bzxz_download_sources', JSON.stringify(downloadSources));
@@ -50,10 +54,31 @@ let logEntries = [];
 let isDownloading = false;
 let searchAborted = false;
 let activePanelId = null;
-let filterState = { sources: new Set(), statuses: new Set(), onlyDownloadable: false, onlyQualified: false, sort: 'smart' };
+let filterState = { sources: new Set(), statuses: new Set(), onlyDownloadable: false, onlyQualified: false, onlySaved: false, sort: 'smart' };
 let sourceCheckCache = {};
 let currentDetailContext = null;
 
+function persistSavedStandards() {
+  try { localStorage.setItem('bzxz_saved_standards', JSON.stringify(savedStandards.slice(0, 200))); }
+  catch { /* non-critical */ }
+}
+
+function standardSaveKey(item) {
+  return String(item?.standardNumber || item?.id || '').replace(/\s+/g, '').toUpperCase();
+}
+
+function isStandardSaved(item) {
+  const key = typeof item === 'string' ? item.replace(/\s+/g, '').toUpperCase() : standardSaveKey(item);
+  return Boolean(key && savedStandards.some(s => s.key === key));
+}
+
+function setResultDensity(mode) {
+  resultDensity = mode === 'compact' ? 'compact' : 'comfortable';
+  localStorage.setItem('bzxz_result_density', resultDensity);
+  document.body.classList.toggle('compact-results', resultDensity === 'compact');
+}
+
+setResultDensity(resultDensity);
 
 // ── Panel management (sidebar/tab layout) ──
 let activeDrag = null;

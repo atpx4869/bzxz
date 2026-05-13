@@ -63,7 +63,7 @@ async function doSearch() {
     fetchQualBadges(stdNums).then(() => { if (results.length > 0) renderResults(); });
   }
   filterState.sources.clear(); filterState.statuses.clear();
-  filterState.onlyDownloadable = false; filterState.onlyQualified = false; filterState.sort = 'smart';
+  filterState.onlyDownloadable = false; filterState.onlyQualified = false; filterState.onlySaved = false; filterState.sort = 'smart';
   renderFilterBar();
   if (results.length === 0 && !searchAborted) {
     document.getElementById('results').innerHTML = `<div class="empty"><p>—</p><p>未找到相关标准</p><p style="font-size:13px;color:var(--text-3)">尝试更换关键词或数据源</p></div>`;
@@ -152,6 +152,7 @@ function getFilteredResults() {
     }
     if (filterState.onlyDownloadable && !r.previewAvailable) return false;
     if (filterState.onlyQualified && !hasQualificationBadge(r.standardNumber)) return false;
+    if (filterState.onlySaved && !isStandardSaved(r)) return false;
     return true;
   });
   return sortFilteredResults(filtered);
@@ -185,12 +186,13 @@ function renderFilterBar() {
   if (!results.length) { bar.classList.remove('visible'); bar.innerHTML = ''; return; }
 
   const srcCounts = {}; const statusCounts = {};
-  let downloadableCount = 0; let qualifiedCount = 0;
+  let downloadableCount = 0; let qualifiedCount = 0; let savedCount = 0;
   for (const r of results) {
     for (const s of (r.sources || [r._source])) { srcCounts[s] = (srcCounts[s] || 0) + 1; }
     statusCounts[statusCategory(r.status)] = (statusCounts[statusCategory(r.status)] || 0) + 1;
     if (r.previewAvailable) downloadableCount++;
     if (hasQualificationBadge(r.standardNumber)) qualifiedCount++;
+    if (isStandardSaved(r)) savedCount++;
   }
 
   const srcChips = [
@@ -217,6 +219,7 @@ function renderFilterBar() {
     <span class="filter-sep"></span>
     <button class="filter-chip filter-toggle${filterState.onlyDownloadable ? ' active' : ''}" data-filter-toggle="downloadable">可下载<span class="chip-count">${downloadableCount}</span></button>
     <button class="filter-chip filter-toggle${filterState.onlyQualified ? ' active' : ''}" data-filter-toggle="qualified">有资质<span class="chip-count">${qualifiedCount}</span></button>
+    <button class="filter-chip filter-toggle${filterState.onlySaved ? ' active' : ''}" data-filter-toggle="saved">收藏<span class="chip-count">${savedCount}</span></button>
     <label class="filter-sort">
       <span>排序</span>
       <select id="resultSortSelect">
@@ -248,10 +251,11 @@ function renderResults() {
     const i = idxMap.get(r.id);
     const srcBadges = (r.sources || [r._source]).map(s => `<span class="source-badge source-${escapeHtml(String(s))}">${escapeHtml(srcLabel(String(s)))}</span>`).join(' ');
     const sCls = statusClass(r.status); const hasText = r.previewAvailable;
+    const saved = isStandardSaved(r);
     const statusBadge = r.status ? `<span class="status-indicator ${sCls}"><span class="dot"></span>${escapeHtml(r.status)}</span>` : '';
     const textBadge = !hasText ? '<span class="no-text-badge">无文本</span>' : '<span class="has-text-badge">有文本</span>';
     return `
-    <div class="result-card card-enter${hasText ? '' : ' no-text'}" data-sid="${escapeHtml(r.id)}" style="animation-delay:${fi * 40}ms">
+    <div class="result-card card-enter${hasText ? '' : ' no-text'}${saved ? ' saved' : ''}" data-sid="${escapeHtml(r.id)}" style="animation-delay:${fi * 40}ms">
       <div class="check-col"><input type="checkbox" data-idx="${i}" ${selectedIds.has(r.id) ? 'checked' : ''}></div>
       <div class="card-id">
         <div class="card-number">${escapeHtml(r.standardNumber)}</div>
@@ -273,6 +277,7 @@ function renderResults() {
         <span><b>实施</b>${r.implementDate || '—'}</span>
       </div>
       <div class="card-actions">
+        <button data-action="save" data-id="${escapeHtml(r.id)}" class="${saved ? 'saved' : ''}" title="${saved ? '取消收藏' : '收藏'}">${saved ? '已存' : '收藏'}</button>
         <button data-action="detail" data-id="${escapeHtml(r.id)}">详情</button>
         <button data-action="download" data-id="${escapeHtml(r.id)}" ${hasText ? '' : 'disabled'}>下载</button>
       </div>
@@ -296,6 +301,7 @@ document.getElementById('filterBar').addEventListener('click', e => {
   if (toggle) {
     if (toggle.dataset.filterToggle === 'downloadable') filterState.onlyDownloadable = !filterState.onlyDownloadable;
     if (toggle.dataset.filterToggle === 'qualified') filterState.onlyQualified = !filterState.onlyQualified;
+    if (toggle.dataset.filterToggle === 'saved') filterState.onlySaved = !filterState.onlySaved;
     renderFilterBar(); renderResults(); updateToolbar();
     return;
   }
@@ -323,6 +329,7 @@ document.getElementById('results').addEventListener('click', e => {
   const id = btn.dataset.id;
   if (btn.dataset.action === 'detail') showDetail(id);
   else if (btn.dataset.action === 'download') downloadOne(id, btn);
+  else if (btn.dataset.action === 'save') toggleSavedStandard(id);
 });
 
 function setRowDownloadState(id, state) {
@@ -349,6 +356,7 @@ function updateToolbar() {
   document.getElementById('selectedCount').textContent = `已选 ${selectedIds.size}`;
   const dlBtn = document.getElementById('downloadSelected');
   if (dlBtn) dlBtn.disabled = selectedIds.size === 0 || isDownloading;
+  renderSavedToolbar();
 }
 document.getElementById('selectAll').addEventListener('click', () => {
   const filtered = getFilteredResults();
@@ -372,4 +380,67 @@ document.getElementById('exportResults').addEventListener('click', () => {
   a.click();
   URL.revokeObjectURL(a.href);
   showToast(`已导出 ${data.length} 条结果`);
+});
+
+function toggleSavedStandard(id) {
+  const r = findResultByAnyId(id);
+  if (!r) return;
+  const key = standardSaveKey(r);
+  const exists = savedStandards.some(s => s.key === key);
+  if (exists) {
+    savedStandards = savedStandards.filter(s => s.key !== key);
+    showToast('已取消收藏');
+  } else {
+    savedStandards.unshift({
+      key,
+      id: r.id,
+      standardNumber: r.standardNumber,
+      title: r.title || '',
+      status: r.status || '',
+      sources: r.sources || [r._source],
+      savedAt: Date.now(),
+    });
+    showToast('已加入收藏');
+  }
+  persistSavedStandards();
+  renderResults();
+  renderFilterBar();
+  updateToolbar();
+}
+
+function renderSavedToolbar() {
+  const savedCount = results.filter(r => isStandardSaved(r)).length;
+  const countEl = document.getElementById('savedCount');
+  const toggle = document.getElementById('savedOnlyToggle');
+  const density = document.getElementById('densityToggle');
+  if (countEl) countEl.textContent = `收藏 ${savedCount}`;
+  if (toggle) {
+    toggle.classList.toggle('active', filterState.onlySaved);
+    toggle.disabled = results.length === 0;
+  }
+  if (density) {
+    density.textContent = resultDensity === 'compact' ? '舒展' : '紧凑';
+    density.classList.toggle('active', resultDensity === 'compact');
+  }
+}
+
+document.getElementById('savedOnlyToggle').addEventListener('click', () => {
+  filterState.onlySaved = !filterState.onlySaved;
+  renderFilterBar(); renderResults(); updateToolbar();
+});
+
+document.getElementById('densityToggle').addEventListener('click', () => {
+  setResultDensity(resultDensity === 'compact' ? 'comfortable' : 'compact');
+  renderSavedToolbar();
+});
+
+document.getElementById('searchTemplates').addEventListener('click', e => {
+  const btn = e.target.closest('[data-template]');
+  if (!btn) return;
+  const input = document.getElementById('searchInput');
+  const template = btn.dataset.template || '';
+  const current = input.value.trim();
+  input.value = current && !current.startsWith(template.trim()) ? `${template}${current}` : template;
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
 });

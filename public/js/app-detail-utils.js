@@ -310,6 +310,11 @@ document.getElementById('logToggle').addEventListener('click', () => {
   }
 });
 
+document.getElementById('exportLogs').addEventListener('click', e => {
+  e.stopPropagation();
+  exportLogs();
+});
+
 // ── Utils ──
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -330,6 +335,20 @@ function recordDownload(source, fileName, standardNumber) {
   const now = new Date(new Date().getTime() + 8*3600000);
   const time = `${now.getUTCMonth()+1}/${now.getUTCDate()} ${String(now.getUTCHours()).padStart(2,'0')}:${String(now.getUTCMinutes()).padStart(2,'0')}`;
   addDownloadHistory({ source, fileName, standardNumber: standardNumber || fileName, name: fileName, time });
+}
+
+function exportLogs() {
+  if (!logEntries.length) { showToast('暂无日志可导出', 'fail'); return; }
+  const rows = [['时间', '状态', '消息']];
+  logEntries.slice().reverse().forEach(l => rows.push([l.time, l.status, l.msg]));
+  const csv = rows.map(r => r.map(c => `"${String(c || '').replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `下载日志_${beijingDate()}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast(`已导出 ${logEntries.length} 条日志`);
 }
 
 // ── Search history ──
@@ -434,6 +453,24 @@ document.addEventListener('keydown', e => {
   }
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
     doSearch();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd') {
+    e.preventDefault();
+    toggleDownloadCenter();
+  } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+    e.preventDefault();
+    const btn = document.getElementById('downloadSelected');
+    if (btn && !btn.disabled) btn.click();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j') {
+    e.preventDefault();
+    setResultDensity(resultDensity === 'compact' ? 'comfortable' : 'compact');
+    if (typeof renderSavedToolbar === 'function') renderSavedToolbar();
+  }
+  if (e.altKey && !e.ctrlKey && !e.metaKey && /^[1-6]$/.test(e.key)) {
+    e.preventDefault();
+    const tabs = ['search', 'batch', 'complete', 'history', 'qual', 'settings'];
+    switchTab(tabs[Number(e.key) - 1]);
   }
   if ((e.ctrlKey || e.metaKey) && e.key === 'a' && document.activeElement === document.body) {
     e.preventDefault();
