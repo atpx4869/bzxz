@@ -48,6 +48,7 @@ function parseStandardNumber(line: string): ParsedNumber | null {
 }
 
 const STATUS_ACTIVE = new Set(['现行有效', '即将实施']);
+const RESOLVE_CONCURRENCY = 6;
 
 export class StandardResolver {
   constructor(private readonly registry: SourceRegistry) {}
@@ -61,25 +62,48 @@ export class StandardResolver {
       parsed: parseStandardNumber(line),
     }));
 
+    const tasks = new Map<string, { parsed: ParsedNumber; promise?: Promise<ResolvedItem | null> }>();
+    const taskKeys: (string | null)[] = [];
+
     for (const { line, parsed } of parsedList) {
+      if (!line || !parsed) {
+        taskKeys.push(null);
+        continue;
+      }
+
+      const key = this.resolveCacheKey(parsed, sources);
+      if (!tasks.has(key)) tasks.set(key, { parsed });
+      taskKeys.push(key);
+    }
+
+    await mapLimit([...tasks.entries()], RESOLVE_CONCURRENCY, async ([_key, task]) => {
+      task.promise = this.findMatch('', task.parsed, sources);
+      await task.promise;
+    });
+
+    for (let i = 0; i < parsedList.length; i++) {
+      const { line, parsed } = parsedList[i];
       if (!line) continue;
       if (!parsed) {
         unmatched.push({ input: line, reason: '无法识别为标准号格式' });
         continue;
       }
 
-      const match = await this.findMatch(line, parsed, sources);
-      if (match) {
-        resolved.push(match);
-      } else {
-        unmatched.push({
-          input: line,
-          reason: `未找到匹配标准 (已搜: ${sources.join(', ')})`,
-        });
-      }
+      const match = await tasks.get(taskKeys[i]!)?.promise;
+      if (match) resolved.push({ ...match, input: line });
+      else unmatched.push({ input: line, reason: `未找到匹配标准 (已搜: ${sources.join(', ')})` });
     }
 
     return { resolved, unmatched };
+  }
+
+  private resolveCacheKey(parsed: ParsedNumber, sources: SourceName[]): string {
+    return [
+      parsed.prefix,
+      parsed.number,
+      parsed.yearCode ?? '',
+      sources.join(','),
+    ].join('|');
   }
 
   private async findMatch(
@@ -165,4 +189,15 @@ function toResolved(input: string, r: StandardSummary, source: SourceName): Reso
     publishDate: r.publishDate,
     implementDate: r.implementDate,
   };
+}
+
+async function mapLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  const queue = [...items];
+  const workers = Array.from({ length: Math.min(limit, queue.length) }, async () => {
+    while (queue.length) {
+      const item = queue.shift();
+      if (item) await fn(item);
+    }
+  });
+  await Promise.all(workers);
 }

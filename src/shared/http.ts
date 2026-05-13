@@ -17,30 +17,53 @@ const headers = {
   Accept: 'application/json, text/plain, */*',
 };
 
-export async function pooledFetch(url: string, init?: RequestInit): Promise<Response> {
-  const maxRetries = 3;
+export interface FetchWithTimeoutOptions extends RequestInit {
+  timeoutMs?: number;
+  retries?: number;
+  retryDelayMs?: number;
+}
+
+export async function fetchWithTimeoutAndRetry(url: string, init: FetchWithTimeoutOptions = {}): Promise<Response> {
+  const { timeoutMs = 15_000, retries = 3, retryDelayMs = 1_000, signal, ...requestInit } = init;
+  const maxRetries = Math.max(1, retries);
   let lastError: Error | undefined;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(new Error(`Request timed out after ${timeoutMs}ms`)), timeoutMs);
+    const abortFromParent = () => ctrl.abort(signal?.reason);
+    if (signal) {
+      if (signal.aborted) ctrl.abort(signal.reason);
+      else signal.addEventListener('abort', abortFromParent, { once: true });
+    }
+
     try {
       const resp = await fetch(url, {
-        ...init,
-        headers: { ...headers, ...init?.headers },
+        ...requestInit,
+        headers: { ...headers, ...requestInit.headers },
+        signal: ctrl.signal,
         // @ts-ignore
         dispatcher: httpAgent,
       });
       if (resp.ok || resp.status < 500) return resp;
       if (attempt < maxRetries - 1) {
-        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        await new Promise(r => setTimeout(r, retryDelayMs * (attempt + 1)));
         continue;
       }
       return resp;
     } catch (e) {
       lastError = e instanceof Error ? e : new Error(String(e));
       if (attempt < maxRetries - 1) {
-        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        await new Promise(r => setTimeout(r, retryDelayMs * (attempt + 1)));
       }
+    } finally {
+      clearTimeout(timer);
+      if (signal) signal.removeEventListener('abort', abortFromParent);
     }
   }
-  throw lastError ?? new Error('pooledFetch: all retries failed');
+  throw lastError ?? new Error('fetchWithTimeoutAndRetry: all retries failed');
+}
+
+export async function pooledFetch(url: string, init?: FetchWithTimeoutOptions): Promise<Response> {
+  return fetchWithTimeoutAndRetry(url, init);
 }

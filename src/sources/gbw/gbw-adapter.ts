@@ -87,7 +87,7 @@ export class GbwAdapter implements SourceAdapter {
     const detailUrl = new URL('/gb/search/gbDetailed', GBW_STD_BASE);
     detailUrl.searchParams.set('id', sourceId);
 
-    const response = await fetch(detailUrl, {
+    const response = await pooledFetch(detailUrl.toString(), {
       headers: {
         'User-Agent': USER_AGENT,
       },
@@ -192,7 +192,7 @@ export class GbwAdapter implements SourceAdapter {
     }
 
     const showUrl = `${GBW_DOWNLOAD_BASE}/bzgk/gb/showGb?type=download&hcno=${hcno}`;
-    const showResponse = await fetch(showUrl, {
+    const showResponse = await pooledFetch(showUrl, {
       headers: {
         'User-Agent': USER_AGENT,
         Referer: `${GBW_OPENSTD_BASE}/`,
@@ -208,7 +208,7 @@ export class GbwAdapter implements SourceAdapter {
     }
 
     const captchaUrl = `${GBW_DOWNLOAD_BASE}/bzgk/gb/gc?_${Date.now()}`;
-    const captchaResponse = await fetch(captchaUrl, {
+    const captchaResponse = await pooledFetch(captchaUrl, {
       headers: {
         'User-Agent': USER_AGENT,
         Referer: showUrl,
@@ -253,7 +253,7 @@ export class GbwAdapter implements SourceAdapter {
 
     const cookieHeader = session.cookies.join('; ');
     const verifyUrl = `${GBW_DOWNLOAD_BASE}/bzgk/gb/verifyCode`;
-    const response = await fetch(verifyUrl, {
+    const response = await pooledFetch(verifyUrl, {
       method: 'POST',
       headers: {
         'User-Agent': USER_AGENT,
@@ -398,7 +398,7 @@ export class GbwAdapter implements SourceAdapter {
     | { kind: 'html'; contentType: string; htmlPreview: string }
   > {
     const cookieHeader = session.cookies.join('; ');
-    const response = await fetch(viewUrl, {
+    const response = await pooledFetch(viewUrl, {
       headers: {
         'User-Agent': USER_AGENT,
         Referer: session.showUrl,
@@ -440,9 +440,9 @@ export class GbwAdapter implements SourceAdapter {
   private async checkOpenstdHasText(hcno: string): Promise<boolean> {
     try {
       const url = `${GBW_OPENSTD_BASE}/bzgk/std/newGbInfo?hcno=${hcno}`;
-      const resp = await fetch(url, {
+      const resp = await pooledFetch(url, {
         headers: { 'User-Agent': USER_AGENT },
-        signal: AbortSignal.timeout(8000),
+        timeoutMs: 8000,
       });
       if (!resp.ok) return false;
       const html = await resp.text();

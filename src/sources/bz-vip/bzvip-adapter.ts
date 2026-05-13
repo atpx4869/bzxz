@@ -123,9 +123,10 @@ export class BzVipAdapter implements SourceAdapter {
 
       const fileName = buildBzVipFileName(standardNo, detail.title, dl.disposition);
       const filePath = await safeWriteExportFile(fileName, dl.data);
+      const savedFileName = filePath.split(/[\\/]/).pop() ?? fileName;
 
       accountPool.release(account, true);
-      return { standardId: id, filePath, fileName };
+      return { standardId: id, filePath, fileName: savedFileName };
     } catch (e) {
       accountPool.release(account, false);
       throw e instanceof UpstreamError ? e : new UpstreamError(`bzvip download failed: ${(e as Error).message}`);

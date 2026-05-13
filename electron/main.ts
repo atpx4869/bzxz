@@ -10,6 +10,7 @@ Menu.setApplicationMenu(null);
 import path from 'node:path';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createApp } from '../src/api/app';
+import { ensureDataDirs } from '../src/shared/fs';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -98,11 +99,8 @@ async function startServer(): Promise<number> {
     ? (process as any).resourcesPath // resources/ dir where extraResources live
     : process.cwd();
 
-  // Ensure data dir exists (outside asar, writable)
-  const dataDir = path.join(baseDir, 'data', 'exports');
-  if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
-
   process.env.BZXZ_BASE_DIR = baseDir;
+  await ensureDataDirs();
 
   const expressApp = createApp();
   return new Promise((resolve) => {
