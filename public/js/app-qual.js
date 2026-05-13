@@ -13,10 +13,77 @@ function switchQualTab(tab) {
     t.style.borderBottomColor = active ? 'var(--accent)' : 'transparent';
   });
   document.getElementById('qualSearchTab').style.display = tab === 'search' ? '' : 'none';
+  document.getElementById('qualVisualTab').style.display = tab === 'visual' ? '' : 'none';
   document.getElementById('qualLabsTab').style.display = tab === 'labs' ? '' : 'none';
   document.getElementById('qualLogsTab').style.display = tab === 'logs' ? '' : 'none';
   if (tab === 'labs') { loadQualLabs(); loadLabsSyncLogs(); }
   if (tab === 'logs') loadQualSyncLogs('cnas');
+}
+
+async function doQualBatchVisual() {
+  const input = document.getElementById('qualBatchInput');
+  const codes = [...new Set(input.value.split(/[\n\r,，;；]+/).map(s => s.trim()).filter(Boolean))];
+  const stats = document.getElementById('qualVisualStats');
+  const out = document.getElementById('qualVisualResults');
+  if (!codes.length) {
+    stats.innerHTML = '请输入标准号';
+    out.innerHTML = '';
+    return;
+  }
+  stats.innerHTML = '<span class="spinner"></span> 查询中';
+  out.innerHTML = '';
+  try {
+    const res = await fetch('/api/standards/qualifications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stdCodes: codes }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || '查询失败');
+    renderQualVisual(codes, data);
+  } catch (e) {
+    stats.innerHTML = `<span style="color:var(--danger)">查询失败: ${escapeHtml(e.message)}</span>`;
+  }
+}
+
+function fillQualBatchFromSaved() {
+  const input = document.getElementById('qualBatchInput');
+  input.value = savedStandards.map(s => s.standardNumber).filter(Boolean).join('\n');
+  input.focus();
+}
+
+function renderQualVisual(codes, data) {
+  const stats = document.getElementById('qualVisualStats');
+  const out = document.getElementById('qualVisualResults');
+  let covered = 0, cnas = 0, cma = 0, expired = 0;
+  const now = beijingDate();
+  const cards = codes.map(code => {
+    const items = data[code] || [];
+    if (items.length) covered++;
+    cnas += items.filter(i => i.source === 'CNAS').length;
+    cma += items.filter(i => i.source === 'CMA').length;
+    expired += items.filter(i => i.expiryDate && i.expiryDate < now).length;
+    const labs = [...new Map(items.map(i => [i.source + ':' + (i.labNo || i.labName), i])).values()];
+    return `<div class="qual-visual-result ${items.length ? '' : 'empty'}">
+      <div class="qual-visual-code">
+        <strong>${escapeHtml(code)}</strong>
+        <span>${items.length ? `${labs.length} 家机构 · ${items.length} 条能力` : '暂无能力记录'}</span>
+      </div>
+      <div class="qual-visual-bars">
+        <span style="--w:${Math.min(100, items.filter(i => i.source === 'CNAS').length * 12)}%" class="cnas">CNAS ${items.filter(i => i.source === 'CNAS').length}</span>
+        <span style="--w:${Math.min(100, items.filter(i => i.source === 'CMA').length * 12)}%" class="cma">CMA ${items.filter(i => i.source === 'CMA').length}</span>
+      </div>
+      <div class="qual-visual-labs">
+        ${labs.slice(0, 8).map(l => `<span>${escapeHtml(l.source)} · ${escapeHtml(l.labName || l.labNo || '机构')}</span>`).join('') || '<span>可在订阅管理中添加机构并同步能力</span>'}
+      </div>
+    </div>`;
+  }).join('');
+  stats.innerHTML = `
+    <div><strong>${covered}/${codes.length}</strong><span>有能力覆盖</span></div>
+    <div><strong>${cnas}</strong><span>CNAS 能力</span></div>
+    <div><strong>${cma}</strong><span>CMA 能力</span></div>
+    <div class="${expired ? 'warn' : ''}"><strong>${expired}</strong><span>已过期记录</span></div>`;
+  out.innerHTML = `<div class="qual-visual-results">${cards}</div>`;
 }
 
 function setQualFilter(btn, source) {

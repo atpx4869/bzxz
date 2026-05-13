@@ -48,6 +48,13 @@ async function doComplete() {
   try {
     const form = new FormData(); form.append('file', file);
     form.append('sources', JSON.stringify(downloadPriority.filter(s => downloadSources.includes(s))));
+    form.append('inputColumn', document.getElementById('completeInputColumn').value || 'A');
+    form.append('outputColumn', document.getElementById('completeOutputColumn').value || 'B');
+    form.append('preserveStyle', String(document.getElementById('completePreserveStyle').checked));
+    form.append('includeStatus', String(document.getElementById('completeIncludeStatus').checked));
+    form.append('includeSource', String(document.getElementById('completeIncludeSource').checked));
+    form.append('includeDownloadLink', String(document.getElementById('completeIncludeLink').checked));
+    form.append('includeTextFlag', String(document.getElementById('completeIncludeText').checked));
     const res = await fetch(`${API}/api/standards/complete`, { method: 'POST', body: form });
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);

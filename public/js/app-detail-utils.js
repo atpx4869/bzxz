@@ -335,6 +335,15 @@ function recordDownload(source, fileName, standardNumber) {
   const now = new Date(new Date().getTime() + 8*3600000);
   const time = `${now.getUTCMonth()+1}/${now.getUTCDate()} ${String(now.getUTCHours()).padStart(2,'0')}:${String(now.getUTCMinutes()).padStart(2,'0')}`;
   addDownloadHistory({ source, fileName, standardNumber: standardNumber || fileName, name: fileName, time });
+  const key = String(standardNumber || '').replace(/\s+/g, '').toUpperCase();
+  const saved = savedStandards.find(s => s.key === key);
+  if (saved) {
+    saved.downloaded = true;
+    saved.fileName = fileName;
+    saved.source = source;
+    saved.downloadedAt = Date.now();
+    persistSavedStandards();
+  }
 }
 
 function exportLogs() {
@@ -398,6 +407,7 @@ document.getElementById('searchHistory').addEventListener('click', e => {
 
 // ── Download history ──
 const DL_HISTORY_KEY = 'bzxz_dl_history';
+let fileLibraryItems = [];
 function loadDownloadHistory() {
   try { return JSON.parse(localStorage.getItem(DL_HISTORY_KEY) || '[]'); } catch { return []; }
 }
@@ -413,6 +423,8 @@ function clearDownloadHistory() {
   showToast('历史已清空');
 }
 function renderDownloadHistory() {
+  renderSavedLibrary();
+  refreshFileLibrary();
   const hist = loadDownloadHistory();
   const el = document.getElementById('historyList');
   if (!hist.length) { el.innerHTML = '<div style="color:var(--text-3);text-align:center;padding:32px">暂无下载记录</div>'; return; }
@@ -422,6 +434,109 @@ function renderDownloadHistory() {
     <span style="color:var(--text-3);font-size:11px">${escapeHtml(h.time || '')}</span>
     ${h.fileName ? `<button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" onclick="triggerDownload('${escapeHtml(h.fileName)}')">重下</button>` : ''}
   </div>`).join('');
+}
+
+function renderSavedLibrary() {
+  const list = document.getElementById('savedLibraryList');
+  const count = document.getElementById('savedLibraryCount');
+  if (!list || !count) return;
+  count.textContent = String(savedStandards.length);
+  if (!savedStandards.length) {
+    list.innerHTML = '<div class="library-empty">搜索结果里点“收藏”，常用标准会出现在这里。</div>';
+    return;
+  }
+  list.innerHTML = savedStandards.map(item => `
+    <div class="library-item">
+      <div class="library-main">
+        <strong>${escapeHtml(item.standardNumber || item.key)}</strong>
+        <span>${escapeHtml(item.title || item.note || '—')}</span>
+        <em>${escapeHtml(item.group || '未分组')} · ${item.downloaded ? '已下载' : '未下载'}</em>
+      </div>
+      <div class="library-actions">
+        ${item.fileName ? `<button class="btn btn-ghost btn-sm" data-download-file="${escapeHtml(item.fileName)}">重下</button>` : ''}
+        <button class="btn btn-ghost btn-sm" onclick="editSavedStandard('${escapeHtml(item.key)}')">备注</button>
+        <button class="btn btn-ghost btn-sm" onclick="removeSavedStandard('${escapeHtml(item.key)}')">移除</button>
+      </div>
+    </div>`).join('');
+}
+
+function editSavedStandard(key) {
+  const item = savedStandards.find(s => s.key === key);
+  if (!item) return;
+  const group = prompt('分组', item.group || '');
+  if (group === null) return;
+  const note = prompt('备注', item.note || item.title || '');
+  if (note === null) return;
+  item.group = group.trim();
+  item.note = note.trim();
+  persistSavedStandards();
+  renderSavedLibrary();
+  showToast('收藏信息已更新');
+}
+
+function removeSavedStandard(key) {
+  savedStandards = savedStandards.filter(s => s.key !== key);
+  persistSavedStandards();
+  renderSavedLibrary();
+  if (typeof renderResults === 'function') { renderResults(); renderFilterBar(); updateToolbar(); }
+}
+
+async function refreshFileLibrary() {
+  const list = document.getElementById('fileLibraryList');
+  if (!list) return;
+  try {
+    const res = await fetch('/api/downloads');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || '加载失败');
+    fileLibraryItems = data.items || [];
+    renderFileLibrary();
+  } catch (e) {
+    list.innerHTML = `<div class="library-empty fail">文件库加载失败: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderFileLibrary() {
+  const list = document.getElementById('fileLibraryList');
+  const count = document.getElementById('fileLibraryCount');
+  if (!list || !count) return;
+  const q = (document.getElementById('fileLibrarySearch')?.value || '').trim().toLowerCase();
+  const items = fileLibraryItems.filter(f => !q || `${f.fileName} ${f.standardNumber}`.toLowerCase().includes(q));
+  count.textContent = String(items.length);
+  if (!items.length) {
+    list.innerHTML = '<div class="library-empty">暂无匹配文件</div>';
+    return;
+  }
+  list.innerHTML = items.map(f => `
+    <div class="library-item">
+      <div class="library-main">
+        <strong>${escapeHtml(f.standardNumber || f.fileName)}</strong>
+        <span title="${escapeHtml(f.fileName)}">${escapeHtml(f.fileName)}</span>
+        <em>${escapeHtml(f.source || '本地')} · ${formatSize(f.size)} · ${utcToBeijing(f.mtime)}</em>
+      </div>
+      <div class="library-actions">
+        <button class="btn btn-ghost btn-sm" data-download-file="${escapeHtml(f.fileName)}">下载</button>
+        <button class="btn btn-ghost btn-sm" onclick="copyFilePath('${escapeHtml(f.path)}')">路径</button>
+        <button class="btn btn-ghost btn-sm danger" onclick="deleteLibraryFile('${escapeHtml(f.fileName)}')">删除</button>
+      </div>
+    </div>`).join('');
+}
+
+function copyFilePath(filePath) {
+  navigator.clipboard.writeText(filePath || '');
+  showToast('文件路径已复制');
+}
+
+async function deleteLibraryFile(fileName) {
+  if (!confirm(`删除文件 ${fileName}？`)) return;
+  try {
+    const res = await fetch(`/api/downloads/${encodeURIComponent(fileName)}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || '删除失败');
+    showToast('文件已删除');
+    refreshFileLibrary();
+  } catch (e) {
+    showToast(`删除失败: ${e.message}`, 'fail');
+  }
 }
 
 // ── Toast ──

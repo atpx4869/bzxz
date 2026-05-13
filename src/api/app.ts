@@ -1,6 +1,7 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
+import { readdir, stat, unlink } from 'node:fs/promises';
 
 import { ExportTaskStore } from '../services/export-task-store';
 import { SourceRegistry } from '../services/source-registry';
@@ -38,7 +39,7 @@ export function createApp() {
 
   // Serve exported files for browser download
   app.get('/api/downloads/:filename', (req, res) => {
-    const filename = req.params.filename;
+    const filename = String(req.params.filename);
     // Strict filename whitelist — no path separators or traversal
     if (!/^[a-zA-Z0-9一-鿿._\-\s()]+$/.test(filename)) {
       res.status(400).json({ code: 'BAD_REQUEST', message: 'Invalid filename' });
@@ -58,6 +59,59 @@ export function createApp() {
       res.sendFile(filePath);
     } else {
       res.download(filePath);
+    }
+  });
+
+  app.get('/api/downloads', requireAuth, async (_req, res, next) => {
+    try {
+      const exportsDir = path.resolve(baseDir, 'data', 'exports');
+      if (!existsSync(exportsDir)) {
+        res.json({ items: [] });
+        return;
+      }
+      const names = await readdir(exportsDir);
+      const items = await Promise.all(names
+        .filter(name => /^[a-zA-Z0-9一-鿿._\-\s()]+$/.test(name))
+        .map(async name => {
+          const filePath = path.resolve(exportsDir, name);
+          if (!filePath.startsWith(exportsDir + path.sep)) return null;
+          const s = await stat(filePath);
+          if (!s.isFile()) return null;
+          const standardNumber = name.match(/((?:GB|GB\/T|YY\/T|YY|JJG|DB\d+\/T|ISO)[\w./ -]*?\d{1,5}(?:[-—]\d{4})?)/i)?.[1]?.trim() ?? '';
+          const source = name.match(/_(gbw|bzvip|by|bz)_/i)?.[1] ?? '';
+          return {
+            fileName: name,
+            size: s.size,
+            mtime: s.mtime.toISOString(),
+            standardNumber,
+            source,
+            path: filePath,
+            downloadUrl: `/api/downloads/${encodeURIComponent(name)}`,
+          };
+        }));
+      res.json({ items: items.filter(Boolean).sort((a: any, b: any) => String(b.mtime).localeCompare(String(a.mtime))) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete('/api/downloads/:filename', requireAuth, async (req, res, next) => {
+    try {
+      const filename = String(req.params.filename);
+      if (!/^[a-zA-Z0-9一-鿿._\-\s()]+$/.test(filename)) {
+        res.status(400).json({ code: 'BAD_REQUEST', message: 'Invalid filename' });
+        return;
+      }
+      const exportsDir = path.resolve(baseDir, 'data', 'exports');
+      const filePath = path.resolve(exportsDir, filename);
+      if (!filePath.startsWith(exportsDir + path.sep)) {
+        res.status(400).json({ code: 'BAD_REQUEST', message: 'Invalid filename' });
+        return;
+      }
+      await unlink(filePath);
+      res.json({ ok: true });
+    } catch (error) {
+      next(error);
     }
   });
 

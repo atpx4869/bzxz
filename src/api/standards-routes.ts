@@ -384,8 +384,35 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
 
       const bodySchema = z.object({
         sources: z.array(sourceEnum).min(1).optional(),
+        inputColumn: z.string().trim().min(1).max(3).optional(),
+        outputColumn: z.string().trim().min(1).max(3).optional(),
+        preserveStyle: z.boolean().optional(),
+        includeSource: z.boolean().optional(),
+        includeStatus: z.boolean().optional(),
+        includeDownloadLink: z.boolean().optional(),
+        includeTextFlag: z.boolean().optional(),
       });
-      const { sources } = bodySchema.parse(req.body.sources ? { sources: JSON.parse(req.body.sources) } : {});
+      const parsedBody = bodySchema.parse({
+        sources: req.body.sources ? JSON.parse(req.body.sources) : undefined,
+        inputColumn: req.body.inputColumn,
+        outputColumn: req.body.outputColumn,
+        preserveStyle: req.body.preserveStyle === 'true',
+        includeSource: req.body.includeSource !== 'false',
+        includeStatus: req.body.includeStatus !== 'false',
+        includeDownloadLink: req.body.includeDownloadLink === 'true',
+        includeTextFlag: req.body.includeTextFlag === 'true',
+      });
+      const { sources } = parsedBody;
+      const colToIndex = (value: string | undefined, fallback: number) => {
+        const s = (value || '').trim().toUpperCase();
+        if (!s) return fallback;
+        if (/^\d+$/.test(s)) return Math.max(0, Number(s) - 1);
+        let index = 0;
+        for (const ch of s) index = index * 26 + (ch.charCodeAt(0) - 64);
+        return Math.max(0, index - 1);
+      };
+      const inputCol = colToIndex(parsedBody.inputColumn, 0);
+      const outputCol = colToIndex(parsedBody.outputColumn, 1);
 
       // Parse workbook — lazy load xlsx only when needed
       const XLSX = (await import('xlsx')).default;
@@ -398,16 +425,16 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       // Extract column A, skip header row if it looks like a header
       const lines: string[] = [];
       let startRow = 0;
-      const firstVal = String(rows[0]?.[0] ?? '').trim();
+      const firstVal = String(rows[0]?.[inputCol] ?? '').trim();
       if (firstVal && !/[A-Z]{2,}/i.test(firstVal)) {
         startRow = 1; // Skip header row
       }
       for (let i = startRow; i < rows.length; i++) {
-        const val = String(rows[i]?.[0] ?? '').trim();
+        const val = String(rows[i]?.[inputCol] ?? '').trim();
         if (val) lines.push(val);
       }
 
-      if (lines.length === 0) throw new BadRequestError('未在A列找到有效的标准号');
+      if (lines.length === 0) throw new BadRequestError(`未在${parsedBody.inputColumn || 'A'}列找到有效的标准号`);
 
       // Resolve
       const selectedSources = (sources ?? sourceRegistry.list()) as SourceName[];
@@ -421,31 +448,73 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         if (!lookup.has(key)) lookup.set(key, r);
       }
 
-      // Build output sheet
-      const outRows: string[][] = [];
-      // Header
-      outRows.push(['用户提供', '标准号', '标准名称', '状态', '来源', '备注']);
-      for (let i = startRow; i < rows.length; i++) {
-        const original = String(rows[i]?.[0] ?? '').trim();
-        if (!original) continue;
+      const outputHeaders = ['标准号', '标准名称'];
+      if (parsedBody.includeStatus) outputHeaders.push('状态');
+      if (parsedBody.includeSource) outputHeaders.push('来源');
+      if (parsedBody.includeDownloadLink) outputHeaders.push('下载链接');
+      if (parsedBody.includeTextFlag) outputHeaders.push('是否有文本');
+      outputHeaders.push('备注');
+
+      const rowValues = (original: string) => {
         const match = lookup.get(original);
         if (match) {
-          outRows.push([original, match.standardNumber, match.title, match.status ?? '', match.source, '']);
-        } else {
-          const unmatchReason = unmatched.find(u => u.input === original)?.reason ?? '未匹配';
-          outRows.push([original, '', '', '', '', unmatchReason]);
+          const values = [match.standardNumber, match.title];
+          if (parsedBody.includeStatus) values.push(match.status ?? '');
+          if (parsedBody.includeSource) values.push(match.source);
+          if (parsedBody.includeDownloadLink) values.push(`/api/standards/${encodeURIComponent(match.standardId)}/export`);
+          if (parsedBody.includeTextFlag) values.push('未检测');
+          values.push('');
+          return values;
         }
+        const values = ['', ''];
+        if (parsedBody.includeStatus) values.push('');
+        if (parsedBody.includeSource) values.push('');
+        if (parsedBody.includeDownloadLink) values.push('');
+        if (parsedBody.includeTextFlag) values.push('');
+        values.push(unmatched.find(u => u.input === original)?.reason ?? '未匹配');
+        return values;
+      };
+
+      let outWorkbook: any;
+      let outSheet: any;
+      if (parsedBody.preserveStyle) {
+        outWorkbook = workbook;
+        outSheet = sheet;
+        outputHeaders.forEach((header, offset) => {
+          outSheet[XLSX.utils.encode_cell({ r: Math.max(0, startRow - 1), c: outputCol + offset })] = { t: 's', v: header };
+        });
+        for (let i = startRow; i < rows.length; i++) {
+          const original = String(rows[i]?.[inputCol] ?? '').trim();
+          if (!original) continue;
+          rowValues(original).forEach((value, offset) => {
+            outSheet[XLSX.utils.encode_cell({ r: i, c: outputCol + offset })] = { t: 's', v: value };
+          });
+        }
+        const range = XLSX.utils.decode_range(outSheet['!ref'] || 'A1:A1');
+        range.e.c = Math.max(range.e.c, outputCol + outputHeaders.length - 1);
+        range.e.r = Math.max(range.e.r, rows.length - 1);
+        outSheet['!ref'] = XLSX.utils.encode_range(range);
+        outSheet['!cols'] = outSheet['!cols'] || [];
+        outputHeaders.forEach((_header, offset) => {
+          outSheet['!cols']![outputCol + offset] = { wch: offset === 1 ? 50 : 18 };
+        });
+      } else {
+        const outRows: string[][] = [];
+        outRows.push(['用户提供', ...outputHeaders]);
+        for (let i = startRow; i < rows.length; i++) {
+          const original = String(rows[i]?.[inputCol] ?? '').trim();
+          if (!original) continue;
+          outRows.push([original, ...rowValues(original)]);
+        }
+        outWorkbook = XLSX.utils.book_new();
+        outSheet = XLSX.utils.aoa_to_sheet(outRows);
+        outSheet['!cols'] = [
+          { wch: 25 }, { wch: 28 }, { wch: 50 }, ...outputHeaders.slice(2).map(() => ({ wch: 18 })),
+        ];
+        XLSX.utils.book_append_sheet(outWorkbook, outSheet, '标准补全结果');
       }
 
       // Write output file
-      const outWorkbook = XLSX.utils.book_new();
-      const outSheet = XLSX.utils.aoa_to_sheet(outRows);
-      // Set column widths
-      outSheet['!cols'] = [
-        { wch: 25 }, { wch: 28 }, { wch: 50 }, { wch: 12 }, { wch: 10 }, { wch: 30 },
-      ];
-      XLSX.utils.book_append_sheet(outWorkbook, outSheet, '标准补全结果');
-
       const exportsDir = path.resolve(baseDir, 'data', 'exports');
       await mkdir(exportsDir, { recursive: true });
       const outFileName = `标准补全_${Date.now()}.xlsx`;

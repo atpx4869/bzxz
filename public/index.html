@@ -194,6 +194,15 @@
         <div class="complete-actions">
           <button class="btn btn-primary btn-sm" id="completeUploadBtn" disabled onclick="doComplete()">上传并补全</button>
         </div>
+        <div class="complete-options">
+          <label><span>输入列</span><input id="completeInputColumn" value="A" maxlength="3"></label>
+          <label><span>输出起始列</span><input id="completeOutputColumn" value="B" maxlength="3"></label>
+          <label class="check-option"><input type="checkbox" id="completePreserveStyle" checked> 保留原表样式</label>
+          <label class="check-option"><input type="checkbox" id="completeIncludeStatus" checked> 状态</label>
+          <label class="check-option"><input type="checkbox" id="completeIncludeSource" checked> 来源</label>
+          <label class="check-option"><input type="checkbox" id="completeIncludeLink"> 下载链接</label>
+          <label class="check-option"><input type="checkbox" id="completeIncludeText"> 是否有文本</label>
+        </div>
       </section>
       <section class="complete-card">
         <div class="complete-card-head">
@@ -210,10 +219,30 @@
 
   <!-- Page: History -->
   <div class="page" id="page-history">
-    <h2 style="font-size:20px;font-weight:600;margin-bottom:18px">下载历史</h2>
-    <div id="historyList" style="max-height:400px;overflow-y:auto;font-size:13px"></div>
-    <div style="text-align:right;margin-top:8px">
-      <button class="btn btn-ghost btn-sm" onclick="clearDownloadHistory()">清空历史</button>
+    <div class="page-heading">
+      <div>
+        <h2>下载历史与文件库</h2>
+        <p>收藏的常用标准、已下载文件和历史记录集中在这里。</p>
+      </div>
+      <button class="btn btn-sm btn-ghost" onclick="refreshFileLibrary()">刷新文件库</button>
+    </div>
+    <div class="library-grid">
+      <section class="library-card">
+        <div class="library-head"><h3>常用标准库</h3><span id="savedLibraryCount">0</span></div>
+        <div id="savedLibraryList"></div>
+      </section>
+      <section class="library-card">
+        <div class="library-head"><h3>本地文件库</h3><span id="fileLibraryCount">0</span></div>
+        <input class="library-search" id="fileLibrarySearch" placeholder="按标准号或文件名筛选…" oninput="renderFileLibrary()">
+        <div id="fileLibraryList"></div>
+      </section>
+      <section class="library-card wide">
+        <div class="library-head">
+          <h3>下载历史</h3>
+          <button class="btn btn-ghost btn-sm" onclick="clearDownloadHistory()">清空历史</button>
+        </div>
+        <div id="historyList" style="font-size:13px"></div>
+      </section>
     </div>
   </div>
 
@@ -222,6 +251,7 @@
     <h2 style="font-size:20px;font-weight:600;margin-bottom:18px">资质查询</h2>
     <div class="qual-tab-bar" style="display:flex;gap:0;margin-bottom:14px;border-bottom:1px solid var(--border)">
       <button class="qual-tab active" data-qual-tab="search" onclick="switchQualTab('search')" style="padding:8px 16px;font-size:13px;border:none;background:none;color:var(--text);cursor:pointer;border-bottom:2px solid var(--accent);font-weight:500">搜索</button>
+      <button class="qual-tab" data-qual-tab="visual" onclick="switchQualTab('visual')" style="padding:8px 16px;font-size:13px;border:none;background:none;color:var(--text-3);cursor:pointer;border-bottom:2px solid transparent;font-weight:500">可视化</button>
       <button class="qual-tab" data-qual-tab="labs" onclick="switchQualTab('labs')" style="padding:8px 16px;font-size:13px;border:none;background:none;color:var(--text-3);cursor:pointer;border-bottom:2px solid transparent;font-weight:500">订阅管理</button>
       <button class="qual-tab" data-qual-tab="logs" onclick="switchQualTab('logs')" style="padding:8px 16px;font-size:13px;border:none;background:none;color:var(--text-3);cursor:pointer;border-bottom:2px solid transparent;font-weight:500">同步日志</button>
     </div>
@@ -252,6 +282,24 @@
       </div>
       <div class="qual-section-title" style="margin-top:24px">同步日志</div>
       <div id="qualLabsSyncLogs" style="max-height:300px;overflow-y:auto;font-size:12px"></div>
+    </div>
+    <div id="qualVisualTab" style="display:none">
+      <div class="qual-visual-workspace">
+        <section class="qual-visual-card">
+          <div class="batch-kicker">批量能力查询</div>
+          <h3>按标准号查看可检测机构</h3>
+          <textarea id="qualBatchInput" class="batch-textarea" placeholder="每行一个标准号&#10;GB/T 1.1-2020&#10;GB 18584-2024"></textarea>
+          <div class="batch-actions">
+            <button class="btn btn-primary btn-sm" onclick="doQualBatchVisual()">查询能力</button>
+            <button class="btn btn-ghost btn-sm" onclick="fillQualBatchFromSaved()">填入收藏</button>
+          </div>
+        </section>
+        <section class="qual-visual-card">
+          <div class="batch-kicker">概览</div>
+          <div id="qualVisualStats" class="qual-visual-stats">等待查询</div>
+        </section>
+      </div>
+      <div id="qualVisualResults"></div>
     </div>
     <div id="qualLogsTab" style="display:none">
       <div style="display:flex;gap:8px;margin-bottom:12px">
