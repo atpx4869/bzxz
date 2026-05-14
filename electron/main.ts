@@ -8,8 +8,10 @@ import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain, session, 
 
 Menu.setApplicationMenu(null);
 import path from 'node:path';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { networkInterfaces } from 'node:os';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { createApp } from '../src/api/app';
 import { ensureDataDirs } from '../src/shared/fs';
@@ -27,6 +29,23 @@ const SETTINGS_FILE = path.join(app.getPath('userData'), 'bzxz-settings.json');
 interface DesktopSettings {
   downloadPath: string;
   webServiceEnabled: boolean;
+}
+
+interface UpdateAsset {
+  name: string;
+  url: string;
+  size: number;
+}
+
+interface UpdateInfo {
+  currentVersion: string;
+  latestVersion: string;
+  updateAvailable: boolean;
+  releaseUrl: string;
+  releaseName?: string;
+  publishedAt?: string;
+  assets: UpdateAsset[];
+  note?: string;
 }
 
 function getDefaultSettings(): DesktopSettings {
@@ -117,7 +136,7 @@ function isNewerVersion(latest: string, current: string): boolean {
   return false;
 }
 
-async function checkForUpdates() {
+async function checkForUpdates(): Promise<UpdateInfo> {
   const currentVersion = app.getVersion();
   const response = await fetch(UPDATE_API_URL, {
     headers: {
@@ -159,6 +178,77 @@ async function checkForUpdates() {
       url: asset.browser_download_url,
       size: asset.size,
     })),
+  };
+}
+
+function findInstallerAsset(assets: UpdateAsset[]): UpdateAsset | undefined {
+  return assets.find((asset) => /\.exe$/i.test(asset.name) && /setup/i.test(asset.name));
+}
+
+function safeDownloadFileName(name: string): string {
+  return name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 160) || 'bzxz-setup.exe';
+}
+
+async function downloadAndInstallUpdate() {
+  const info = await checkForUpdates();
+  if (!info.updateAvailable) {
+    throw new Error('当前已是最新版');
+  }
+  const asset = findInstallerAsset(info.assets);
+  if (!asset) {
+    throw new Error('未找到可自动安装的 Setup 安装包，请打开下载页手动下载');
+  }
+
+  const updateDir = path.join(app.getPath('temp'), 'bzxz-updates');
+  if (!existsSync(updateDir)) mkdirSync(updateDir, { recursive: true });
+  const filePath = path.join(updateDir, safeDownloadFileName(asset.name));
+
+  const response = await fetch(asset.url, {
+    headers: {
+      Accept: 'application/octet-stream',
+      'User-Agent': `bzxz/${app.getVersion()}`,
+    },
+  });
+  if (!response.ok || !response.body) {
+    throw new Error(`下载安装包失败: HTTP ${response.status}`);
+  }
+
+  const total = Number(response.headers.get('content-length')) || asset.size || 0;
+  let downloaded = 0;
+  const body = Readable.fromWeb(response.body as any);
+  body.on('data', (chunk: Buffer) => {
+    downloaded += chunk.length;
+    mainWindow?.webContents.send('bzxz:update-download-progress', {
+      downloaded,
+      total,
+      percent: total ? Math.round((downloaded / total) * 100) : 0,
+      fileName: asset.name,
+    });
+  });
+
+  await pipeline(body, createWriteStream(filePath));
+  mainWindow?.webContents.send('bzxz:update-download-progress', {
+    downloaded: total || downloaded,
+    total: total || downloaded,
+    percent: 100,
+    fileName: asset.name,
+    done: true,
+  });
+
+  const openError = await shell.openPath(filePath);
+  if (openError) {
+    throw new Error(`启动安装包失败: ${openError}`);
+  }
+
+  setTimeout(() => {
+    isQuitting = true;
+    app.quit();
+  }, 1200);
+
+  return {
+    latestVersion: info.latestVersion,
+    installerPath: filePath,
+    fileName: asset.name,
   };
 }
 
@@ -334,6 +424,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('bzxz:set-web-service-enabled', (_event, enabled: boolean) => setWebServiceEnabled(Boolean(enabled)));
   ipcMain.handle('bzxz:get-app-version', () => app.getVersion());
   ipcMain.handle('bzxz:check-for-updates', () => checkForUpdates());
+  ipcMain.handle('bzxz:download-and-install-update', () => downloadAndInstallUpdate());
   ipcMain.handle('bzxz:open-update-page', (_event, url?: string) => {
     const target = typeof url === 'string' && url.startsWith('https://github.com/') ? url : UPDATE_RELEASES_URL;
     void shell.openExternal(target);

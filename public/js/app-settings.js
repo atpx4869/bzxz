@@ -3,7 +3,7 @@ const SETTINGS_LABELS = { gbw: 'BW源', bz: 'BZ源', by: 'BY源', bzvip: 'BZvip�
 const SETTINGS_NOTES = { gbw: '自动验证码 5~15s', bz: '合成PDF 30~90s', by: '直链PDF 2~5s', bzvip: '账号池 2~5s' };
 var startupSettingState = { loaded: false, loading: false, enabled: false, supported: false, error: '' };
 var webAccessState = { loaded: false, loading: false, info: null, error: '' };
-var appUpdateState = { loaded: false, checking: false, info: null, error: '' };
+var appUpdateState = { loaded: false, checking: false, installing: false, progress: null, info: null, error: '' };
 
 function hasDesktopStartupApi() {
   return Boolean(window.bzxz && window.bzxz.isElectron && window.bzxz.getOpenAtLogin && window.bzxz.setOpenAtLogin);
@@ -28,6 +28,12 @@ function jsStringArg(value) {
   return JSON.stringify(String(value || '')).replace(/"/g, '&quot;');
 }
 
+function getInstallerAsset(assets) {
+  return (Array.isArray(assets) ? assets : []).find(function(asset) {
+    return /\.exe$/i.test(asset.name || '') && /setup/i.test(asset.name || '');
+  });
+}
+
 function renderUpdateCard() {
   var supported = hasDesktopUpdateApi();
   var info = appUpdateState.info || {};
@@ -41,6 +47,10 @@ function renderUpdateCard() {
     : '当前是浏览器 Web 端，无法检查桌面客户端更新。';
   var statusClass = appUpdateState.error ? ' danger' : (info.updateAvailable ? ' success' : '');
   var assets = Array.isArray(info.assets) ? info.assets.slice(0, 3) : [];
+  var installerAsset = getInstallerAsset(info.assets);
+  var progressText = appUpdateState.installing
+    ? ('下载中' + (appUpdateState.progress?.percent ? ' ' + appUpdateState.progress.percent + '%' : '...'))
+    : '';
   var assetList = assets.length ? `
         <div class="update-asset-list">
           ${assets.map(function(asset) {
@@ -64,9 +74,11 @@ function renderUpdateCard() {
           <span>当前版本 <strong>v${escapeHtml(current)}</strong></span>
           <span>最新版本 <strong>${latest === '—' ? '—' : 'v' + escapeHtml(latest)}</strong></span>
         </div>
+        ${progressText ? `<div class="update-progress"><div><span style="width:${Math.max(4, Math.min(100, appUpdateState.progress?.percent || 8))}%"></span></div><em>${escapeHtml(progressText)}</em></div>` : ''}
         ${assetList}
         <div class="settings-actions">
           <button class="btn btn-sm btn-primary" ${!supported || appUpdateState.checking ? 'disabled' : ''} onclick="checkAppUpdate(false)">检查更新</button>
+          <button class="btn btn-sm btn-primary" ${!supported || appUpdateState.installing || !info.updateAvailable || !installerAsset ? 'disabled' : ''} onclick="downloadAndInstallAppUpdate()">下载并安装</button>
           <button class="btn btn-sm btn-ghost" ${!supported || !info.releaseUrl ? 'disabled' : ''} onclick="openAppUpdatePage(${jsStringArg(info.releaseUrl || '')})">打开下载页</button>
         </div>
       </div>`;
@@ -129,19 +141,47 @@ async function checkAppUpdate(silent) {
   if (document.getElementById('settingsBody')) renderSettings();
   try {
     var info = await window.bzxz.checkForUpdates();
-    appUpdateState = { loaded: true, checking: false, info: info, error: '' };
+    appUpdateState = { loaded: true, checking: false, installing: false, progress: null, info: info, error: '' };
     if (!silent && typeof showToast === 'function') {
       showToast(info.updateAvailable ? ('发现新版本 v' + info.latestVersion) : '当前已是最新版', info.updateAvailable ? 'success' : 'info');
     }
   } catch (err) {
-    appUpdateState = { loaded: true, checking: false, info: appUpdateState.info, error: err?.message || '检查更新失败' };
+    appUpdateState = { loaded: true, checking: false, installing: false, progress: null, info: appUpdateState.info, error: err?.message || '检查更新失败' };
     if (!silent && typeof showToast === 'function') showToast(appUpdateState.error, 'fail');
   }
   renderUpdateBadge();
   if (document.getElementById('settingsBody')) renderSettings();
 }
 
+async function downloadAndInstallAppUpdate() {
+  if (!window.bzxz?.downloadAndInstallUpdate) return;
+  appUpdateState.installing = true;
+  appUpdateState.error = '';
+  appUpdateState.progress = { percent: 0 };
+  renderSettings();
+  try {
+    await window.bzxz.downloadAndInstallUpdate();
+    if (typeof showToast === 'function') showToast('安装器已启动，客户端即将退出', 'success', 5000);
+  } catch (err) {
+    appUpdateState.installing = false;
+    appUpdateState.error = err?.message || '下载并安装失败';
+    if (typeof showToast === 'function') showToast(appUpdateState.error, 'fail');
+    renderSettings();
+  }
+}
+
+function initUpdateDownloadProgress() {
+  if (!window.bzxz?.onUpdateDownloadProgress || window.__bzxzUpdateProgressBound) return;
+  window.__bzxzUpdateProgressBound = true;
+  window.bzxz.onUpdateDownloadProgress(function(progress) {
+    appUpdateState.installing = !progress?.done;
+    appUpdateState.progress = progress || null;
+    if (document.getElementById('settingsBody')) renderSettings();
+  });
+}
+
 function initAppUpdateCheck() {
+  initUpdateDownloadProgress();
   if (!hasDesktopUpdateApi() || appUpdateState.loaded || appUpdateState.checking) {
     renderUpdateBadge();
     return;

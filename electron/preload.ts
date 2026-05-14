@@ -12,7 +12,13 @@ contextBridge.exposeInMainWorld('bzxz', {
   setWebServiceEnabled: (enabled: boolean) => ipcRenderer.invoke('bzxz:set-web-service-enabled', enabled),
   getAppVersion: () => ipcRenderer.invoke('bzxz:get-app-version'),
   checkForUpdates: () => ipcRenderer.invoke('bzxz:check-for-updates'),
+  downloadAndInstallUpdate: () => ipcRenderer.invoke('bzxz:download-and-install-update'),
   openUpdatePage: (url?: string) => ipcRenderer.invoke('bzxz:open-update-page', url),
+  onUpdateDownloadProgress: (callback: (progress: unknown) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: unknown) => callback(progress);
+    ipcRenderer.on('bzxz:update-download-progress', listener);
+    return () => ipcRenderer.removeListener('bzxz:update-download-progress', listener);
+  },
   copyWebAccessUrl: (url?: string) => ipcRenderer.invoke('bzxz:copy-web-access-url', url),
   openWebAccessUrl: (url?: string) => ipcRenderer.invoke('bzxz:open-web-access-url', url),
 });
