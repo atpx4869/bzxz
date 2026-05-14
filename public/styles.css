@@ -388,6 +388,7 @@ body.sidebar-collapsed .log-panel { left: var(--sidebar-collapsed-w); }
 /* Toggle switch */
 .toggle-switch { display: inline-block; cursor: pointer; position: relative; }
 .toggle-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.toggle-switch:has(input:disabled) { cursor: not-allowed; opacity: 0.55; }
 .toggle-track { display: block; width: 44px; height: 24px; background: var(--border); border-radius: 12px; position: relative; transition: background 0.2s var(--ease-out); }
 .toggle-switch input:checked + .toggle-track { background: var(--accent); }
 .toggle-thumb { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: #fff; border-radius: 50%; transition: transform 0.2s var(--ease-spring); box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
@@ -420,6 +421,16 @@ body.sidebar-collapsed .log-panel { left: var(--sidebar-collapsed-w); }
 .setting-row-main { min-width: 0; }
 .setting-row-title { font-size: 14px; font-weight: 600; color: var(--text); }
 .setting-row-note { margin-top: 3px; font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.desktop-setting-card { padding: 0; }
+.desktop-setting-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 14px; }
+.desktop-setting-status { color: var(--text-3); font: 700 12px 'DM Mono', monospace; white-space: nowrap; }
+.desktop-setting-status.success { color: var(--success); }
+.desktop-setting-status.danger { color: var(--danger); }
+.web-access-card .settings-card-header { margin-bottom: 10px; }
+.web-access-url-list { display: grid; gap: 8px; }
+.web-access-url-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 8px; border: 1px solid oklch(26% 0.012 255 / 0.42); border-radius: var(--radius-sm); background: oklch(15% 0.012 255 / 0.35); }
+.web-access-url-row span { color: var(--text-3); font-size: 12px; }
+.web-access-url-row code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent-h); font: 600 12px 'DM Mono', monospace; }
 .source-pill { pointer-events: none; }
 .settings-source-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
 .source-status-list { font-size: 13px; color: var(--text-3); border: 1px solid oklch(26% 0.012 255 / 0.42); border-radius: var(--radius-sm); padding: 12px; background: oklch(17% 0.014 255 / 0.38); }

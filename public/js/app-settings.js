@@ -1,6 +1,163 @@
 // ── Settings (floating panel) ──
 const SETTINGS_LABELS = { gbw: 'BW源', bz: 'BZ源', by: 'BY源', bzvip: 'BZvip源' };
 const SETTINGS_NOTES = { gbw: '自动验证码 5~15s', bz: '合成PDF 30~90s', by: '直链PDF 2~5s', bzvip: '账号池 2~5s' };
+var startupSettingState = { loaded: false, loading: false, enabled: false, supported: false, error: '' };
+var webAccessState = { loaded: false, loading: false, info: null, error: '' };
+
+function hasDesktopStartupApi() {
+  return Boolean(window.bzxz && window.bzxz.isElectron && window.bzxz.getOpenAtLogin && window.bzxz.setOpenAtLogin);
+}
+
+function hasDesktopWebAccessApi() {
+  return Boolean(window.bzxz && window.bzxz.isElectron && window.bzxz.getWebAccessInfo);
+}
+
+function renderWebAccessCard() {
+  var supported = hasDesktopWebAccessApi();
+  var info = webAccessState.info || {};
+  var lanUrls = Array.isArray(info.lanUrls) ? info.lanUrls : [];
+  var urls = supported ? [info.localUrl].concat(lanUrls).filter(Boolean) : [window.location.origin].filter(Boolean);
+  var title = supported
+    ? (lanUrls.length ? '局域网可访问' : '仅本机地址')
+    : '仅桌面端可启动';
+  var note = supported
+    ? (webAccessState.error || info.firewallHint || '桌面程序最小化到托盘后，内置 Web 服务仍会继续运行。')
+    : '当前是浏览器 Web 端，无法控制桌面内置服务。';
+  var statusClass = webAccessState.error ? ' danger' : (lanUrls.length ? ' success' : '');
+  var urlRows = urls.length ? urls.map(function(url, idx) {
+    var label = idx === 0 ? '本机' : '内网';
+    return `
+      <div class="web-access-url-row">
+        <span>${label}</span>
+        <code title="${escapeHtml(url)}">${escapeHtml(url)}</code>
+        ${supported ? `<button class="btn btn-sm btn-ghost" onclick="copyWebAccessUrl('${escapeHtml(url)}')">复制</button>` : ''}
+        ${supported ? `<button class="btn btn-sm btn-ghost" onclick="openWebAccessUrl('${escapeHtml(url)}')">打开</button>` : ''}
+      </div>`;
+  }).join('') : '<div class="setting-hint">未获取到访问地址</div>';
+  return `
+      <div class="settings-card wide web-access-card">
+        <div class="settings-card-header">
+          <div>
+            <div class="settings-kicker">网页版启动器</div>
+            <div class="settings-value">内置 Web 服务</div>
+            <div class="setting-hint">${escapeHtml(note)}</div>
+          </div>
+          <span class="desktop-setting-status${statusClass}">${webAccessState.loading ? '读取中' : title}</span>
+        </div>
+        <div class="web-access-url-list">${urlRows}</div>
+      </div>`;
+}
+
+async function ensureWebAccessLoaded(force) {
+  if (!hasDesktopWebAccessApi()) {
+    webAccessState = { loaded: true, loading: false, info: null, error: '' };
+    return;
+  }
+  if (!force && (webAccessState.loaded || webAccessState.loading)) return;
+  webAccessState.loading = true;
+  webAccessState.error = '';
+  try {
+    var info = await window.bzxz.getWebAccessInfo();
+    webAccessState = { loaded: true, loading: false, info: info, error: '' };
+  } catch (err) {
+    webAccessState = { loaded: true, loading: false, info: null, error: err?.message || '读取 Web 访问地址失败' };
+  }
+  renderSettings();
+}
+
+async function copyWebAccessUrl(url) {
+  if (!window.bzxz?.copyWebAccessUrl) return;
+  try {
+    var result = await window.bzxz.copyWebAccessUrl(url);
+    if (typeof showToast === 'function') showToast('已复制: ' + result.url, 'success');
+  } catch (err) {
+    if (typeof showToast === 'function') showToast(err?.message || '复制失败', 'fail');
+  }
+}
+
+async function openWebAccessUrl(url) {
+  if (!window.bzxz?.openWebAccessUrl) return;
+  try {
+    await window.bzxz.openWebAccessUrl(url);
+  } catch (err) {
+    if (typeof showToast === 'function') showToast(err?.message || '打开失败', 'fail');
+  }
+}
+
+function renderStartupSettingCard() {
+  var supported = hasDesktopStartupApi();
+  var disabled = !supported || startupSettingState.loading;
+  var title = supported ? (startupSettingState.enabled ? '已开启' : '未开启') : '仅桌面端';
+  var note = supported
+    ? (startupSettingState.error || '开启后，登录 Windows 时自动启动 bzxz 桌面程序。')
+    : 'Web 端不能写入系统启动项，请在桌面程序中设置。';
+  var statusClass = startupSettingState.error ? ' danger' : (startupSettingState.enabled ? ' success' : '');
+  return `
+      <div class="settings-card wide desktop-setting-card">
+        <div class="setting-row desktop-setting-row">
+          <div class="setting-row-main">
+            <div class="settings-kicker">桌面程序</div>
+            <div class="setting-row-title">开机自启</div>
+            <div class="setting-row-note">${escapeHtml(note)}</div>
+          </div>
+          <span class="desktop-setting-status${statusClass}">${startupSettingState.loading ? '读取中' : title}</span>
+          <label class="toggle-switch" title="${supported ? '登录 Windows 后自动启动' : '仅桌面程序可用'}">
+            <input type="checkbox" ${startupSettingState.enabled ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="toggleStartupSetting(this.checked)">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+      </div>`;
+}
+
+async function ensureStartupSettingLoaded(force) {
+  if (!hasDesktopStartupApi()) {
+    startupSettingState = { loaded: true, loading: false, enabled: false, supported: false, error: '' };
+    return;
+  }
+  if (!force && (startupSettingState.loaded || startupSettingState.loading)) return;
+  startupSettingState.loading = true;
+  startupSettingState.error = '';
+  try {
+    var info = await window.bzxz.getOpenAtLogin();
+    startupSettingState = {
+      loaded: true,
+      loading: false,
+      enabled: Boolean(info && info.openAtLogin),
+      supported: info?.supported !== false,
+      error: '',
+    };
+  } catch (err) {
+    startupSettingState = {
+      loaded: true,
+      loading: false,
+      enabled: false,
+      supported: true,
+      error: err?.message || '读取开机自启状态失败',
+    };
+  }
+  renderSettings();
+}
+
+async function toggleStartupSetting(enabled) {
+  if (!hasDesktopStartupApi()) return;
+  startupSettingState.loading = true;
+  startupSettingState.error = '';
+  renderSettings();
+  try {
+    var info = await window.bzxz.setOpenAtLogin(Boolean(enabled));
+    startupSettingState = {
+      loaded: true,
+      loading: false,
+      enabled: Boolean(info && info.openAtLogin),
+      supported: info?.supported !== false,
+      error: '',
+    };
+  } catch (err) {
+    startupSettingState.loading = false;
+    startupSettingState.error = err?.message || '设置开机自启失败';
+  }
+  renderSettings();
+}
 
 function renderSettings() {
   const priorityRows = downloadPriority.map((s, i) => {
@@ -32,6 +189,8 @@ function renderSettings() {
   const historyOpts = [3, 5, 8, 10, 15, 20].map(n => {
     return `<button class="btn btn-sm ${n === getHistoryLimit() ? 'btn-primary' : 'btn-ghost'}" onclick="setHistoryLimit(${n});renderSettings()">${n}</button>`;
   }).join('');
+  const webAccessCard = renderWebAccessCard();
+  const startupCard = renderStartupSettingCard();
 
   document.getElementById('settingsBody').innerHTML = `
     <div class="settings-grid">
@@ -66,6 +225,8 @@ function renderSettings() {
         <div class="settings-value">${getHistoryLimit()}条</div>
         <div class="setting-options">${historyOpts}</div>
       </div>
+      ${webAccessCard}
+      ${startupCard}
     </div>
     <div class="setting-section">
       <div class="field-label">源优先级</div>
@@ -83,6 +244,8 @@ function renderSettings() {
       <button class="btn btn-ghost btn-sm" onclick="resetSettings();renderSettings()">恢复默认</button>
     </div>`;
   initDragSort();
+  ensureWebAccessLoaded(false);
+  ensureStartupSettingLoaded(false);
 }
 
 var sourceStatusCache = {};

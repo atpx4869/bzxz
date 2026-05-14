@@ -4,17 +4,19 @@ for (const key of ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'AL
 }
 process.env.NO_PROXY = '*';
 
-import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain, session } from 'electron';
+import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain, session, shell, clipboard } from 'electron';
 
 Menu.setApplicationMenu(null);
 import path from 'node:path';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { networkInterfaces } from 'node:os';
 import { createApp } from '../src/api/app';
 import { ensureDataDirs } from '../src/shared/fs';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let serverPort = 0;
+let isQuitting = false;
 
 // Default download path — persists in userData
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'bzxz-settings.json');
@@ -26,6 +28,49 @@ function loadSettings(): { downloadPath: string } {
 }
 function saveSettings(s: { downloadPath: string }) {
   try { writeFileSync(SETTINGS_FILE, JSON.stringify(s)); } catch {}
+}
+
+function getOpenAtLoginInfo() {
+  const loginItem = app.getLoginItemSettings();
+  return {
+    supported: true,
+    openAtLogin: loginItem.openAtLogin,
+    openAsHidden: loginItem.openAsHidden,
+  };
+}
+
+function setOpenAtLogin(enabled: boolean) {
+  app.setLoginItemSettings({
+    openAtLogin: enabled,
+    path: process.execPath,
+  });
+  return getOpenAtLoginInfo();
+}
+
+function getLanIps(): string[] {
+  return Object.values(networkInterfaces())
+    .flatMap((entries) => entries ?? [])
+    .filter((entry) => entry.family === 'IPv4' && !entry.internal)
+    .map((entry) => entry.address);
+}
+
+function getWebAccessInfo() {
+  const localUrl = `http://localhost:${serverPort}`;
+  const lanUrls = getLanIps().map((ip) => `http://${ip}:${serverPort}`);
+  return {
+    port: serverPort,
+    bindHost: '0.0.0.0',
+    localUrl,
+    lanUrls,
+    primaryUrl: lanUrls[0] ?? localUrl,
+    firewallHint: '同一局域网设备访问前，请允许 Windows 防火墙放行 bzxz 或当前端口。',
+  };
+}
+
+function pickWebAccessUrl(url?: string): string {
+  const info = getWebAccessInfo();
+  const allowed = [info.localUrl, ...info.lanUrls];
+  return url && allowed.includes(url) ? url : info.primaryUrl;
 }
 
 function createWindow() {
@@ -48,6 +93,22 @@ function createWindow() {
   mainWindow.loadURL(`http://localhost:${serverPort}`);
 
   // Start minimized to tray — user opens window via tray menu or double-click
+  const windowWithMinimizeEvent = mainWindow as unknown as {
+    on(event: 'minimize', listener: (event: { preventDefault(): void }) => void): void;
+  };
+  windowWithMinimizeEvent.on('minimize', (event) => {
+    if (process.platform !== 'darwin') {
+      event.preventDefault();
+      mainWindow?.hide();
+    }
+  });
+
+  mainWindow.on('close', (event) => {
+    if (!isQuitting && process.platform !== 'darwin') {
+      event.preventDefault();
+      mainWindow?.hide();
+    }
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -63,6 +124,7 @@ function createTray() {
     // fallback to empty image
   }
   tray = new Tray(icon);
+  const accessInfo = getWebAccessInfo();
 
   const contextMenu = Menu.buildFromTemplate([
     { label: '打开 bzxz', click: () => {
@@ -73,13 +135,20 @@ function createTray() {
         createWindow();
       }
     }},
+    { label: '在浏览器打开网页版', click: () => {
+      void shell.openExternal(accessInfo.localUrl);
+    }},
+    { label: `复制局域网地址${accessInfo.lanUrls[0] ? `: ${accessInfo.lanUrls[0]}` : ''}`, click: () => {
+      clipboard.writeText(accessInfo.primaryUrl);
+    }},
     { type: 'separator' },
     { label: '退出', click: () => {
+      isQuitting = true;
       app.quit();
     }},
   ]);
 
-  tray.setToolTip(`bzxz · http://localhost:${serverPort}`);
+  tray.setToolTip(`bzxz · ${accessInfo.primaryUrl}`);
   tray.setContextMenu(contextMenu);
 
   tray.on('double-click', () => {
@@ -143,6 +212,19 @@ app.whenReady().then(async () => {
   ipcMain.handle('bzxz:open-download-folder', () => {
     require('electron').shell.openPath(settings.downloadPath);
   });
+  ipcMain.handle('bzxz:get-open-at-login', () => getOpenAtLoginInfo());
+  ipcMain.handle('bzxz:set-open-at-login', (_event, enabled: boolean) => setOpenAtLogin(Boolean(enabled)));
+  ipcMain.handle('bzxz:get-web-access-info', () => getWebAccessInfo());
+  ipcMain.handle('bzxz:copy-web-access-url', (_event, url?: string) => {
+    const target = pickWebAccessUrl(url);
+    clipboard.writeText(target);
+    return { url: target };
+  });
+  ipcMain.handle('bzxz:open-web-access-url', (_event, url?: string) => {
+    const target = pickWebAccessUrl(url);
+    void shell.openExternal(target);
+    return { url: target };
+  });
 
   createWindow();
   createTray();
@@ -164,6 +246,7 @@ app.on('activate', () => {
 });
 
 app.on('before-quit', () => {
+  isQuitting = true;
   tray?.destroy();
   tray = null;
 });
