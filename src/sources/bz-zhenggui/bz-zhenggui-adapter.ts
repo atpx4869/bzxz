@@ -1,5 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 
 import type {
   ExportResult,
@@ -31,9 +32,19 @@ interface BzNewDetailResponse {
 }
 
 const SEARCH_API = `${BZ_NEW_BASE}/api/gxist-standard/standardstd/list`;
+const MAX_PREVIEW_PAGES = 512;
+const PAGE_DISCOVERY_BATCH_SIZE = 8;
+const PREVIEW_PAGE_CACHE_TTL = 5 * 60 * 1000;
+
+interface PreviewPage {
+  index: number;
+  bytes: Uint8Array;
+  hash: string;
+}
 
 export class BzZhengguiAdapter implements SourceAdapter {
   readonly source = 'bz' as const;
+  private readonly previewPageCache = new Map<string, { expiresAt: number; pages: PreviewPage[] }>();
 
   async searchStandards(input: SearchStandardsInput): Promise<StandardSummary[]> {
     const cacheKey = `bz:search:${input.query}`;
@@ -100,9 +111,7 @@ export class BzZhengguiAdapter implements SourceAdapter {
 
     const totalPages = await this.detectPageCount(standardNo);
 
-    const pageUrls = Array.from({ length: totalPages }, (_, index) =>
-      `${BZ_NEW_BASE}/api/gxist-standard/standardstd/read-image?no=${encodeURIComponent(standardNo)}&page=${index}`,
-    );
+    const pageUrls = Array.from({ length: totalPages }, (_, index) => this.getPreviewPageUrl(standardNo, index));
 
     return {
       standardId: id,
@@ -123,47 +132,26 @@ export class BzZhengguiAdapter implements SourceAdapter {
 
   async exportStandard(id: string, onProgress?: (current: number, total: number) => void): Promise<ExportResult> {
     const detail = await this.getStandardDetail(id);
-    let preview: PreviewInfo;
-    for (let retry = 0; retry < 3; retry++) {
-      preview = await this.detectPreview(id);
-      if (preview.totalPages && preview.totalPages > 0 && preview.pageUrls.length > 0) break;
-      if (retry < 2) await new Promise(r => setTimeout(r, 3000));
-    }
-    preview = preview!;
-
-    if (!preview.totalPages || preview.pageUrls.length === 0) {
+    const hasPdf = detail.moreInfo?.hasPdf === true || detail.moreInfo?.isPdf === '1';
+    if (!hasPdf || !detail.standardNumber) {
       throw new BadRequestError(`bz export: no preview pages available for ${detail.standardNumber}`);
     }
 
-    const totalPages = preview.totalPages;
+    const previewPages = await this.downloadPreviewPages(detail.standardNumber);
+    if (previewPages.length === 0) {
+      throw new BadRequestError(`bz export: no preview pages available for ${detail.standardNumber}`);
+    }
+
+    const totalPages = previewPages.length;
     const { PDFDocument } = await import('pdf-lib');
     const pdfDoc = await PDFDocument.create();
 
-    // Download pages in parallel batches of 8
-    const BATCH = 8;
-    const pageBuffers: Map<number, Uint8Array> = new Map();
-
-    for (let i = 0; i < preview.pageUrls.length; i += BATCH) {
-      const batch = preview.pageUrls.slice(i, i + BATCH);
-      const results = await Promise.all(
-        batch.map(async (pageUrl, idx) => {
-          const response = await pooledFetch(pageUrl);
-          if (!response.ok) {
-            throw new UpstreamError(`Failed to download preview page: ${pageUrl}`, { status: response.status });
-          }
-          return { idx: i + idx, bytes: new Uint8Array(await response.arrayBuffer()) };
-        }),
-      );
-      for (const r of results) pageBuffers.set(r.idx, r.bytes);
-      onProgress?.(Math.min(i + BATCH, totalPages), totalPages);
-    }
-
     // Embed in order
-    for (let idx = 0; idx < totalPages; idx++) {
-      const bytes = pageBuffers.get(idx)!;
-      const image = await pdfDoc.embedJpg(bytes);
+    for (const [idx, previewPage] of previewPages.entries()) {
+      const image = await pdfDoc.embedJpg(previewPage.bytes);
       const page = pdfDoc.addPage([image.width, image.height]);
       page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
+      onProgress?.(idx + 1, totalPages);
     }
 
     const fileName = buildFileName(detail.standardNumber, detail.title);
@@ -181,57 +169,70 @@ export class BzZhengguiAdapter implements SourceAdapter {
   private async detectPageCount(standardNo: string): Promise<number> {
     // Cache hit
     const cached = getCachedPageCount(standardNo);
-    if (cached !== null) return cached;
+    // Old versions wrote invalid "1 page" entries because BZ no longer returns
+    // content-length for HEAD requests. Re-check one-page cache entries.
+    if (cached !== null && cached > 1) return cached;
 
-    // Binary search via HEAD requests to find page boundary
-    const count = await this.probePageCount(standardNo);
-    setCachedPageCount(standardNo, count);
-    return count;
+    return (await this.downloadPreviewPages(standardNo)).length;
   }
 
-  private async probePageCount(standardNo: string): Promise<number> {
-    // First, try to read pages 0..8 in parallel to get a quick baseline
-    const probes = await Promise.all(
-      Array.from({ length: 9 }, (_, i) => this.getPageContentLength(standardNo, i)),
-    );
-
-    // Find first page with content < 5000 bytes
-    let maxPage = 0;
-    for (let i = 0; i < probes.length; i++) {
-      if (probes[i] >= 5000) maxPage = i;
+  private async downloadPreviewPages(standardNo: string): Promise<PreviewPage[]> {
+    const cached = this.previewPageCache.get(standardNo);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.pages;
     }
 
-    // If all first 9 pages have content, binary search higher
-    if (probes.every((len) => len >= 5000)) {
-      let low = 8;
-      let high = 512;
-      while (low < high - 1) {
-        const mid = Math.floor((low + high) / 2);
-        const [midLen, nextLen] = await Promise.all([
-          this.getPageContentLength(standardNo, mid),
-          this.getPageContentLength(standardNo, mid + 1),
-        ]);
-        if (midLen < 5000 || midLen === nextLen) {
-          high = mid;
-        } else {
-          low = mid + 1;
+    const first = await this.fetchPreviewPage(standardNo, 0);
+    const pages: PreviewPage[] = [first];
+    const firstHash = first.hash;
+    let nextPage = 1;
+    let reachedEnd = false;
+
+    while (!reachedEnd && pages.length < MAX_PREVIEW_PAGES) {
+      const indexes = Array.from(
+        { length: Math.min(PAGE_DISCOVERY_BATCH_SIZE, MAX_PREVIEW_PAGES - nextPage) },
+        (_unused, idx) => nextPage + idx,
+      );
+      const batch = await Promise.all(indexes.map(index => this.fetchPreviewPage(standardNo, index)));
+      for (const page of batch) {
+        if (page.hash === firstHash) {
+          reachedEnd = true;
+          break;
         }
+        pages.push(page);
       }
-      maxPage = low;
+      nextPage += indexes.length;
     }
 
-    return maxPage + 1; // pages are 0-indexed, count = last+1
+    if (!reachedEnd && pages.length >= MAX_PREVIEW_PAGES) {
+      throw new UpstreamError(`bz preview page boundary not found for ${standardNo}`, { maxPages: MAX_PREVIEW_PAGES });
+    }
+
+    pages.sort((a, b) => a.index - b.index);
+    this.previewPageCache.set(standardNo, { expiresAt: Date.now() + PREVIEW_PAGE_CACHE_TTL, pages });
+    setCachedPageCount(standardNo, pages.length);
+    return pages;
   }
 
-  private async getPageContentLength(standardNo: string, pageNum: number): Promise<number> {
-    try {
-      const url = `${BZ_NEW_BASE}/api/gxist-standard/standardstd/read-image?no=${encodeURIComponent(standardNo)}&page=${pageNum}`;
-      const response = await pooledFetch(url, { method: 'HEAD' });
-      const length = response.headers.get('content-length');
-      return length ? parseInt(length, 10) : 0;
-    } catch {
-      return 0;
+  private async fetchPreviewPage(standardNo: string, pageNum: number): Promise<PreviewPage> {
+    const pageUrl = this.getPreviewPageUrl(standardNo, pageNum);
+    const response = await pooledFetch(pageUrl, { timeoutMs: 20_000, retries: 2 });
+    if (!response.ok) {
+      throw new UpstreamError(`Failed to download preview page: ${pageUrl}`, { status: response.status });
     }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.length < 5000 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+      throw new UpstreamError(`Invalid bz preview page response: ${pageUrl}`, { status: response.status, bytes: bytes.length });
+    }
+    return {
+      index: pageNum,
+      bytes,
+      hash: createHash('sha256').update(bytes).digest('hex'),
+    };
+  }
+
+  private getPreviewPageUrl(standardNo: string, pageNum: number): string {
+    return `${BZ_NEW_BASE}/api/gxist-standard/standardstd/read-image?no=${encodeURIComponent(standardNo)}&page=${pageNum}`;
   }
 
   private mapSearchRow(row: BzSearchRow): StandardSummary {
