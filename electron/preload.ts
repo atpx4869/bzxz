@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('bzxz', {
   getOpenAtLogin: () => ipcRenderer.invoke('bzxz:get-open-at-login'),
   setOpenAtLogin: (enabled: boolean) => ipcRenderer.invoke('bzxz:set-open-at-login', enabled),
   getWebAccessInfo: () => ipcRenderer.invoke('bzxz:get-web-access-info'),
+  setWebServiceEnabled: (enabled: boolean) => ipcRenderer.invoke('bzxz:set-web-service-enabled', enabled),
   copyWebAccessUrl: (url?: string) => ipcRenderer.invoke('bzxz:copy-web-access-url', url),
   openWebAccessUrl: (url?: string) => ipcRenderer.invoke('bzxz:open-web-access-url', url),
 });

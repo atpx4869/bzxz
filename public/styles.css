@@ -423,6 +423,7 @@ body.sidebar-collapsed .log-panel { left: var(--sidebar-collapsed-w); }
 .setting-row-note { margin-top: 3px; font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .desktop-setting-card { padding: 0; }
 .desktop-setting-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 14px; }
+.desktop-setting-controls { display: flex; align-items: center; gap: 10px; }
 .desktop-setting-status { color: var(--text-3); font: 700 12px 'DM Mono', monospace; white-space: nowrap; }
 .desktop-setting-status.success { color: var(--success); }
 .desktop-setting-status.danger { color: var(--danger); }

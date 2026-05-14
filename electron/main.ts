@@ -10,6 +10,7 @@ Menu.setApplicationMenu(null);
 import path from 'node:path';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { networkInterfaces } from 'node:os';
+import express, { type Request, type Response, type NextFunction } from 'express';
 import { createApp } from '../src/api/app';
 import { ensureDataDirs } from '../src/shared/fs';
 
@@ -20,13 +21,28 @@ let isQuitting = false;
 
 // Default download path — persists in userData
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'bzxz-settings.json');
-function loadSettings(): { downloadPath: string } {
-  try {
-    if (existsSync(SETTINGS_FILE)) return JSON.parse(readFileSync(SETTINGS_FILE, 'utf-8'));
-  } catch {}
-  return { downloadPath: path.join(app.getPath('downloads'), 'bzxz') };
+interface DesktopSettings {
+  downloadPath: string;
+  webServiceEnabled: boolean;
 }
-function saveSettings(s: { downloadPath: string }) {
+
+function getDefaultSettings(): DesktopSettings {
+  return {
+    downloadPath: path.join(app.getPath('downloads'), 'bzxz'),
+    webServiceEnabled: true,
+  };
+}
+
+function loadSettings(): DesktopSettings {
+  const defaults = getDefaultSettings();
+  try {
+    if (existsSync(SETTINGS_FILE)) {
+      return { ...defaults, ...JSON.parse(readFileSync(SETTINGS_FILE, 'utf-8')) };
+    }
+  } catch {}
+  return defaults;
+}
+function saveSettings(s: DesktopSettings) {
   try { writeFileSync(SETTINGS_FILE, JSON.stringify(s)); } catch {}
 }
 
@@ -55,22 +71,47 @@ function getLanIps(): string[] {
 }
 
 function getWebAccessInfo() {
+  const settings = loadSettings();
   const localUrl = `http://localhost:${serverPort}`;
-  const lanUrls = getLanIps().map((ip) => `http://${ip}:${serverPort}`);
+  const lanUrls = settings.webServiceEnabled ? getLanIps().map((ip) => `http://${ip}:${serverPort}`) : [];
   return {
     port: serverPort,
     bindHost: '0.0.0.0',
+    webServiceEnabled: settings.webServiceEnabled,
     localUrl,
     lanUrls,
-    primaryUrl: lanUrls[0] ?? localUrl,
-    firewallHint: '同一局域网设备访问前，请允许 Windows 防火墙放行 bzxz 或当前端口。',
+    primaryUrl: settings.webServiceEnabled && lanUrls[0] ? lanUrls[0] : localUrl,
+    firewallHint: settings.webServiceEnabled
+      ? '同一局域网设备访问前，请允许 Windows 防火墙放行 bzxz 或当前端口。'
+      : '局域网 Web 访问已关闭；桌面端和本机 localhost 仍可使用。',
   };
+}
+
+function setWebServiceEnabled(enabled: boolean) {
+  const settings = loadSettings();
+  settings.webServiceEnabled = enabled;
+  saveSettings(settings);
+  updateTrayMenu();
+  return getWebAccessInfo();
 }
 
 function pickWebAccessUrl(url?: string): string {
   const info = getWebAccessInfo();
   const allowed = [info.localUrl, ...info.lanUrls];
   return url && allowed.includes(url) ? url : info.primaryUrl;
+}
+
+function isLocalRequest(req: Request): boolean {
+  const remote = req.socket.remoteAddress || req.ip || '';
+  return ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(remote) || remote.startsWith('::ffff:127.');
+}
+
+function webAccessGate(req: Request, res: Response, next: NextFunction) {
+  if (loadSettings().webServiceEnabled || isLocalRequest(req)) {
+    next();
+    return;
+  }
+  res.status(403).send('bzxz Web access is disabled on this desktop host.');
 }
 
 function createWindow() {
@@ -124,6 +165,20 @@ function createTray() {
     // fallback to empty image
   }
   tray = new Tray(icon);
+  updateTrayMenu();
+
+  tray.on('double-click', () => {
+    if (mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+    } else {
+      createWindow();
+    }
+  });
+}
+
+function updateTrayMenu() {
+  if (!tray) return;
   const accessInfo = getWebAccessInfo();
 
   const contextMenu = Menu.buildFromTemplate([
@@ -138,8 +193,8 @@ function createTray() {
     { label: '在浏览器打开网页版', click: () => {
       void shell.openExternal(accessInfo.localUrl);
     }},
-    { label: `复制局域网地址${accessInfo.lanUrls[0] ? `: ${accessInfo.lanUrls[0]}` : ''}`, click: () => {
-      clipboard.writeText(accessInfo.primaryUrl);
+    { label: accessInfo.webServiceEnabled && accessInfo.lanUrls[0] ? `复制局域网地址: ${accessInfo.lanUrls[0]}` : '局域网访问已关闭', enabled: accessInfo.webServiceEnabled && accessInfo.lanUrls.length > 0, click: () => {
+      clipboard.writeText(accessInfo.lanUrls[0]);
     }},
     { type: 'separator' },
     { label: '退出', click: () => {
@@ -150,15 +205,6 @@ function createTray() {
 
   tray.setToolTip(`bzxz · ${accessInfo.primaryUrl}`);
   tray.setContextMenu(contextMenu);
-
-  tray.on('double-click', () => {
-    if (mainWindow) {
-      mainWindow.show();
-      mainWindow.focus();
-    } else {
-      createWindow();
-    }
-  });
 }
 
 async function startServer(): Promise<number> {
@@ -171,7 +217,9 @@ async function startServer(): Promise<number> {
   process.env.BZXZ_BASE_DIR = baseDir;
   await ensureDataDirs();
 
-  const expressApp = createApp();
+  const expressApp = express();
+  expressApp.use(webAccessGate);
+  expressApp.use(createApp());
   return new Promise((resolve) => {
     const server = expressApp.listen(0, '0.0.0.0', () => {  // 0 = random available port
       const addr = server.address();
@@ -193,28 +241,30 @@ app.whenReady().then(async () => {
   if (!existsSync(settings.downloadPath)) mkdirSync(settings.downloadPath, { recursive: true });
 
   session.defaultSession.on('will-download', (_event, item) => {
-    const filePath = path.join(settings.downloadPath, item.getFilename());
+    const filePath = path.join(loadSettings().downloadPath, item.getFilename());
     item.setSavePath(filePath);
   });
 
   // IPC: get/set download path
-  ipcMain.handle('bzxz:get-download-path', () => settings.downloadPath);
+  ipcMain.handle('bzxz:get-download-path', () => loadSettings().downloadPath);
   ipcMain.handle('bzxz:set-download-path', async () => {
     const result = await dialog.showOpenDialog({
       title: '选择默认下载路径', properties: ['openDirectory', 'createDirectory'],
     });
     if (!result.canceled && result.filePaths[0]) {
-      settings.downloadPath = result.filePaths[0];
-      saveSettings(settings);
+      const currentSettings = loadSettings();
+      currentSettings.downloadPath = result.filePaths[0];
+      saveSettings(currentSettings);
     }
-    return settings.downloadPath;
+    return loadSettings().downloadPath;
   });
   ipcMain.handle('bzxz:open-download-folder', () => {
-    require('electron').shell.openPath(settings.downloadPath);
+    void shell.openPath(loadSettings().downloadPath);
   });
   ipcMain.handle('bzxz:get-open-at-login', () => getOpenAtLoginInfo());
   ipcMain.handle('bzxz:set-open-at-login', (_event, enabled: boolean) => setOpenAtLogin(Boolean(enabled)));
   ipcMain.handle('bzxz:get-web-access-info', () => getWebAccessInfo());
+  ipcMain.handle('bzxz:set-web-service-enabled', (_event, enabled: boolean) => setWebServiceEnabled(Boolean(enabled)));
   ipcMain.handle('bzxz:copy-web-access-url', (_event, url?: string) => {
     const target = pickWebAccessUrl(url);
     clipboard.writeText(target);

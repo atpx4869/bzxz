@@ -9,21 +9,22 @@ function hasDesktopStartupApi() {
 }
 
 function hasDesktopWebAccessApi() {
-  return Boolean(window.bzxz && window.bzxz.isElectron && window.bzxz.getWebAccessInfo);
+  return Boolean(window.bzxz && window.bzxz.isElectron && window.bzxz.getWebAccessInfo && window.bzxz.setWebServiceEnabled);
 }
 
 function renderWebAccessCard() {
   var supported = hasDesktopWebAccessApi();
   var info = webAccessState.info || {};
   var lanUrls = Array.isArray(info.lanUrls) ? info.lanUrls : [];
-  var urls = supported ? [info.localUrl].concat(lanUrls).filter(Boolean) : [window.location.origin].filter(Boolean);
+  var enabled = supported ? info.webServiceEnabled !== false : false;
+  var urls = supported ? [info.localUrl].concat(enabled ? lanUrls : []).filter(Boolean) : [window.location.origin].filter(Boolean);
   var title = supported
-    ? (lanUrls.length ? '局域网可访问' : '仅本机地址')
+    ? (enabled ? (lanUrls.length ? '局域网可访问' : '仅本机地址') : '已关闭')
     : '仅桌面端可启动';
   var note = supported
     ? (webAccessState.error || info.firewallHint || '桌面程序最小化到托盘后，内置 Web 服务仍会继续运行。')
     : '当前是浏览器 Web 端，无法控制桌面内置服务。';
-  var statusClass = webAccessState.error ? ' danger' : (lanUrls.length ? ' success' : '');
+  var statusClass = webAccessState.error ? ' danger' : (enabled && lanUrls.length ? ' success' : '');
   var urlRows = urls.length ? urls.map(function(url, idx) {
     var label = idx === 0 ? '本机' : '内网';
     return `
@@ -42,7 +43,13 @@ function renderWebAccessCard() {
             <div class="settings-value">内置 Web 服务</div>
             <div class="setting-hint">${escapeHtml(note)}</div>
           </div>
-          <span class="desktop-setting-status${statusClass}">${webAccessState.loading ? '读取中' : title}</span>
+          <div class="desktop-setting-controls">
+            <span class="desktop-setting-status${statusClass}">${webAccessState.loading ? '读取中' : title}</span>
+            <label class="toggle-switch" title="${supported ? '允许同一局域网设备访问网页版' : '仅桌面程序可用'}">
+              <input type="checkbox" ${enabled ? 'checked' : ''} ${!supported || webAccessState.loading ? 'disabled' : ''} onchange="toggleWebServiceSetting(this.checked)">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </label>
+          </div>
         </div>
         <div class="web-access-url-list">${urlRows}</div>
       </div>`;
@@ -82,6 +89,22 @@ async function openWebAccessUrl(url) {
   } catch (err) {
     if (typeof showToast === 'function') showToast(err?.message || '打开失败', 'fail');
   }
+}
+
+async function toggleWebServiceSetting(enabled) {
+  if (!hasDesktopWebAccessApi()) return;
+  webAccessState.loading = true;
+  webAccessState.error = '';
+  renderSettings();
+  try {
+    var info = await window.bzxz.setWebServiceEnabled(Boolean(enabled));
+    webAccessState = { loaded: true, loading: false, info: info, error: '' };
+    if (typeof showToast === 'function') showToast(Boolean(info?.webServiceEnabled) ? '局域网 Web 服务已开启' : '局域网 Web 服务已关闭', 'success');
+  } catch (err) {
+    webAccessState.loading = false;
+    webAccessState.error = err?.message || '设置 Web 服务失败';
+  }
+  renderSettings();
 }
 
 function renderStartupSettingCard() {
