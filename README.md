@@ -27,7 +27,7 @@ npm run build
 node dist/src/index.js
 ```
 
-打开 `http://localhost:3000`。默认免登录模式，直接使用。首次注册用户自动成为管理员。
+打开 `http://localhost:3000`。默认免登录模式，直接以 `guest` 普通用户使用。首次注册用户自动成为管理员。
 
 如需启用登录验证，在「用户管理」中勾选「需要登录」。
 
@@ -63,7 +63,7 @@ start.bat
 
 基于 SQLite 的本地用户体系，无需外部数据库。
 
-- **免登录模式**：默认开启，无需注册即可使用所有功能（管理员权限）
+- **免登录模式**：默认开启，无需注册即可使用；默认身份为 `_guest` 普通用户
 - **注册**：首个注册用户自动成为管理员，后续默认普通用户
 - **登录**：Session Cookie（HttpOnly，30 天滑动续期）
 - **管理员功能**：
@@ -206,9 +206,10 @@ start.bat
 - 行级下载反馈（spinner + 卡片高亮 + 成功/失败闪烁）
 - BZ 页级实时进度
 - 搜索历史（可配置条数 3~20，localStorage 持久化）
+- 常用标准收藏、本地文件库、下载历史
 - 键盘快捷键（`Ctrl+K` 搜索 / `Ctrl+Enter` 确认 / `Esc` 关闭 / `?` 查看）
 - BW 自动 OCR 验证码 + 有文本检测修复
-- 下载优先级设置（持久化）
+- 下载模式设置（顺序/竞速）、下载优先级、并发数和超时时间（持久化）
 - 数据源健康检测（设置页手动检测 + 单源重试）
 - 底部日志面板 + 执行历史
 - 登录/注册界面 + 用户菜单
@@ -223,12 +224,22 @@ start.bat
 - 自动选择随机端口
 - 绕过系统代理直连（Clash 等不影响）
 - 隐藏默认菜单栏
-- LAN 访问支持（绑定 0.0.0.0）
+- 内置 Web 服务启动器：设置页显示本机地址和局域网地址，可复制或用浏览器打开
+- LAN 访问支持（绑定 `0.0.0.0`），可在设置页开关控制；关闭后本机 `localhost` 仍可使用，内网访问返回 403
+- 开机自启开关（仅桌面端可用）
+- 在线更新：启动后轻量检查 GitHub Release；设置页可手动检查、打开下载页、下载并启动 NSIS 安装包
 - 下载文件保存到 `用户目录/downloads/bzxz`
 
 ## 自动打包 (GitHub Actions)
 
-推送 `main` 分支自动触发 Windows 构建（便携版 + NSIS 安装包），产物在 Actions → Artifacts 下载。
+推送 `main` 分支自动触发 Windows 构建（便携版 + NSIS 安装包）。
+
+- 使用 `npm ci` 安装依赖，保证 Actions 构建可重复
+- 打包前自动把版本号设置为 `1.0.<github.run_number>`
+- Artifacts 名称包含版本号，便于区分构建产物
+- 自动发布 GitHub Release，tag 形如 `v1.0.123`
+- Release 上传 `release/*.exe`，桌面端在线更新会优先选择名称包含 `Setup` 的 NSIS 安装包
+- Portable 便携版仍提供手动下载，不参与自动安装更新
 
 ## 开发指南
 
@@ -258,6 +269,8 @@ interface SourceAdapter {
 
 ```bash
 npm test
+npm run build
+npx tsc -p tsconfig.electron.json --noEmit
 ```
 
 ## License
