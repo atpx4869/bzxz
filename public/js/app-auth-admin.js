@@ -73,6 +73,7 @@ function onAuthReady() {
   document.getElementById('statsTo').value = today;
   document.getElementById('statsFrom').value = monthAgo;
   initPanels();
+  if (typeof initAppUpdateCheck === 'function') initAppUpdateCheck();
   if (typeof renderTopSourceHealth === 'function') renderTopSourceHealth();
   if (typeof refreshSourceHealth === 'function' && Date.now() - (sourceHealthCheckedAt || 0) > 5 * 60 * 1000) {
     refreshSourceHealth();

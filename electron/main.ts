@@ -18,6 +18,9 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let serverPort = 0;
 let isQuitting = false;
+const UPDATE_REPO = 'atpx4869/bzxz';
+const UPDATE_RELEASES_URL = `https://github.com/${UPDATE_REPO}/releases`;
+const UPDATE_API_URL = `https://api.github.com/repos/${UPDATE_REPO}/releases/latest`;
 
 // Default download path — persists in userData
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'bzxz-settings.json');
@@ -93,6 +96,70 @@ function setWebServiceEnabled(enabled: boolean) {
   saveSettings(settings);
   updateTrayMenu();
   return getWebAccessInfo();
+}
+
+function parseVersion(version: string): number[] {
+  return version.replace(/^v/i, '').split(/[.-]/).map((part) => {
+    const value = Number.parseInt(part, 10);
+    return Number.isFinite(value) ? value : 0;
+  });
+}
+
+function isNewerVersion(latest: string, current: string): boolean {
+  const a = parseVersion(latest);
+  const b = parseVersion(current);
+  const length = Math.max(a.length, b.length);
+  for (let i = 0; i < length; i++) {
+    const diff = (a[i] ?? 0) - (b[i] ?? 0);
+    if (diff > 0) return true;
+    if (diff < 0) return false;
+  }
+  return false;
+}
+
+async function checkForUpdates() {
+  const currentVersion = app.getVersion();
+  const response = await fetch(UPDATE_API_URL, {
+    headers: {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': `bzxz/${currentVersion}`,
+    },
+  });
+  if (response.status === 404) {
+    return {
+      currentVersion,
+      latestVersion: currentVersion,
+      updateAvailable: false,
+      releaseUrl: UPDATE_RELEASES_URL,
+      assets: [],
+      note: '未找到 GitHub Release。',
+    };
+  }
+  if (!response.ok) {
+    throw new Error(`检查更新失败: HTTP ${response.status}`);
+  }
+
+  const latest = await response.json() as {
+    tag_name?: string;
+    html_url?: string;
+    name?: string;
+    published_at?: string;
+    assets?: Array<{ name: string; browser_download_url: string; size: number }>;
+  };
+  const latestVersion = (latest.tag_name || '').replace(/^v/i, '') || currentVersion;
+  return {
+    currentVersion,
+    latestVersion,
+    updateAvailable: isNewerVersion(latestVersion, currentVersion),
+    releaseUrl: latest.html_url || UPDATE_RELEASES_URL,
+    releaseName: latest.name || latest.tag_name || '',
+    publishedAt: latest.published_at || '',
+    assets: (latest.assets || []).map((asset) => ({
+      name: asset.name,
+      url: asset.browser_download_url,
+      size: asset.size,
+    })),
+  };
 }
 
 function pickWebAccessUrl(url?: string): string {
@@ -265,6 +332,13 @@ app.whenReady().then(async () => {
   ipcMain.handle('bzxz:set-open-at-login', (_event, enabled: boolean) => setOpenAtLogin(Boolean(enabled)));
   ipcMain.handle('bzxz:get-web-access-info', () => getWebAccessInfo());
   ipcMain.handle('bzxz:set-web-service-enabled', (_event, enabled: boolean) => setWebServiceEnabled(Boolean(enabled)));
+  ipcMain.handle('bzxz:get-app-version', () => app.getVersion());
+  ipcMain.handle('bzxz:check-for-updates', () => checkForUpdates());
+  ipcMain.handle('bzxz:open-update-page', (_event, url?: string) => {
+    const target = typeof url === 'string' && url.startsWith('https://github.com/') ? url : UPDATE_RELEASES_URL;
+    void shell.openExternal(target);
+    return { url: target };
+  });
   ipcMain.handle('bzxz:copy-web-access-url', (_event, url?: string) => {
     const target = pickWebAccessUrl(url);
     clipboard.writeText(target);

@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld('bzxz', {
   setOpenAtLogin: (enabled: boolean) => ipcRenderer.invoke('bzxz:set-open-at-login', enabled),
   getWebAccessInfo: () => ipcRenderer.invoke('bzxz:get-web-access-info'),
   setWebServiceEnabled: (enabled: boolean) => ipcRenderer.invoke('bzxz:set-web-service-enabled', enabled),
+  getAppVersion: () => ipcRenderer.invoke('bzxz:get-app-version'),
+  checkForUpdates: () => ipcRenderer.invoke('bzxz:check-for-updates'),
+  openUpdatePage: (url?: string) => ipcRenderer.invoke('bzxz:open-update-page', url),
   copyWebAccessUrl: (url?: string) => ipcRenderer.invoke('bzxz:copy-web-access-url', url),
   openWebAccessUrl: (url?: string) => ipcRenderer.invoke('bzxz:open-web-access-url', url),
 });

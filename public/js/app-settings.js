@@ -3,6 +3,7 @@ const SETTINGS_LABELS = { gbw: 'BW源', bz: 'BZ源', by: 'BY源', bzvip: 'BZvip�
 const SETTINGS_NOTES = { gbw: '自动验证码 5~15s', bz: '合成PDF 30~90s', by: '直链PDF 2~5s', bzvip: '账号池 2~5s' };
 var startupSettingState = { loaded: false, loading: false, enabled: false, supported: false, error: '' };
 var webAccessState = { loaded: false, loading: false, info: null, error: '' };
+var appUpdateState = { loaded: false, checking: false, info: null, error: '' };
 
 function hasDesktopStartupApi() {
   return Boolean(window.bzxz && window.bzxz.isElectron && window.bzxz.getOpenAtLogin && window.bzxz.setOpenAtLogin);
@@ -10,6 +11,151 @@ function hasDesktopStartupApi() {
 
 function hasDesktopWebAccessApi() {
   return Boolean(window.bzxz && window.bzxz.isElectron && window.bzxz.getWebAccessInfo && window.bzxz.setWebServiceEnabled);
+}
+
+function hasDesktopUpdateApi() {
+  return Boolean(window.bzxz && window.bzxz.isElectron && window.bzxz.checkForUpdates);
+}
+
+function formatAssetSize(size) {
+  if (!Number.isFinite(size) || size <= 0) return '';
+  if (size >= 1024 * 1024) return Math.round(size / 1024 / 1024) + 'MB';
+  if (size >= 1024) return Math.round(size / 1024) + 'KB';
+  return size + 'B';
+}
+
+function jsStringArg(value) {
+  return JSON.stringify(String(value || '')).replace(/"/g, '&quot;');
+}
+
+function renderUpdateCard() {
+  var supported = hasDesktopUpdateApi();
+  var info = appUpdateState.info || {};
+  var current = supported ? (info.currentVersion || '读取中') : 'Web';
+  var latest = info.latestVersion || '—';
+  var title = supported
+    ? (appUpdateState.checking ? '检查中' : info.updateAvailable ? '发现新版本' : appUpdateState.loaded ? '已是最新' : '未检查')
+    : '仅桌面端';
+  var note = supported
+    ? (appUpdateState.error || (info.updateAvailable ? 'GitHub Actions 已发布新版本，可打开下载页更新。' : '启动时会自动轻量检查，必要时也可以手动检查。'))
+    : '当前是浏览器 Web 端，无法检查桌面客户端更新。';
+  var statusClass = appUpdateState.error ? ' danger' : (info.updateAvailable ? ' success' : '');
+  var assets = Array.isArray(info.assets) ? info.assets.slice(0, 3) : [];
+  var assetList = assets.length ? `
+        <div class="update-asset-list">
+          ${assets.map(function(asset) {
+            var size = formatAssetSize(asset.size);
+            return `<button class="update-asset" onclick="openAppUpdatePage(${jsStringArg(asset.url || info.releaseUrl || '')})">
+              <span>${escapeHtml(asset.name || '下载文件')}</span><em>${escapeHtml(size)}</em>
+            </button>`;
+          }).join('')}
+        </div>` : '';
+  return `
+      <div class="settings-card wide update-card">
+        <div class="settings-card-header">
+          <div>
+            <div class="settings-kicker">在线更新</div>
+            <div class="settings-value">客户端版本</div>
+            <div class="setting-hint">${escapeHtml(note)}</div>
+          </div>
+          <span class="desktop-setting-status${statusClass}">${title}</span>
+        </div>
+        <div class="version-row">
+          <span>当前版本 <strong>v${escapeHtml(current)}</strong></span>
+          <span>最新版本 <strong>${latest === '—' ? '—' : 'v' + escapeHtml(latest)}</strong></span>
+        </div>
+        ${assetList}
+        <div class="settings-actions">
+          <button class="btn btn-sm btn-primary" ${!supported || appUpdateState.checking ? 'disabled' : ''} onclick="checkAppUpdate(false)">检查更新</button>
+          <button class="btn btn-sm btn-ghost" ${!supported || !info.releaseUrl ? 'disabled' : ''} onclick="openAppUpdatePage(${jsStringArg(info.releaseUrl || '')})">打开下载页</button>
+        </div>
+      </div>`;
+}
+
+function ensureUpdateBadge() {
+  var actions = document.querySelector('.topbar-actions');
+  if (!actions) return null;
+  var badge = document.getElementById('appUpdateBadge');
+  if (!badge) {
+    badge = document.createElement('button');
+    badge.id = 'appUpdateBadge';
+    badge.className = 'topbar-btn update-badge';
+    badge.type = 'button';
+    badge.onclick = function() {
+      var info = appUpdateState.info || {};
+      if (info.updateAvailable && info.releaseUrl) openAppUpdatePage(info.releaseUrl);
+      else switchTab('settings');
+    };
+    actions.insertBefore(badge, actions.firstChild);
+  }
+  return badge;
+}
+
+function renderUpdateBadge() {
+  var badge = ensureUpdateBadge();
+  if (!badge) return;
+  if (!hasDesktopUpdateApi()) {
+    badge.style.display = 'none';
+    return;
+  }
+  var info = appUpdateState.info || {};
+  if (appUpdateState.checking) {
+    badge.style.display = '';
+    badge.textContent = '检查更新';
+    badge.title = '正在检查客户端更新';
+    badge.classList.remove('has-update');
+    return;
+  }
+  if (info.updateAvailable) {
+    badge.style.display = '';
+    badge.textContent = '新版 v' + info.latestVersion;
+    badge.title = '发现新版本，点击打开下载页';
+    badge.classList.add('has-update');
+    return;
+  }
+  badge.style.display = 'none';
+  badge.classList.remove('has-update');
+}
+
+async function checkAppUpdate(silent) {
+  if (!hasDesktopUpdateApi()) {
+    appUpdateState = { loaded: true, checking: false, info: null, error: '' };
+    renderUpdateBadge();
+    return;
+  }
+  appUpdateState.checking = true;
+  appUpdateState.error = '';
+  renderUpdateBadge();
+  if (document.getElementById('settingsBody')) renderSettings();
+  try {
+    var info = await window.bzxz.checkForUpdates();
+    appUpdateState = { loaded: true, checking: false, info: info, error: '' };
+    if (!silent && typeof showToast === 'function') {
+      showToast(info.updateAvailable ? ('发现新版本 v' + info.latestVersion) : '当前已是最新版', info.updateAvailable ? 'success' : 'info');
+    }
+  } catch (err) {
+    appUpdateState = { loaded: true, checking: false, info: appUpdateState.info, error: err?.message || '检查更新失败' };
+    if (!silent && typeof showToast === 'function') showToast(appUpdateState.error, 'fail');
+  }
+  renderUpdateBadge();
+  if (document.getElementById('settingsBody')) renderSettings();
+}
+
+function initAppUpdateCheck() {
+  if (!hasDesktopUpdateApi() || appUpdateState.loaded || appUpdateState.checking) {
+    renderUpdateBadge();
+    return;
+  }
+  checkAppUpdate(true);
+}
+
+async function openAppUpdatePage(url) {
+  if (!window.bzxz?.openUpdatePage) return;
+  try {
+    await window.bzxz.openUpdatePage(url);
+  } catch (err) {
+    if (typeof showToast === 'function') showToast(err?.message || '打开下载页失败', 'fail');
+  }
 }
 
 function renderWebAccessCard() {
@@ -212,6 +358,7 @@ function renderSettings() {
   const historyOpts = [3, 5, 8, 10, 15, 20].map(n => {
     return `<button class="btn btn-sm ${n === getHistoryLimit() ? 'btn-primary' : 'btn-ghost'}" onclick="setHistoryLimit(${n});renderSettings()">${n}</button>`;
   }).join('');
+  const updateCard = renderUpdateCard();
   const webAccessCard = renderWebAccessCard();
   const startupCard = renderStartupSettingCard();
 
@@ -248,6 +395,7 @@ function renderSettings() {
         <div class="settings-value">${getHistoryLimit()}条</div>
         <div class="setting-options">${historyOpts}</div>
       </div>
+      ${updateCard}
       ${webAccessCard}
       ${startupCard}
     </div>

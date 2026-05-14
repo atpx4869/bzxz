@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -31,6 +34,14 @@ jobs:
       - name: Install Node deps
         run: npm ci
 
+      - name: Set package version
+        shell: pwsh
+        run: |
+          $version = "1.0.${{ github.run_number }}"
+          npm version $version --no-git-tag-version
+          "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RELEASE_TAG=v$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Build TypeScript
         run: npm run build
 
@@ -49,11 +60,19 @@ jobs:
       - name: Upload portable
         uses: actions/upload-artifact@v4
         with:
-          name: bzxz-portable-win
+          name: bzxz-${{ env.APP_VERSION }}-portable-win
           path: dist-portable/
 
       - name: Upload NSIS installer
         uses: actions/upload-artifact@v4
         with:
-          name: bzxz-nsis-win
+          name: bzxz-${{ env.APP_VERSION }}-nsis-win
           path: dist-nsis/
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: bzxz ${{ env.APP_VERSION }}
+          make_latest: true
+          files: release/*.exe
