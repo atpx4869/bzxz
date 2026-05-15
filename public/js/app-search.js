@@ -29,9 +29,8 @@ function pollGbwTextAvailability() {
   if (_gbwTextPollTimer) return;
   const gbwIds = results.filter(r => r._source === 'gbw' || (r._sourceIds && r._sourceIds.gbw)).map(r => r._sourceIds?.gbw || r.sourceId).filter(Boolean);
   if (!gbwIds.length) return;
-  let polls = 0;
+  let emptyPolls = 0;
   _gbwTextPollTimer = setInterval(async () => {
-    polls++;
     try {
       const resp = await fetch(`/api/standards/text-availability?ids=${gbwIds.join(',')}`);
       const data = await resp.json();
@@ -51,14 +50,29 @@ function pollGbwTextAvailability() {
         }
       }
       if (updated) renderResults();
-      // Stop polling if all gbw results have text availability determined or after 10 polls
+      // Stop when all gbw IDs have been resolved
       const hasAnyData = Object.keys(data).length > 0;
       const allChecked = hasAnyData && gbwIds.every(id => data[id] !== undefined);
-      if (allChecked || polls >= 10) {
+      if (allChecked) {
         clearInterval(_gbwTextPollTimer); _gbwTextPollTimer = null;
         const textCount = results.filter(r => r.previewAvailable).length;
         showSearchStatus(`文本检测完成 (${textCount}/${results.length}条有文本)`, false);
         setTimeout(hideSearchStatus, 3000);
+      } else if (!hasAnyData) {
+        emptyPolls++;
+        // Only give up after 20 consecutive empty responses (60s)
+        if (emptyPolls >= 20) {
+          clearInterval(_gbwTextPollTimer); _gbwTextPollTimer = null;
+          const textCount = results.filter(r => r.previewAvailable).length;
+          if (textCount > 0) {
+            showSearchStatus(`文本检测完成 (${textCount}/${results.length}条有文本)`, false);
+          } else {
+            showSearchStatus('文本检测超时', false);
+          }
+          setTimeout(hideSearchStatus, 3000);
+        }
+      } else {
+        emptyPolls = 0; // Reset on partial progress
       }
     } catch { /* ignore */ }
   }, 3000);

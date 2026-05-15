@@ -130,18 +130,17 @@ export class GbwAdapter implements SourceAdapter {
       }
     }
 
-    const concurrency = 2;
-    const maxRetries = 2;
+    const concurrency = 3;
     let i = 0;
-    const failed: string[] = [];
     const worker = async () => {
       while (i < toCheck.length) {
         const idx = i++;
         const sourceId = toCheck[idx];
         try {
+          // No retries here — pooledFetch has built-in retries, disable for batch
           const detailUrl = `${GBW_STD_BASE}/gb/search/gbDetailed?id=${sourceId}`;
-          const resp = await pooledFetch(detailUrl, { headers: { 'User-Agent': USER_AGENT }, timeoutMs: 15000 });
-          if (!resp.ok) { this.textCache.set(sourceId, false); continue; }
+          const resp = await pooledFetch(detailUrl, { headers: { 'User-Agent': USER_AGENT }, timeoutMs: 12000, retries: 1 });
+          if (!resp.ok) { continue; }  // Don't cache — leave for retry on next search
           const html = await resp.text();
           const hcno = extractHcno(html);
           if (!hcno) { this.textCache.set(sourceId, false); continue; }
@@ -149,37 +148,10 @@ export class GbwAdapter implements SourceAdapter {
           this.textCache.set(sourceId, hasText);
         } catch {
           // Don't cache failures — leave uncached so they can be retried on next search
-          failed.push(sourceId);
         }
       }
     };
     await Promise.all(Array.from({ length: Math.min(concurrency, toCheck.length) }, () => worker()));
-
-    // Retry failed items once after a short delay
-    if (failed.length > 0) {
-      await new Promise(r => setTimeout(r, 2000));
-      i = 0;
-      const retryList = failed.filter(id => !this.textCache.has(id));
-      const retryWorker = async () => {
-        while (i < retryList.length) {
-          const idx = i++;
-          const sourceId = retryList[idx];
-          try {
-            const detailUrl = `${GBW_STD_BASE}/gb/search/gbDetailed?id=${sourceId}`;
-            const resp = await pooledFetch(detailUrl, { headers: { 'User-Agent': USER_AGENT }, timeoutMs: 20000 });
-            if (!resp.ok) { continue; }
-            const html = await resp.text();
-            const hcno = extractHcno(html);
-            if (!hcno) { this.textCache.set(sourceId, false); continue; }
-            const hasText = await this.checkOpenstdHasText(hcno);
-            this.textCache.set(sourceId, hasText);
-          } catch {
-            // Still failed after retry — leave uncached
-          }
-        }
-      };
-      await Promise.all(Array.from({ length: Math.min(concurrency, retryList.length) }, () => retryWorker()));
-    }
   }
 
   async getStandardDetail(id: string): Promise<StandardDetail> {
@@ -546,7 +518,8 @@ export class GbwAdapter implements SourceAdapter {
       const url = `${GBW_OPENSTD_BASE}/bzgk/std/newGbInfo?hcno=${hcno}`;
       const resp = await pooledFetch(url, {
         headers: { 'User-Agent': USER_AGENT },
-        timeoutMs: 15000,
+        timeoutMs: 12000,
+        retries: 1,
       });
       if (!resp.ok) return false;
       const html = await resp.text();
