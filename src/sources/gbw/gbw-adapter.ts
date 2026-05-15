@@ -69,7 +69,21 @@ export class GbwAdapter implements SourceAdapter {
   async searchStandards(input: SearchStandardsInput): Promise<StandardSummary[]> {
     const cacheKey = `gbw:search:${input.query}`;
     const cached = searchCache.get<StandardSummary[]>(cacheKey);
-    if (cached) return cached;
+
+    if (cached) {
+      // Even for cached results, re-check uncached text availability items
+      const statusMap = new Map<string, string>();
+      for (const r of cached) {
+        if (r.status) statusMap.set(r.sourceId, r.status);
+      }
+      const uncachedIds = cached
+        .map(r => r.sourceId)
+        .filter(id => !this.textCache.has(id));
+      if (uncachedIds.length) {
+        this.batchCheckTextAvailability(uncachedIds, statusMap).catch(() => {});
+      }
+      return cached;
+    }
 
     const searchUrl = new URL('/gb/search/gbQueryPage', GBW_STD_BASE);
     searchUrl.searchParams.set('searchText', input.query);
@@ -116,15 +130,17 @@ export class GbwAdapter implements SourceAdapter {
       }
     }
 
-    const concurrency = 4;
+    const concurrency = 2;
+    const maxRetries = 2;
     let i = 0;
+    const failed: string[] = [];
     const worker = async () => {
       while (i < toCheck.length) {
         const idx = i++;
         const sourceId = toCheck[idx];
         try {
           const detailUrl = `${GBW_STD_BASE}/gb/search/gbDetailed?id=${sourceId}`;
-          const resp = await pooledFetch(detailUrl, { headers: { 'User-Agent': USER_AGENT }, timeoutMs: 10000 });
+          const resp = await pooledFetch(detailUrl, { headers: { 'User-Agent': USER_AGENT }, timeoutMs: 15000 });
           if (!resp.ok) { this.textCache.set(sourceId, false); continue; }
           const html = await resp.text();
           const hcno = extractHcno(html);
@@ -132,11 +148,38 @@ export class GbwAdapter implements SourceAdapter {
           const hasText = await this.checkOpenstdHasText(hcno);
           this.textCache.set(sourceId, hasText);
         } catch {
-          this.textCache.set(sourceId, false);
+          // Don't cache failures — leave uncached so they can be retried on next search
+          failed.push(sourceId);
         }
       }
     };
     await Promise.all(Array.from({ length: Math.min(concurrency, toCheck.length) }, () => worker()));
+
+    // Retry failed items once after a short delay
+    if (failed.length > 0) {
+      await new Promise(r => setTimeout(r, 2000));
+      i = 0;
+      const retryList = failed.filter(id => !this.textCache.has(id));
+      const retryWorker = async () => {
+        while (i < retryList.length) {
+          const idx = i++;
+          const sourceId = retryList[idx];
+          try {
+            const detailUrl = `${GBW_STD_BASE}/gb/search/gbDetailed?id=${sourceId}`;
+            const resp = await pooledFetch(detailUrl, { headers: { 'User-Agent': USER_AGENT }, timeoutMs: 20000 });
+            if (!resp.ok) { continue; }
+            const html = await resp.text();
+            const hcno = extractHcno(html);
+            if (!hcno) { this.textCache.set(sourceId, false); continue; }
+            const hasText = await this.checkOpenstdHasText(hcno);
+            this.textCache.set(sourceId, hasText);
+          } catch {
+            // Still failed after retry — leave uncached
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(concurrency, retryList.length) }, () => retryWorker()));
+    }
   }
 
   async getStandardDetail(id: string): Promise<StandardDetail> {
@@ -503,7 +546,7 @@ export class GbwAdapter implements SourceAdapter {
       const url = `${GBW_OPENSTD_BASE}/bzgk/std/newGbInfo?hcno=${hcno}`;
       const resp = await pooledFetch(url, {
         headers: { 'User-Agent': USER_AGENT },
-        timeoutMs: 8000,
+        timeoutMs: 15000,
       });
       if (!resp.ok) return false;
       const html = await resp.text();
