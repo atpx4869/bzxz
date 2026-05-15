@@ -88,24 +88,40 @@ export class GbwAdapter implements SourceAdapter {
     searchCache.set(cacheKey, result);
 
     // Fire off background text availability checks (don't await)
+    // Skip 废止 standards — they generally have no text available
+    const statusMap = new Map<string, string>();
+    for (const r of result) {
+      if (r.status) statusMap.set(r.sourceId, r.status);
+    }
     const uncachedIds = result
       .map(r => r.sourceId)
       .filter(id => !this.textCache.has(id));
     if (uncachedIds.length) {
-      this.batchCheckTextAvailability(uncachedIds).catch(() => {});
+      this.batchCheckTextAvailability(uncachedIds, statusMap).catch(() => {});
     }
 
     return result;
   }
 
   /** Background batch check: fetch detail pages to extract hcno, then check openstd */
-  private async batchCheckTextAvailability(sourceIds: string[]): Promise<void> {
+  private async batchCheckTextAvailability(sourceIds: string[], statusMap?: Map<string, string>): Promise<void> {
+    // Pre-filter: 废止 standards generally have no text, skip them
+    const toCheck: string[] = [];
+    for (const id of sourceIds) {
+      const status = statusMap?.get(id);
+      if (status && status.includes('废止')) {
+        this.textCache.set(id, false);
+      } else {
+        toCheck.push(id);
+      }
+    }
+
     const concurrency = 4;
     let i = 0;
     const worker = async () => {
-      while (i < sourceIds.length) {
+      while (i < toCheck.length) {
         const idx = i++;
-        const sourceId = sourceIds[idx];
+        const sourceId = toCheck[idx];
         try {
           const detailUrl = `${GBW_STD_BASE}/gb/search/gbDetailed?id=${sourceId}`;
           const resp = await pooledFetch(detailUrl, { headers: { 'User-Agent': USER_AGENT }, timeoutMs: 10000 });
@@ -120,7 +136,7 @@ export class GbwAdapter implements SourceAdapter {
         }
       }
     };
-    await Promise.all(Array.from({ length: Math.min(concurrency, sourceIds.length) }, () => worker()));
+    await Promise.all(Array.from({ length: Math.min(concurrency, toCheck.length) }, () => worker()));
   }
 
   async getStandardDetail(id: string): Promise<StandardDetail> {
