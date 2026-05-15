@@ -8,9 +8,45 @@ document.querySelectorAll('.source-tag').forEach(tag => {
   });
 });
 
+// ── GBW text availability polling ──
+let _gbwTextPollTimer = null;
+function pollGbwTextAvailability() {
+  if (_gbwTextPollTimer) return;
+  const gbwIds = results.filter(r => r._source === 'gbw' || (r._sourceIds && r._sourceIds.gbw)).map(r => r._sourceIds?.gbw || r.sourceId).filter(Boolean);
+  if (!gbwIds.length) return;
+  let polls = 0;
+  _gbwTextPollTimer = setInterval(async () => {
+    polls++;
+    try {
+      const resp = await fetch(`/api/standards/text-availability?ids=${gbwIds.join(',')}`);
+      const data = await resp.json();
+      let updated = false;
+      for (const r of results) {
+        const gbwId = r._sourceIds?.gbw || (r._source === 'gbw' ? r.sourceId : null);
+        if (gbwId && data[gbwId] !== undefined) {
+          const newVal = data[gbwId];
+          if (r._source === 'gbw') {
+            if (r.previewAvailable !== newVal) { r.previewAvailable = newVal; updated = true; }
+          }
+          if (r._previewAvailableBySource && r._previewAvailableBySource.gbw !== undefined) {
+            r._previewAvailableBySource.gbw = newVal;
+            r.previewAvailable = Object.values(r._previewAvailableBySource).some(Boolean);
+            updated = true;
+          }
+        }
+      }
+      if (updated) renderResults();
+      // Stop polling if all gbw results have text availability determined or after 10 polls
+      const allChecked = gbwIds.every(id => data[id] !== undefined);
+      if (allChecked || polls >= 10) { clearInterval(_gbwTextPollTimer); _gbwTextPollTimer = null; }
+    } catch { /* ignore */ }
+  }, 3000);
+}
+
 // ── Search ──
 async function doSearch() {
   if (searchAborted === 'cancelling') return; // already cancelling
+  if (_gbwTextPollTimer) { clearInterval(_gbwTextPollTimer); _gbwTextPollTimer = null; }
   const q = document.getElementById('searchInput').value.trim();
   if (!q) return;
   document.getElementById('searchBtn').innerHTML = '<span class="spinner"></span>取消';
@@ -51,6 +87,8 @@ async function doSearch() {
       const stdNums = results.map(r => r.standardNumber).filter(Boolean);
       fetchQualBadges(stdNums).then(() => { if (results.length > 0) renderResults(); });
     }
+    // Poll GBW text availability in background (non-blocking)
+    pollGbwTextAvailability();
   }
   if (searchAborted) {
     addLog('搜索已取消', 'fail');
@@ -62,6 +100,8 @@ async function doSearch() {
     const stdNums = results.map(r => r.standardNumber).filter(Boolean);
     fetchQualBadges(stdNums).then(() => { if (results.length > 0) renderResults(); });
   }
+  // Final poll for GBW text availability
+  pollGbwTextAvailability();
   filterState.sources.clear(); filterState.statuses.clear();
   filterState.onlyDownloadable = false; filterState.onlyQualified = false; filterState.onlySaved = false; filterState.sort = 'smart';
   renderFilterBar();

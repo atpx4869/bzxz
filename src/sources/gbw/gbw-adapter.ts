@@ -52,8 +52,19 @@ const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 
 export class GbwAdapter implements SourceAdapter {
   readonly source = 'gbw' as const;
+  /** Cache of text availability: sourceId → boolean */
+  private textCache = new Map<string, boolean>();
 
   constructor(private readonly downloadSessionStore = new GbwDownloadSessionStore()) {}
+
+  /** Get cached text availability for multiple IDs */
+  getTextAvailability(ids: string[]): Record<string, boolean> {
+    const result: Record<string, boolean> = {};
+    for (const id of ids) {
+      if (this.textCache.has(id)) result[id] = this.textCache.get(id)!;
+    }
+    return result;
+  }
 
   async searchStandards(input: SearchStandardsInput): Promise<StandardSummary[]> {
     const cacheKey = `gbw:search:${input.query}`;
@@ -75,7 +86,41 @@ export class GbwAdapter implements SourceAdapter {
     const rows = payload.rows ?? [];
     const result = rows.map((row) => this.mapSearchRow(row));
     searchCache.set(cacheKey, result);
+
+    // Fire off background text availability checks (don't await)
+    const uncachedIds = result
+      .map(r => r.sourceId)
+      .filter(id => !this.textCache.has(id));
+    if (uncachedIds.length) {
+      this.batchCheckTextAvailability(uncachedIds).catch(() => {});
+    }
+
     return result;
+  }
+
+  /** Background batch check: fetch detail pages to extract hcno, then check openstd */
+  private async batchCheckTextAvailability(sourceIds: string[]): Promise<void> {
+    const concurrency = 4;
+    let i = 0;
+    const worker = async () => {
+      while (i < sourceIds.length) {
+        const idx = i++;
+        const sourceId = sourceIds[idx];
+        try {
+          const detailUrl = `${GBW_STD_BASE}/gb/search/gbDetailed?id=${sourceId}`;
+          const resp = await pooledFetch(detailUrl, { headers: { 'User-Agent': USER_AGENT }, timeoutMs: 10000 });
+          if (!resp.ok) { this.textCache.set(sourceId, false); continue; }
+          const html = await resp.text();
+          const hcno = extractHcno(html);
+          if (!hcno) { this.textCache.set(sourceId, false); continue; }
+          const hasText = await this.checkOpenstdHasText(hcno);
+          this.textCache.set(sourceId, hasText);
+        } catch {
+          this.textCache.set(sourceId, false);
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(concurrency, sourceIds.length) }, () => worker()));
   }
 
   async getStandardDetail(id: string): Promise<StandardDetail> {

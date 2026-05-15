@@ -131,6 +131,13 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
     }
   });
 
+  /** Poll endpoint: returns cached GBW text availability for given source IDs */
+  router.get('/api/standards/text-availability', requireAuth, (req, res) => {
+    const ids = ((req.query.ids as string) || '').split(',').filter(Boolean);
+    if (!ids.length) { res.json({}); return; }
+    res.json(sourceRegistry.getGbwTextAvailability(ids));
+  });
+
   router.post('/api/standards/resolve', requireAuth, async (req, res, next) => {
     try {
       const bodySchema = z.object({

@@ -39,4 +39,13 @@ export class SourceRegistry {
   list(): SourceName[] {
     return Object.keys(FACTORIES) as SourceName[];
   }
+
+  /** Get GBW text availability cache (returns empty if gbw not loaded) */
+  getGbwTextAvailability(ids: string[]): Record<string, boolean> {
+    const adapter = this.cache.get('gbw') as any;
+    if (adapter && typeof adapter.getTextAvailability === 'function') {
+      return adapter.getTextAvailability(ids);
+    }
+    return {};
+  }
 }
