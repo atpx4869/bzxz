@@ -25,12 +25,15 @@ document.querySelectorAll('.source-tag').forEach(tag => {
 
 // ── GBW text availability polling ──
 let _gbwTextPollTimer = null;
+let _gbwTextPollAbort = false;
 function pollGbwTextAvailability() {
   if (_gbwTextPollTimer) return;
+  _gbwTextPollAbort = false;
   const gbwIds = results.filter(r => r._source === 'gbw' || (r._sourceIds && r._sourceIds.gbw)).map(r => r._sourceIds?.gbw || r.sourceId).filter(Boolean);
   if (!gbwIds.length) return;
   let emptyPolls = 0;
-  _gbwTextPollTimer = setInterval(async () => {
+  const poll = async () => {
+    if (_gbwTextPollAbort) return;
     try {
       const resp = await fetch(`/api/standards/text-availability?ids=${gbwIds.join(',')}`);
       const data = await resp.json();
@@ -50,38 +53,40 @@ function pollGbwTextAvailability() {
         }
       }
       if (updated) renderResults();
-      // Stop when all gbw IDs have been resolved
       const hasAnyData = Object.keys(data).length > 0;
       const allChecked = hasAnyData && gbwIds.every(id => data[id] !== undefined);
       if (allChecked) {
-        clearInterval(_gbwTextPollTimer); _gbwTextPollTimer = null;
+        _gbwTextPollTimer = null;
         const textCount = results.filter(r => r.previewAvailable).length;
         showSearchStatus(`文本检测完成 (${textCount}/${results.length}条有文本)`, false);
         setTimeout(hideSearchStatus, 3000);
-      } else if (!hasAnyData) {
+        return;
+      }
+      if (!hasAnyData) {
         emptyPolls++;
-        // Only give up after 20 consecutive empty responses (60s)
         if (emptyPolls >= 20) {
-          clearInterval(_gbwTextPollTimer); _gbwTextPollTimer = null;
+          _gbwTextPollTimer = null;
           const textCount = results.filter(r => r.previewAvailable).length;
-          if (textCount > 0) {
-            showSearchStatus(`文本检测完成 (${textCount}/${results.length}条有文本)`, false);
-          } else {
-            showSearchStatus('文本检测超时', false);
-          }
+          showSearchStatus(textCount > 0 ? `文本检测完成 (${textCount}/${results.length}条有文本)` : '文本检测超时', false);
           setTimeout(hideSearchStatus, 3000);
+          return;
         }
       } else {
-        emptyPolls = 0; // Reset on partial progress
+        emptyPolls = 0;
       }
-    } catch { /* ignore */ }
-  }, 3000);
+      // New data arrived → poll again in 1s; no change → wait 3s
+      _gbwTextPollTimer = setTimeout(poll, updated ? 1000 : 3000);
+    } catch {
+      _gbwTextPollTimer = setTimeout(poll, 3000);
+    }
+  };
+  _gbwTextPollTimer = setTimeout(poll, 2000);
 }
 
 // ── Search ──
 async function doSearch() {
   if (searchAborted === 'cancelling') return; // already cancelling
-  if (_gbwTextPollTimer) { clearInterval(_gbwTextPollTimer); _gbwTextPollTimer = null; }
+  if (_gbwTextPollTimer) { clearTimeout(_gbwTextPollTimer); _gbwTextPollTimer = null; _gbwTextPollAbort = true; }
   const q = document.getElementById('searchInput').value.trim();
   if (!q) return;
   document.getElementById('searchBtn').innerHTML = '<span class="spinner"></span>取消';

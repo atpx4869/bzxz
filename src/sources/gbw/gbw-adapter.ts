@@ -548,7 +548,9 @@ export class GbwAdapter implements SourceAdapter {
       publishDate: row.ISSUE_DATE ?? null,
       implementDate: row.ACT_DATE ?? null,
       abolishedDate: null,
-      previewAvailable: false, // cannot determine from search API; needs detail page check
+      // Optimistic: assume text available for non-废弃 standards (most have text).
+      // Batch check will correct to false if no text found.
+      previewAvailable: !status || !status.includes('废止'),
       detailUrl: `${GBW_STD_BASE}/gb/search/gbDetailed?id=${sourceId}`,
       meta: row as Record<string, unknown>,
     };
