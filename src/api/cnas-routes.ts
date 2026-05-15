@@ -32,6 +32,19 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
     } catch (e) { next(normalizeError(e)); }
   });
 
+  router.post('/api/qualifications/visual', requireAuth, (req, res, next) => {
+    try {
+      const schema = z.object({
+        queries: z.array(z.string().trim().min(1).max(500)).min(1).max(100),
+        limitPerQuery: z.coerce.number().int().min(1).max(1000).default(500),
+      });
+      const { queries, limitPerQuery } = schema.parse(req.body);
+      const unique = [...new Set(queries)];
+      const result = svc.queryVisualKeywords(unique, limitPerQuery);
+      res.json(result);
+    } catch (e) { next(normalizeError(e)); }
+  });
+
   // ─── CNAS Labs ───
   router.get('/api/cnas/labs', requireAuth, (_req, res) => {
     res.json(svc.listCnasLabs());
@@ -45,6 +58,7 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
         base_info_id: z.string().trim().max(100).optional(),
         cert_update_ts: z.string().trim().max(50).optional(),
         validate: z.string().trim().max(50).optional(),
+        url_params: z.record(z.string(), z.string()).optional(),
       });
       const data = schema.parse(req.body);
       const lab = svc.addCnasLab(data);
@@ -69,21 +83,26 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
   });
 
   // ─── CMA Labs ───
+  router.get('/api/cma/search-labs', requireAuth, async (req, res, next) => {
+    try {
+      const schema = z.object({ q: z.string().trim().min(1).max(200) });
+      const { q } = schema.parse(req.query);
+      const items = await svc.searchCmaLabs(q);
+      res.json({ items, total: items.length });
+    } catch (e) { next(normalizeError(e)); }
+  });
+
   router.get('/api/cma/labs', requireAuth, (_req, res) => {
     res.json(svc.listCmaLabs());
   });
 
-  router.post('/api/cma/labs', requireAuth, (req, res, next) => {
+  router.post('/api/cma/labs', requireAuth, async (req, res, next) => {
     try {
       const schema = z.object({
-        cert_number: z.string().trim().min(1).max(50),
-        lab_name: z.string().trim().max(200).optional(),
-        credit_code: z.string().trim().max(50).optional(),
-        lic_sys_id: z.string().trim().max(100).optional(),
-        lic_date: z.string().trim().max(50).optional(),
+        public_detail_id: z.string().trim().min(1).max(120),
       });
       const data = schema.parse(req.body);
-      const lab = svc.addCmaLab(data);
+      const lab = await svc.addCmaLab(data);
       res.status(201).json(lab);
     } catch (e) { next(normalizeError(e)); }
   });
@@ -100,6 +119,31 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
       const schema = z.object({ lab_name: z.string().trim().max(200) });
       const { lab_name } = schema.parse(req.body);
       db.prepare('UPDATE cma_labs SET lab_name = ? WHERE cert_number = ?').run(lab_name, req.params.certNumber);
+      res.json({ ok: true });
+    } catch (e) { next(normalizeError(e)); }
+  });
+
+  router.post('/api/qualification-links', requireAuth, (req, res, next) => {
+    try {
+      const schema = z.object({
+        display_name: z.string().trim().min(1).max(200),
+        cnas_lab_no: z.string().trim().max(80).optional(),
+        cma_cert_number: z.string().trim().max(80).optional(),
+      });
+      const data = schema.parse(req.body);
+      svc.linkQualificationLabs(data);
+      res.json({ ok: true });
+    } catch (e) { next(normalizeError(e)); }
+  });
+
+  router.delete('/api/qualification-links/:source/:id', requireAuth, (req, res, next) => {
+    try {
+      const schema = z.object({
+        source: z.enum(['CNAS', 'CMA']),
+        id: z.string().trim().min(1).max(80),
+      });
+      const { source, id } = schema.parse(req.params);
+      svc.unlinkQualificationLab(source, id);
       res.json({ ok: true });
     } catch (e) { next(normalizeError(e)); }
   });

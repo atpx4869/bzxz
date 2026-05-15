@@ -274,9 +274,10 @@
       <div class="qual-section-title">CMA 实验室</div>
       <div id="qualCmaLabs"></div>
       <div class="qual-add-form">
-        <input id="qualCmaInput" placeholder="统一社会信用代码" onkeydown="if(event.key==='Enter')addQualLab('cma')">
-        <button class="btn btn-sm btn-primary" onclick="addQualLab('cma')">添加</button>
+        <input id="qualCmaInput" placeholder="输入 CMA 机构名称" onkeydown="if(event.key==='Enter')searchCmaLabCandidates()">
+        <button class="btn btn-sm btn-primary" onclick="searchCmaLabCandidates()">搜索机构</button>
       </div>
+      <div id="qualCmaCandidates" style="margin-top:8px"></div>
       <div style="text-align:right;margin-top:12px">
         <button class="btn btn-sm btn-ghost" onclick="syncAllQualLabs()">同步全部</button>
       </div>
@@ -286,9 +287,9 @@
     <div id="qualVisualTab" style="display:none">
       <div class="qual-visual-workspace">
         <section class="qual-visual-card">
-          <div class="batch-kicker">批量能力查询</div>
-          <h3>按标准号查看可检测机构</h3>
-          <textarea id="qualBatchInput" class="batch-textarea" placeholder="每行一个标准号&#10;GB/T 1.1-2020&#10;GB 18584-2024"></textarea>
+          <div class="batch-kicker">本地缓存能力查询</div>
+          <h3>按关键词查看已订阅机构能力</h3>
+          <textarea id="qualBatchInput" class="batch-textarea" placeholder="每行一个关键词，可输入标准号、标准名称、检测项目、机构名称&#10;GB 5009.9&#10;淀粉&#10;食品安全国家标准"></textarea>
           <div class="batch-actions">
             <button class="btn btn-primary btn-sm" onclick="doQualBatchVisual()">查询能力</button>
             <button class="btn btn-ghost btn-sm" onclick="fillQualBatchFromSaved()">填入收藏</button>

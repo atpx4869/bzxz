@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 import { getDb } from './db';
-import { CmaScraper, type CmaCapability } from './cma-scraper';
+import { CmaScraper, type CmaCapability, type CmaSearchResult } from './cma-scraper';
 import { CnasScraper, type CnasCapability, type CnasLabInfo } from './cnas-scraper';
 
 export interface Qualification {
@@ -9,6 +9,7 @@ export interface Qualification {
   stdName: string;
   labNo: string;
   labName: string;
+  linkedLabName?: string;
   effectiveDate: string;
   expiryDate: string;
   category: string;
@@ -32,6 +33,13 @@ export interface CnasLab {
   sync_error: string | null;
   record_count: number;
   subscribed_at: string;
+  url_params: string;
+  other_names: string;
+  org_address: string;
+  validity_period: string;
+  cert_tasks: string;
+  linked_display_name?: string;
+  linked_cma_cert_number?: string;
 }
 
 export interface CmaLab {
@@ -40,6 +48,14 @@ export interface CmaLab {
   lab_name: string;
   credit_code: string;
   lic_sys_id: string;
+  public_detail_id: string;
+  address: string;
+  area_name: string;
+  industry: string;
+  issue_date: string;
+  valid_from: string;
+  valid_to: string;
+  cert_status: string;
   cached_lic_date: string;
   cached_update_time: number;
   last_check_at: string | null;
@@ -49,6 +65,8 @@ export interface CmaLab {
   sync_error: string | null;
   record_count: number;
   subscribed_at: string;
+  linked_display_name?: string;
+  linked_cnas_lab_no?: string;
 }
 
 export interface SyncLog {
@@ -62,10 +80,17 @@ export interface SyncLog {
   error_message: string | null;
 }
 
+export interface SyncProgress {
+  fetched: number;
+  total: number;
+}
+
 export class QualificationService {
   private db: Database.Database;
   private cmaScraper = new CmaScraper();
   private cnasScraper = new CnasScraper();
+  /** In-memory sync progress: key = "cnas:labNo" or "cma:certNumber" */
+  private syncProgress = new Map<string, SyncProgress>();
 
   constructor(db?: Database.Database) {
     this.db = db ?? getDb();
@@ -108,11 +133,14 @@ export class QualificationService {
 
     // CNAS
     const cnasRows = this.db.prepare(`
-      SELECT q.std_code, q.std_name, q.lab_no, l.lab_name,
+      SELECT q.std_code, q.std_name, q.lab_no,
+             COALESCE(link.display_name, l.lab_name) AS lab_name,
+             link.display_name AS linked_lab_name,
              q.effective_date, q.expiry_date, q.category,
              q.test_object, q.test_param, q.test_standard, q.limit_desc
       FROM cnas_qualifications q
       LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
+      LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
       WHERE q.std_code IN (${placeholders})
     `).all(...stdCodes) as any[];
 
@@ -121,6 +149,7 @@ export class QualificationService {
       const qual: Qualification = {
         source: 'CNAS', stdCode: row.std_code, stdName: row.std_name,
         labNo: row.lab_no, labName: row.lab_name ?? '',
+        linkedLabName: row.linked_lab_name ?? undefined,
         effectiveDate: row.effective_date, expiryDate: row.expiry_date,
         category: row.category,
         testItem: [row.test_object, row.test_param].filter(Boolean).join(' > '),
@@ -140,11 +169,14 @@ export class QualificationService {
 
     // CMA
     const cmaRows = this.db.prepare(`
-      SELECT q.std_code, q.std_name, q.cert_number, l.lab_name,
+      SELECT q.std_code, q.std_name, q.cert_number,
+             COALESCE(link.display_name, l.lab_name) AS lab_name,
+             link.display_name AS linked_lab_name,
              q.effective_date, q.expiry_date, q.category,
              q.test_item, q.test_standard, q.limit_desc
       FROM cma_qualifications q
       LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
+      LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
       WHERE q.std_code IN (${placeholders})
     `).all(...stdCodes) as any[];
 
@@ -152,6 +184,7 @@ export class QualificationService {
       const qual: Qualification = {
         source: 'CMA', stdCode: row.std_code, stdName: row.std_name,
         labNo: row.cert_number, labName: row.lab_name ?? '',
+        linkedLabName: row.linked_lab_name ?? undefined,
         effectiveDate: row.effective_date, expiryDate: row.expiry_date,
         category: row.category, testItem: row.test_item,
         testStandard: row.test_standard, limitDesc: row.limit_desc,
@@ -221,16 +254,20 @@ export class QualificationService {
 
     if (!source || source === 'CNAS') {
       const rows = this.db.prepare(`
-        SELECT q.std_code, q.std_name, q.lab_no, l.lab_name,
+        SELECT q.std_code, q.std_name, q.lab_no,
+               COALESCE(link.display_name, l.lab_name) AS lab_name,
+               link.display_name AS linked_lab_name,
                q.effective_date, q.expiry_date, q.category,
                q.test_object, q.test_param, q.test_standard, q.limit_desc
         FROM cnas_qualifications q
         LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
+        LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
         WHERE q.std_code LIKE ? OR q.std_name LIKE ? OR q.lab_no LIKE ?
-           OR q.test_object LIKE ? OR q.category LIKE ?
+           OR l.lab_name LIKE ? OR q.test_object LIKE ? OR q.test_param LIKE ?
+           OR q.test_standard LIKE ? OR q.category LIKE ?
         ORDER BY q.std_code, q.effective_date DESC
         LIMIT ?
-      `).all(q, q, q, q, q, limit) as any[];
+      `).all(q, q, q, q, q, q, q, q, limit) as any[];
 
       for (const row of rows) {
         results.push({
@@ -239,6 +276,7 @@ export class QualificationService {
           stdName: row.std_name,
           labNo: row.lab_no,
           labName: row.lab_name ?? '',
+          linkedLabName: row.linked_lab_name ?? undefined,
           effectiveDate: row.effective_date,
           expiryDate: row.expiry_date,
           category: row.category,
@@ -251,16 +289,20 @@ export class QualificationService {
 
     if (!source || source === 'CMA') {
       const rows = this.db.prepare(`
-        SELECT q.std_code, q.std_name, q.cert_number, l.lab_name,
+        SELECT q.std_code, q.std_name, q.cert_number,
+               COALESCE(link.display_name, l.lab_name) AS lab_name,
+               link.display_name AS linked_lab_name,
                q.effective_date, q.expiry_date, q.category,
                q.test_item, q.test_standard, q.limit_desc
         FROM cma_qualifications q
         LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
+        LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
         WHERE q.std_code LIKE ? OR q.std_name LIKE ? OR q.cert_number LIKE ?
-           OR q.test_item LIKE ? OR q.category LIKE ?
+           OR l.lab_name LIKE ? OR q.test_item LIKE ? OR q.test_standard LIKE ?
+           OR q.category LIKE ?
         ORDER BY q.std_code, q.effective_date DESC
         LIMIT ?
-      `).all(q, q, q, q, q, limit) as any[];
+      `).all(q, q, q, q, q, q, q, limit) as any[];
 
       for (const row of rows) {
         results.push({
@@ -269,6 +311,7 @@ export class QualificationService {
           stdName: row.std_name,
           labNo: row.cert_number,
           labName: row.lab_name ?? '',
+          linkedLabName: row.linked_lab_name ?? undefined,
           effectiveDate: row.effective_date,
           expiryDate: row.expiry_date,
           category: row.category,
@@ -282,18 +325,41 @@ export class QualificationService {
     return results;
   }
 
-  // ─── CNAS Lab Management ───
-
-  listCnasLabs(): CnasLab[] {
-    return this.db.prepare('SELECT * FROM cnas_labs ORDER BY subscribed_at DESC').all() as CnasLab[];
+  /** Batch keyword query against local subscribed qualification cache only. */
+  queryVisualKeywords(queries: string[], limitPerQuery = 500): Record<string, Qualification[]> {
+    const result: Record<string, Qualification[]> = {};
+    for (const query of queries) {
+      result[query] = this.searchQualifications(query, undefined, limitPerQuery);
+    }
+    return result;
   }
 
-  addCnasLab(lab: { lab_no: string; lab_name?: string; base_info_id?: string; cert_update_ts?: string; validate?: string }): CnasLab {
+  // ─── CNAS Lab Management ───
+
+  getSyncProgress(key: string): SyncProgress | undefined {
+    return this.syncProgress.get(key);
+  }
+
+  listCnasLabs(): (CnasLab & { sync_progress?: SyncProgress })[] {
+    const labs = this.db.prepare(`
+      SELECT l.*, link.display_name AS linked_display_name, link.cma_cert_number AS linked_cma_cert_number
+      FROM cnas_labs l
+      LEFT JOIN qualification_lab_links link ON l.lab_no = link.cnas_lab_no
+      ORDER BY l.subscribed_at DESC
+    `).all() as CnasLab[];
+    return labs.map(l => {
+      const progress = this.syncProgress.get(`cnas:${l.lab_no}`);
+      return progress ? { ...l, sync_progress: progress } : l;
+    });
+  }
+
+  addCnasLab(lab: { lab_no: string; lab_name?: string; base_info_id?: string; cert_update_ts?: string; validate?: string; url_params?: Record<string, string> }): CnasLab {
+    const urlParamsJson = JSON.stringify(lab.url_params ?? {});
     this.db.prepare(`
-      INSERT INTO cnas_labs (lab_no, lab_name, base_info_id, cert_update_ts, validate)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(lab_no) DO UPDATE SET lab_name = excluded.lab_name, base_info_id = excluded.base_info_id
-    `).run(lab.lab_no, lab.lab_name ?? '', lab.base_info_id ?? '', lab.cert_update_ts ?? '', lab.validate ?? '');
+      INSERT INTO cnas_labs (lab_no, lab_name, base_info_id, cert_update_ts, validate, url_params)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(lab_no) DO UPDATE SET lab_name = excluded.lab_name, base_info_id = excluded.base_info_id, url_params = excluded.url_params
+    `).run(lab.lab_no, lab.lab_name ?? '', lab.base_info_id ?? '', lab.cert_update_ts ?? '', lab.validate ?? '', urlParamsJson);
     return this.db.prepare('SELECT * FROM cnas_labs WHERE lab_no = ?').get(lab.lab_no) as CnasLab;
   }
 
@@ -308,17 +374,117 @@ export class QualificationService {
 
   // ─── CMA Lab Management ───
 
-  listCmaLabs(): CmaLab[] {
-    return this.db.prepare('SELECT * FROM cma_labs ORDER BY subscribed_at DESC').all() as CmaLab[];
+  listCmaLabs(): (CmaLab & { sync_progress?: SyncProgress })[] {
+    const labs = this.db.prepare(`
+      SELECT l.*, link.display_name AS linked_display_name, link.cnas_lab_no AS linked_cnas_lab_no
+      FROM cma_labs l
+      LEFT JOIN qualification_lab_links link ON l.cert_number = link.cma_cert_number
+      ORDER BY l.subscribed_at DESC
+    `).all() as CmaLab[];
+    return labs.map(l => {
+      const progress = this.syncProgress.get(`cma:${l.cert_number}`);
+      return progress ? { ...l, sync_progress: progress } : l;
+    });
   }
 
-  addCmaLab(lab: { cert_number: string; lab_name?: string; credit_code?: string; lic_sys_id?: string; lic_date?: string }): CmaLab {
+  linkQualificationLabs(link: { display_name: string; cnas_lab_no?: string; cma_cert_number?: string }): void {
+    if (!link.cnas_lab_no && !link.cma_cert_number) throw new Error('CNAS or CMA identifier is required');
+    const displayName = link.display_name.trim();
+    if (!displayName) throw new Error('Display name is required');
+
+    const existing = this.db.prepare(`
+      SELECT * FROM qualification_lab_links
+      WHERE (? IS NOT NULL AND cnas_lab_no = ?)
+         OR (? IS NOT NULL AND cma_cert_number = ?)
+    `).get(
+      link.cnas_lab_no ?? null,
+      link.cnas_lab_no ?? null,
+      link.cma_cert_number ?? null,
+      link.cma_cert_number ?? null,
+    ) as any | undefined;
+    const existingId = existing?.id ?? 0;
+
     this.db.prepare(`
-      INSERT INTO cma_labs (cert_number, lab_name, credit_code, lic_sys_id, cached_lic_date)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(cert_number) DO UPDATE SET lab_name = excluded.lab_name, credit_code = excluded.credit_code
-    `).run(lab.cert_number, lab.lab_name ?? '', lab.credit_code ?? '', lab.lic_sys_id ?? '', lab.lic_date ?? '');
-    return this.db.prepare('SELECT * FROM cma_labs WHERE cert_number = ?').get(lab.cert_number) as CmaLab;
+      DELETE FROM qualification_lab_links
+      WHERE id <> ?
+        AND ((? IS NOT NULL AND cnas_lab_no = ?)
+          OR (? IS NOT NULL AND cma_cert_number = ?))
+    `).run(
+      existingId,
+      link.cnas_lab_no ?? null,
+      link.cnas_lab_no ?? null,
+      link.cma_cert_number ?? null,
+      link.cma_cert_number ?? null,
+    );
+
+    if (existing) {
+      this.db.prepare(`
+        UPDATE qualification_lab_links
+        SET display_name = ?,
+            cnas_lab_no = COALESCE(?, cnas_lab_no),
+            cma_cert_number = COALESCE(?, cma_cert_number),
+            updated_at = datetime('now')
+        WHERE id = ?
+      `).run(displayName, link.cnas_lab_no ?? null, link.cma_cert_number ?? null, existing.id);
+      return;
+    }
+
+    this.db.prepare(`
+      INSERT INTO qualification_lab_links (display_name, cnas_lab_no, cma_cert_number)
+      VALUES (?, ?, ?)
+    `).run(displayName, link.cnas_lab_no ?? null, link.cma_cert_number ?? null);
+  }
+
+  unlinkQualificationLab(source: 'CNAS' | 'CMA', id: string): void {
+    const column = source === 'CNAS' ? 'cnas_lab_no' : 'cma_cert_number';
+    this.db.prepare(`DELETE FROM qualification_lab_links WHERE ${column} = ?`).run(id);
+  }
+
+  async searchCmaLabs(query: string): Promise<CmaSearchResult[]> {
+    return this.cmaScraper.searchLabsByName(query);
+  }
+
+  async addCmaLab(lab: { public_detail_id: string }): Promise<CmaLab> {
+    const detail = await this.cmaScraper.getDetail(lab.public_detail_id);
+    if (!detail.certificateNumber) throw new Error('CMA certificate number not found on public detail page');
+
+    this.db.prepare(`
+      INSERT INTO cma_labs (
+        cert_number, lab_name, credit_code, lic_sys_id, public_detail_id,
+        address, area_name, industry, issue_date, valid_from, valid_to,
+        cert_status, cached_lic_date
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(cert_number) DO UPDATE SET
+        lab_name = excluded.lab_name,
+        credit_code = excluded.credit_code,
+        lic_sys_id = excluded.lic_sys_id,
+        public_detail_id = excluded.public_detail_id,
+        address = excluded.address,
+        area_name = excluded.area_name,
+        industry = excluded.industry,
+        issue_date = excluded.issue_date,
+        valid_from = excluded.valid_from,
+        valid_to = excluded.valid_to,
+        cert_status = excluded.cert_status,
+        cached_lic_date = excluded.cached_lic_date,
+        sync_error = NULL
+    `).run(
+      detail.certificateNumber,
+      detail.sysName,
+      detail.sysZzjgdm,
+      detail.publicDetailId,
+      detail.publicDetailId,
+      detail.addr,
+      detail.areaName,
+      detail.majorCategory,
+      detail.licDate,
+      detail.licValidTimeBegin,
+      detail.licValidTimeEnd,
+      detail.certStatus,
+      detail.licDate,
+    );
+    return this.db.prepare('SELECT * FROM cma_labs WHERE cert_number = ?').get(detail.certificateNumber) as CmaLab;
   }
 
   deleteCmaLab(certNumber: string): void {
@@ -335,14 +501,18 @@ export class QualificationService {
   async syncCmaLab(certNumber: string, force = false): Promise<{ action: string; records: number }> {
     const lab = this.db.prepare('SELECT * FROM cma_labs WHERE cert_number = ?').get(certNumber) as CmaLab | undefined;
     if (!lab) throw new Error(`CMA lab not found: ${certNumber}`);
+    const publicDetailId = lab.public_detail_id || lab.lic_sys_id;
+    if (!publicDetailId) throw new Error('No CMA public detail id stored. Search the institution name and subscribe again.');
 
     const startTime = new Date().toISOString();
+    const progressKey = `cma:${certNumber}`;
+    this.syncProgress.set(progressKey, { fetched: 0, total: 0 });
     this.db.prepare("UPDATE cma_labs SET sync_status = 'syncing' WHERE cert_number = ?").run(certNumber);
 
     try {
       // Update detection
-      if (!force && lab.cached_lic_date && lab.credit_code) {
-        const check = await this.cmaScraper.checkForUpdate(lab.credit_code, lab.cached_lic_date);
+      if (!force && lab.cached_lic_date && lab.record_count > 0) {
+        const check = await this.cmaScraper.checkForUpdate(publicDetailId, lab.cached_lic_date);
         this.db.prepare("UPDATE cma_labs SET last_check_at = datetime('now') WHERE cert_number = ?").run(certNumber);
 
         if (!check.hasUpdate) {
@@ -353,19 +523,15 @@ export class QualificationService {
       }
 
       // Full sync
-      const creditCode = lab.credit_code;
-      if (!creditCode) throw new Error('No credit code stored for update check');
-
-      const results = await this.cmaScraper.search({ creditCode });
-      if (results.length === 0) throw new Error('No certificate found');
-
-      const first = results[0];
-      const detail = await this.cmaScraper.getDetail(first.licSysId);
-      const capabilities = await this.cmaScraper.getCapabilities(first.licSysId);
+      const { detail, capabilities } = await this.cmaScraper.scrapeFull(publicDetailId);
+      const nextCertNumber = detail.certificateNumber || certNumber;
 
       // Replace data atomically
       const txn = this.db.transaction(() => {
         this.db.prepare('DELETE FROM cma_qualifications WHERE cert_number = ?').run(certNumber);
+        if (nextCertNumber !== certNumber) {
+          this.db.prepare('DELETE FROM cma_qualifications WHERE cert_number = ?').run(nextCertNumber);
+        }
 
         const insert = this.db.prepare(`
           INSERT INTO cma_qualifications (cert_number, std_code, std_name, qual_type, effective_date, expiry_date, category, sub_category, test_item, test_standard, limit_desc, note, place_name)
@@ -376,7 +542,7 @@ export class QualificationService {
           const stdCode = (cap.yjbzNumber ?? '').trim();
           if (!stdCode) continue;
           insert.run(
-            certNumber,
+            nextCertNumber,
             stdCode,
             cap.yjbzNameNumber ?? '',
             detail.licValidTimeBegin ?? '',
@@ -393,17 +559,37 @@ export class QualificationService {
 
         this.db.prepare(`
           UPDATE cma_labs SET
-            lab_name = ?, lic_sys_id = ?, cached_lic_date = ?,
+            cert_number = ?, lab_name = ?, credit_code = ?, lic_sys_id = ?, public_detail_id = ?,
+            address = ?, area_name = ?, industry = ?, issue_date = ?, valid_from = ?, valid_to = ?,
+            cert_status = ?, cached_lic_date = ?,
             record_count = ?, sync_status = 'success', sync_error = NULL,
             last_sync_at = datetime('now'), last_check_at = datetime('now')
           WHERE cert_number = ?
-        `).run(detail.sysName || detail.licUnitname || lab.cert_number, first.licSysId, first.licDate, capabilities.length, certNumber);
+        `).run(
+          nextCertNumber,
+          detail.sysName || detail.licUnitname || lab.lab_name,
+          detail.sysZzjgdm || lab.credit_code,
+          detail.publicDetailId,
+          detail.publicDetailId,
+          detail.addr,
+          detail.areaName,
+          detail.majorCategory,
+          detail.licDate,
+          detail.licValidTimeBegin,
+          detail.licValidTimeEnd,
+          detail.certStatus,
+          detail.licDate,
+          capabilities.length,
+          certNumber,
+        );
       });
       txn();
 
-      this.logCmaSync(certNumber, force ? 'manual_forced' : 'cert_date_changed', startTime, 'success', capabilities.length);
+      this.syncProgress.delete(progressKey);
+      this.logCmaSync(nextCertNumber, force ? 'manual_forced' : 'cert_date_changed', startTime, 'success', capabilities.length);
       return { action: force ? 'manual_forced' : 'cert_date_changed', records: capabilities.length };
     } catch (err) {
+      this.syncProgress.delete(progressKey);
       const msg = err instanceof Error ? err.message : String(err);
       this.db.prepare("UPDATE cma_labs SET sync_status = 'error', sync_error = ? WHERE cert_number = ?").run(msg, certNumber);
       this.logCmaSync(certNumber, force ? 'manual_forced' : 'sync_error', startTime, 'error', 0, msg);
@@ -418,14 +604,19 @@ export class QualificationService {
     if (!lab) throw new Error(`CNAS lab not found: ${labNo}`);
     if (!lab.base_info_id) throw new Error(`No base_info_id for lab: ${labNo}`);
 
+    let urlParams: Record<string, string> = {};
+    try { urlParams = JSON.parse(lab.url_params || '{}'); } catch { /* ignore */ }
+
     const startTime = new Date().toISOString();
+    const progressKey = `cnas:${labNo}`;
+    this.syncProgress.set(progressKey, { fetched: 0, total: 0 });
     this.db.prepare("UPDATE cnas_labs SET sync_status = 'syncing' WHERE lab_no = ?").run(labNo);
 
     try {
       // Update detection
       if (!force && lab.cached_cert_date) {
         try {
-          const check = await this.cnasScraper.checkForUpdate(lab.base_info_id, lab.cached_cert_date);
+          const check = await this.cnasScraper.checkForUpdate(lab.base_info_id, lab.cached_cert_date, urlParams);
           this.db.prepare("UPDATE cnas_labs SET last_check_at = datetime('now') WHERE lab_no = ?").run(labNo);
 
           if (!check.hasUpdate) {
@@ -445,8 +636,11 @@ export class QualificationService {
         labName: lab.lab_name,
         certUpdateTs: lab.cert_update_ts,
         validate: lab.validate,
+        urlParams,
       };
-      const capabilities = await this.cnasScraper.fetchCapabilities(labInfo);
+      const capabilities = await this.cnasScraper.fetchCapabilities(labInfo, (fetched, total) => {
+        this.syncProgress.set(progressKey, { fetched, total });
+      });
 
       // Try to fetch lab name if missing or garbled
       let labName = lab.lab_name;
@@ -456,6 +650,12 @@ export class QualificationService {
           if (fetched) labName = fetched;
         } catch { /* keep existing name */ }
       }
+
+      // Fetch org info (other names, address, validity, cert tasks)
+      let orgInfo: { otherNames: string; address: string; validityPeriod: string; certTasks: Array<{ taskNo: string; reviewType: string; signDate: string; scopeStatus: string }> } = { otherNames: '', address: '', validityPeriod: '', certTasks: [] };
+      try {
+        orgInfo = await this.cnasScraper.fetchOrgInfo(labInfo);
+      } catch { /* keep defaults */ }
 
       // Replace data atomically
       const txn = this.db.transaction(() => {
@@ -491,15 +691,22 @@ export class QualificationService {
           UPDATE cnas_labs SET
             lab_name = ?, record_count = ?, sync_status = 'success', sync_error = NULL,
             last_sync_at = datetime('now'), last_check_at = datetime('now'),
-            cached_cert_date = ?
+            cached_cert_date = ?,
+            other_names = ?, org_address = ?, validity_period = ?, cert_tasks = ?
           WHERE lab_no = ?
-        `).run(labName, capabilities.length, capabilities[0]?.startDate ?? '', labNo);
+        `).run(
+          labName, capabilities.length, capabilities[0]?.startDate ?? '',
+          orgInfo.otherNames, orgInfo.address, orgInfo.validityPeriod, JSON.stringify(orgInfo.certTasks),
+          labNo,
+        );
       });
       txn();
 
+      this.syncProgress.delete(progressKey);
       this.logCnasSync(labNo, force ? 'manual_forced' : 'synced', startTime, 'success', capabilities.length);
       return { action: force ? 'manual_forced' : 'synced', records: capabilities.length };
     } catch (err) {
+      this.syncProgress.delete(progressKey);
       const msg = err instanceof Error ? err.message : String(err);
       this.db.prepare("UPDATE cnas_labs SET sync_status = 'error', sync_error = ? WHERE lab_no = ?").run(msg, labNo);
       this.logCnasSync(labNo, force ? 'manual_forced' : 'sync_error', startTime, 'error', 0, msg);

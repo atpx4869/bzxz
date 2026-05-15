@@ -1,8 +1,10 @@
+import * as cheerio from 'cheerio';
 import { pooledFetch } from '../shared/http';
 
-const CMA_BASE = 'https://scjg.hubei.gov.cn/iframework/zjj';
+const CMA_BASE = 'http://223.75.53.51:81';
 
 export interface CmaSearchResult {
+  publicDetailId: string;
   licSysId: string;
   sysName: string;
   licHolderCode: string;
@@ -12,9 +14,12 @@ export interface CmaSearchResult {
   licValidTimeEnd: string;
   licState: string;
   addr: string;
+  areaName: string;
+  majorCategory: string;
 }
 
 export interface CmaDetail {
+  publicDetailId: string;
   licSysId: string;
   sysName: string;
   sysZzjgdm: string;
@@ -34,6 +39,8 @@ export interface CmaDetail {
   licUnitname: string;
   licHolder: string;
   addr: string;
+  certStatus: string;
+  areaName: string;
   updateTime: number;
 }
 
@@ -53,128 +60,248 @@ export interface CmaCapability {
   updateTime: number;
 }
 
-interface CmaListResponse {
-  id: string;
-  data: {
-    records: CmaSearchResult[];
-    total: number;
-    size: number;
-    current: number;
-  };
-}
-
-interface CmaDetailResponse extends CmaDetail {}
-
-interface CmaCapabilityResponse {
-  data: {
-    records: CmaCapability[];
-    total: number;
-    size: number;
-    current: number;
-  };
+export interface CmaSearchOptions {
+  orgName?: string;
+  standard?: string;
+  category?: string;
+  areaCode?: string;
+  licState?: '1' | '2' | '';
+  page?: number;
 }
 
 export class CmaScraper {
-  /** Search by credit code, certificate number, or org name */
-  async search(params: {
-    creditCode?: string;
-    certNumber?: string;
-    orgName?: string;
-  }): Promise<CmaSearchResult[]> {
-    const qs = new URLSearchParams();
-    qs.set('tyshxydm', params.creditCode ?? '');
-    qs.set('zsbh', params.certNumber ?? '');
-    qs.set('dwmc', params.orgName ?? '');
-    qs.set('limit', '10');
-    qs.set('pageNum', '1');
-
-    const url = `${CMA_BASE}/lic-jyjcjgzzrd-main/findAllJyjcMain?${qs}`;
-    const resp = await pooledFetch(url);
-    if (!resp.ok) throw new Error(`CMA search failed: ${resp.status}`);
-    const json = (await resp.json()) as CmaListResponse;
-    if (json.id !== '01') throw new Error(`CMA search error: ${JSON.stringify(json)}`);
-    return json.data?.records ?? [];
+  async search(params: CmaSearchOptions): Promise<CmaSearchResult[]> {
+    const html = await this.fetchListHtml(params);
+    return this.parseSearchResults(html);
   }
 
-  /** Get certificate detail */
-  async getDetail(licSysId: string): Promise<CmaDetail> {
-    const url = `${CMA_BASE}/lic-jyjcjgzzrd-main/getJyjcMainEn?id=${licSysId}`;
-    const resp = await pooledFetch(url);
-    if (!resp.ok) throw new Error(`CMA detail failed: ${resp.status}`);
-    return (await resp.json()) as CmaDetail;
+  async searchLabsByName(orgName: string, licState: '1' | '2' | '' = '1'): Promise<CmaSearchResult[]> {
+    return this.search({ orgName, licState });
   }
 
-  /** Get all capabilities with pagination */
+  async searchByStandard(standard: string, licState: '1' | '2' | '' = '1'): Promise<CmaSearchResult[]> {
+    return this.search({ standard, licState });
+  }
+
+  async getDetail(publicDetailId: string): Promise<CmaDetail> {
+    const html = await this.fetchDetailHtml(publicDetailId);
+    return this.parseDetail(html, publicDetailId);
+  }
+
   async getCapabilities(
-    licSysId: string,
+    publicDetailId: string,
     onProgress?: (fetched: number, total: number) => void,
   ): Promise<CmaCapability[]> {
-    const all: CmaCapability[] = [];
-    let page = 1;
-    const pageSize = 500;
-    let total = Infinity;
-
-    while (all.length < total) {
-      const url = `${CMA_BASE}/lic-jyjcjgzzrd-jcnl/jcnlPageTable?licSysId=${licSysId}&limit=${pageSize}&pageNum=${page}`;
-      const resp = await pooledFetch(url);
-      if (!resp.ok) throw new Error(`CMA capabilities failed: ${resp.status} at page ${page}`);
-      const json = (await resp.json()) as CmaCapabilityResponse;
-      const records = json.data?.records ?? [];
-      total = json.data?.total ?? 0;
-
-      if (records.length === 0) break;
-      all.push(...records);
-      onProgress?.(all.length, total);
-      page++;
-
-      // Small delay to be polite
-      if (all.length < total) await sleep(200);
-    }
-
-    return all;
+    const html = await this.fetchDetailHtml(publicDetailId);
+    const detail = this.parseDetail(html, publicDetailId);
+    const capabilities = this.parseCapabilities(html, detail.certificateNumber);
+    onProgress?.(capabilities.length, capabilities.length);
+    return capabilities;
   }
 
-  /** Full scrape: search → detail → capabilities */
   async scrapeFull(
-    creditCode: string,
+    publicDetailId: string,
     onProgress?: (stage: string, fetched: number, total: number) => void,
-  ): Promise<{
-    detail: CmaDetail;
-    capabilities: CmaCapability[];
-  }> {
-    onProgress?.('search', 0, 0);
-    const results = await this.search({ creditCode });
-    if (results.length === 0) throw new Error(`No CMA certificate found for: ${creditCode}`);
-
-    const first = results[0];
+  ): Promise<{ detail: CmaDetail; capabilities: CmaCapability[] }> {
     onProgress?.('detail', 0, 0);
-    const detail = await this.getDetail(first.licSysId);
-
+    const html = await this.fetchDetailHtml(publicDetailId);
+    const detail = this.parseDetail(html, publicDetailId);
     onProgress?.('capabilities', 0, 0);
-    const capabilities = await this.getCapabilities(first.licSysId, (fetched, total) => {
-      onProgress?.('capabilities', fetched, total);
-    });
-
+    const capabilities = this.parseCapabilities(html, detail.certificateNumber);
+    onProgress?.('capabilities', capabilities.length, capabilities.length);
     return { detail, capabilities };
   }
 
-  /** Check if certificate date has changed (lightweight update detection) */
-  async checkForUpdate(creditCode: string, cachedLicDate: string): Promise<{
+  async checkForUpdate(publicDetailId: string, cachedLicDate: string): Promise<{
     hasUpdate: boolean;
     currentLicDate: string;
     licSysId: string;
   }> {
-    const results = await this.search({ creditCode });
-    if (results.length === 0) throw new Error(`No CMA certificate found for: ${creditCode}`);
-    const first = results[0];
+    const detail = await this.getDetail(publicDetailId);
     return {
-      hasUpdate: first.licDate !== cachedLicDate,
-      currentLicDate: first.licDate,
-      licSysId: first.licSysId,
+      hasUpdate: detail.licDate !== cachedLicDate,
+      currentLicDate: detail.licDate,
+      licSysId: publicDetailId,
     };
+  }
+
+  async fetchListHtml(params: CmaSearchOptions): Promise<string> {
+    const qs = new URLSearchParams();
+    if (params.page && params.page > 1) qs.set('page', String(params.page));
+    qs.set('laboraname', params.orgName ?? '');
+    qs.set('licState', params.licState ?? '1');
+    qs.set('cplb', params.category ?? '');
+    qs.set('tpro', '');
+    qs.set('tp', params.standard ?? '');
+    if (params.areaCode) qs.append('xzqh', params.areaCode);
+
+    const resp = await pooledFetch(`${CMA_BASE}/socialPublicController.do?right&${qs}`, {
+      timeoutMs: 20_000,
+      retries: 2,
+    });
+    if (!resp.ok) throw new Error(`CMA public search failed: ${resp.status}`);
+    return resp.text();
+  }
+
+  async fetchDetailHtml(publicDetailId: string): Promise<string> {
+    const qs = new URLSearchParams({
+      fl: '1',
+      id: publicDetailId,
+      tp: '',
+      cplb: '',
+      tpro: '',
+    });
+    const resp = await pooledFetch(`${CMA_BASE}/socialPublicController.do?seelabinfo&${qs}`, {
+      timeoutMs: 25_000,
+      retries: 2,
+    });
+    if (!resp.ok) throw new Error(`CMA public detail failed: ${resp.status}`);
+    return resp.text();
+  }
+
+  parseSearchResults(html: string): CmaSearchResult[] {
+    const $ = cheerio.load(html);
+    const rows: CmaSearchResult[] = [];
+
+    $('#content tr').each((_idx, tr) => {
+      const cells = $(tr).find('td');
+      if (cells.length < 6) return;
+      const onclick = $(cells[5]).find('a').attr('onclick') ?? '';
+      const publicDetailId = onclick.match(/seeMore\('([^']+)'\)/)?.[1] ?? '';
+      if (!publicDetailId) return;
+
+      const name = cleanText($(cells[1]).text());
+      const areaName = cleanText($(cells[2]).text());
+      const majorCategory = cleanText($(cells[3]).text());
+      const licState = cleanText($(cells[4]).text());
+
+      rows.push({
+        publicDetailId,
+        licSysId: publicDetailId,
+        sysName: name,
+        licHolderCode: '',
+        licNumber: '',
+        licDate: '',
+        licValidTimeBegin: '',
+        licValidTimeEnd: '',
+        licState,
+        addr: '',
+        areaName,
+        majorCategory,
+      });
+    });
+
+    return rows;
+  }
+
+  parseDetail(html: string, publicDetailId: string): CmaDetail {
+    const $ = cheerio.load(html);
+    const spanText = (id: string) => cleanText($(`#${id}`).text());
+    const certNumber = findValueAfterLabel($, '证书编号');
+
+    return {
+      publicDetailId,
+      licSysId: publicDetailId,
+      sysName: spanText('LaboraName'),
+      sysZzjgdm: spanText('lbljgdm'),
+      certificateNumber: certNumber,
+      sysGjsjzx: spanText('zgglzName'),
+      majorCategory: spanText('Label2'),
+      businessDepartment: '',
+      registerAddress: spanText('LaboraAddress'),
+      sysFzrName: spanText('zgglzName'),
+      sysLxrName: spanText('ContactMen'),
+      leRep: spanText('Header'),
+      techDirectorName: '',
+      licNumber: certNumber,
+      licDate: normalizeDate(findValueAfterLabel($, '证书颁发时间')),
+      licValidTimeBegin: normalizeDate(findValueAfterLabel($, '证书有效期起始时间')),
+      licValidTimeEnd: normalizeDate(findValueAfterLabel($, '证书有效期截止时间')),
+      licUnitname: spanText('LaboraName'),
+      licHolder: spanText('LaboraName'),
+      addr: spanText('LaboraAddress'),
+      certStatus: cleanText(findValueAfterLabel($, '证书状态')),
+      areaName: spanText('xzqh'),
+      updateTime: 0,
+    };
+  }
+
+  parseCapabilities(html: string, certId: string): CmaCapability[] {
+    const $ = cheerio.load(html);
+    const table = $('table').filter((_idx, el) => {
+      const directRows = directTableRows($, el);
+      const text = cleanText(directRows.slice(0, 2).text());
+      return directRows.length > 1
+        && text.includes('产品/项目/参数')
+        && text.includes('标准(方法)名称')
+        && text.includes('限制范围');
+    }).last();
+
+    const rows: CmaCapability[] = [];
+    directTableRows($, table.get(0)).each((_idx, tr) => {
+      const cells = $(tr).find('td');
+      if (cells.length < 7) return;
+      const seq = cleanText($(cells[0]).text());
+      if (!/^\d+$/.test(seq)) return;
+
+      const cpNumber = cleanText($(cells[1]).text());
+      const parentName = cleanText($(cells[2]).text());
+      const cpName = cleanText($(cells[3]).text());
+      const standardName = cleanText($(cells[4]).text());
+      const stdCode = cleanText($(cells[5]).text());
+      const limitDesc = cleanText($(cells[6]).text());
+
+      rows.push({
+        jcnlId: `${certId || 'CMA'}-${seq}`,
+        type: parentName,
+        cpNumber,
+        cpName,
+        yjbzNameNumber: standardName,
+        yjbzNumber: stdCode === '暂无' ? '' : stdCode,
+        xzfw: limitDesc,
+        sm: '',
+        parentNo: cpNumber,
+        parentName,
+        placeName: '',
+        certId,
+        updateTime: 0,
+      });
+    });
+
+    return rows;
   }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise(r => setTimeout(r, ms));
+function directTableRows($: cheerio.CheerioAPI, table: unknown): cheerio.Cheerio<any> {
+  if (!table) return cheerio.load('')('tr');
+  const node = table as any;
+  const directBodyRows = $(node).children('tbody').children('tr');
+  return directBodyRows.length ? directBodyRows : $(node).children('tr');
+}
+
+function findValueAfterLabel($: cheerio.CheerioAPI, label: string): string {
+  let value = '';
+  $('td').each((_idx, td) => {
+    if (value) return;
+    const text = cleanText($(td).text());
+    if (!text.startsWith(label)) return;
+    const next = $(td).nextAll('td').filter((_i, el) => cleanText($(el).text()).length > 0).first();
+    value = cleanText(next.text());
+  });
+  return value;
+}
+
+function cleanText(value: string): string {
+  return value
+    .replace(/\u00a0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[:：\s]+|[:：\s]+$/g, '')
+    .trim();
+}
+
+function normalizeDate(value: string): string {
+  const text = cleanText(value);
+  const m = text.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+  if (!m) return text;
+  return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
 }

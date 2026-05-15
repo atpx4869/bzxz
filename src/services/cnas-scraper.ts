@@ -41,6 +41,23 @@ export interface CnasLabInfo {
   labName: string;
   certUpdateTs: string;
   validate: string;
+  /** Extra URL params required by CNAS site (id, labType, scopeStr, orgEnOrCh, etc.) */
+  urlParams: Record<string, string>;
+}
+
+export interface CnasOrgInfo {
+  regNo: string;
+  otherNames: string;
+  address: string;
+  validityPeriod: string;
+  certTasks: CnasCertTask[];
+}
+
+export interface CnasCertTask {
+  taskNo: string;
+  reviewType: string;
+  signDate: string;
+  scopeStatus: string;
 }
 
 export class CnasScraper {
@@ -82,7 +99,13 @@ export class CnasScraper {
     await this.close();
     const page = await this.ensureBrowser();
 
-    const labUrl = `${CNAS_BASE}/orgBaseInfoScopePart.jsp?baseInfoId=${labInfo.baseInfoId}&licNo=${labInfo.labNo}`;
+    // Build full URL with all required params
+    const params = new URLSearchParams({
+      baseInfoId: labInfo.baseInfoId,
+      licNo: labInfo.labNo,
+      ...labInfo.urlParams,
+    });
+    const labUrl = `${CNAS_BASE}/orgBaseInfoScopePart.jsp?${params}`;
     await page.goto(labUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForTimeout(5000);
 
@@ -110,6 +133,70 @@ export class CnasScraper {
     } catch {
       return '';
     }
+  }
+
+  /** Fetch organization info from the CNAS org info page */
+  async fetchOrgInfo(labInfo: CnasLabInfo): Promise<CnasOrgInfo> {
+    const orgId = labInfo.urlParams?.id;
+    if (!orgId) return { regNo: labInfo.labNo, otherNames: '', address: '', validityPeriod: '', certTasks: [] };
+
+    await this.close();
+    const page = await this.ensureBrowser();
+    const orgUrl = `${CNAS_BASE}/queryOrgInfo.action?id=${orgId}&orgEnOrCh=Ch`;
+    await page.goto(orgUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(5000);
+
+    const title = await page.title();
+    if (!title || title.includes('__jsl')) {
+      throw new Error('CNAS anti-bot challenge not resolved on org info page');
+    }
+
+    const result = await page.evaluate(() => {
+      const getText = (el: Element | null) => el?.textContent?.trim() ?? '';
+
+      // Helper: find value in a label-value table row pattern
+      const findValue = (labelText: string): string => {
+        const tds = Array.from(document.querySelectorAll('td'));
+        for (let i = 0; i < tds.length - 1; i++) {
+          if (getText(tds[i]).includes(labelText)) return getText(tds[i + 1]);
+        }
+        return '';
+      };
+
+      // Parse cert tasks from table
+      const certTasks: Array<{ taskNo: string; reviewType: string; signDate: string; scopeStatus: string }> = [];
+      const tables = Array.from(document.querySelectorAll('table'));
+      for (const table of tables) {
+        const headers = Array.from(table.querySelectorAll('th, td')).map(getText);
+        const taskNoIdx = headers.findIndex(h => h.includes('任务编号'));
+        const reviewIdx = headers.findIndex(h => h.includes('评审类型'));
+        const signIdx = headers.findIndex(h => h.includes('签发日期'));
+        const statusIdx = headers.findIndex(h => h.includes('公布状态'));
+        if (taskNoIdx < 0) continue;
+        const rows = Array.from(table.querySelectorAll('tr')).slice(1);
+        for (const row of rows) {
+          const cells = Array.from(row.querySelectorAll('td'));
+          if (cells.length <= taskNoIdx) continue;
+          certTasks.push({
+            taskNo: getText(cells[taskNoIdx]),
+            reviewType: reviewIdx >= 0 && cells[reviewIdx] ? getText(cells[reviewIdx]) : '',
+            signDate: signIdx >= 0 && cells[signIdx] ? getText(cells[signIdx]) : '',
+            scopeStatus: statusIdx >= 0 && cells[statusIdx] ? getText(cells[statusIdx]) : '',
+          });
+        }
+        if (certTasks.length) break;
+      }
+
+      return {
+        regNo: findValue('注册编号'),
+        otherNames: findValue('其他名称'),
+        address: findValue('单位地址') || findValue('地址'),
+        validityPeriod: findValue('认可有效期限') || findValue('有效期'),
+        certTasks,
+      };
+    });
+
+    return result;
   }
 
   /** Fetch a single page of capabilities, returns null if anti-bot triggered */
@@ -224,12 +311,22 @@ export class CnasScraper {
       const baseInfoId = params.get('baseInfoId');
       const licNo = params.get('licNo');
       if (!baseInfoId || !licNo) return null;
+
+      // Extract extra URL params required by CNAS site
+      const extraKeys = ['id', 'labType', 'scopeStr', 'orgEnOrCh', 'attactdate'];
+      const urlParams: Record<string, string> = {};
+      for (const key of extraKeys) {
+        const val = params.get(key);
+        if (val) urlParams[key] = val;
+      }
+
       return {
         baseInfoId,
         labNo: licNo,
         labName: '',
         certUpdateTs: params.get('certUpdateTs') ?? '',
         validate: params.get('validate') ?? '',
+        urlParams,
       };
     } catch {
       return null;
@@ -237,8 +334,8 @@ export class CnasScraper {
   }
 
   /** Fetch lab info (lightweight check) */
-  async fetchLabInfo(baseInfoId: string): Promise<{ certDate: string; totalSize: number }> {
-    const labInfo: CnasLabInfo = { baseInfoId, labNo: '', labName: '', certUpdateTs: '', validate: '' };
+  async fetchLabInfo(baseInfoId: string, urlParams: Record<string, string> = {}): Promise<{ certDate: string; totalSize: number }> {
+    const labInfo: CnasLabInfo = { baseInfoId, labNo: '', labName: '', certUpdateTs: '', validate: '', urlParams };
     const page = await this.navigateToLab(labInfo);
 
     const result = await page.evaluate(async (baseinfoId: string) => {
@@ -274,8 +371,9 @@ export class CnasScraper {
   async checkForUpdate(
     baseInfoId: string,
     cachedCertDate: string,
+    urlParams: Record<string, string> = {},
   ): Promise<{ hasUpdate: boolean; currentCertDate: string; totalSize: number }> {
-    const info = await this.fetchLabInfo(baseInfoId);
+    const info = await this.fetchLabInfo(baseInfoId, urlParams);
     return {
       hasUpdate: info.certDate !== cachedCertDate,
       currentCertDate: info.certDate,

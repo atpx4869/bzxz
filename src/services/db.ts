@@ -128,6 +128,14 @@ function migrate(db: Database.Database): void {
       lab_name            TEXT DEFAULT '',
       credit_code         TEXT DEFAULT '',
       lic_sys_id          TEXT DEFAULT '',
+      public_detail_id    TEXT DEFAULT '',
+      address             TEXT DEFAULT '',
+      area_name           TEXT DEFAULT '',
+      industry            TEXT DEFAULT '',
+      issue_date          TEXT DEFAULT '',
+      valid_from          TEXT DEFAULT '',
+      valid_to            TEXT DEFAULT '',
+      cert_status         TEXT DEFAULT '',
       cached_lic_date     TEXT DEFAULT '',
       cached_update_time  INTEGER DEFAULT 0,
       last_check_at       TEXT,
@@ -170,10 +178,33 @@ function migrate(db: Database.Database): void {
       records_fetched INTEGER DEFAULT 0,
       error_message   TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS qualification_lab_links (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      display_name    TEXT NOT NULL,
+      cnas_lab_no     TEXT UNIQUE,
+      cma_cert_number TEXT UNIQUE,
+      created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   // Migration: add allowed_tabs column if missing (existing DBs)
   try { db.exec("ALTER TABLE users ADD COLUMN allowed_tabs TEXT DEFAULT NULL"); } catch { /* column exists */ }
+  try { db.exec("ALTER TABLE cma_labs ADD COLUMN public_detail_id TEXT DEFAULT ''"); } catch { /* column exists */ }
+  try { db.exec("ALTER TABLE cma_labs ADD COLUMN address TEXT DEFAULT ''"); } catch { /* column exists */ }
+  try { db.exec("ALTER TABLE cma_labs ADD COLUMN area_name TEXT DEFAULT ''"); } catch { /* column exists */ }
+  try { db.exec("ALTER TABLE cma_labs ADD COLUMN industry TEXT DEFAULT ''"); } catch { /* column exists */ }
+  try { db.exec("ALTER TABLE cma_labs ADD COLUMN issue_date TEXT DEFAULT ''"); } catch { /* column exists */ }
+  try { db.exec("ALTER TABLE cma_labs ADD COLUMN valid_from TEXT DEFAULT ''"); } catch { /* column exists */ }
+  try { db.exec("ALTER TABLE cma_labs ADD COLUMN valid_to TEXT DEFAULT ''"); } catch { /* column exists */ }
+  try { db.exec("ALTER TABLE cma_labs ADD COLUMN cert_status TEXT DEFAULT ''"); } catch { /* column exists */ }
+  try { db.exec("ALTER TABLE cnas_labs ADD COLUMN url_params TEXT DEFAULT '{}'"); } catch { /* column exists */ }
+  try { db.exec("ALTER TABLE cnas_labs ADD COLUMN other_names TEXT DEFAULT ''"); } catch { /* column exists */ }
+  try { db.exec("ALTER TABLE cnas_labs ADD COLUMN org_address TEXT DEFAULT ''"); } catch { /* column exists */ }
+  try { db.exec("ALTER TABLE cnas_labs ADD COLUMN validity_period TEXT DEFAULT ''"); } catch { /* column exists */ }
+  try { db.exec("ALTER TABLE cnas_labs ADD COLUMN cert_tasks TEXT DEFAULT '[]'"); } catch { /* column exists */ }
+  cleanupLegacyCmaData(db);
 
   ensureGuestUser(db);
 
@@ -191,6 +222,25 @@ function migrate(db: Database.Database): void {
     const existing = db.prepare('SELECT value FROM settings WHERE key = ?').get(k);
     if (!existing) db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(k, v);
   }
+}
+
+function cleanupLegacyCmaData(db: Database.Database): void {
+  db.exec(`
+    DELETE FROM cma_qualifications
+    WHERE cert_number IN (
+      SELECT cert_number FROM cma_labs
+      WHERE COALESCE(public_detail_id, '') = ''
+        AND (length(cert_number) >= 18 OR cert_number GLOB '*[A-Za-z]*')
+    );
+
+    DELETE FROM cma_labs
+    WHERE COALESCE(public_detail_id, '') = ''
+      AND (length(cert_number) >= 18 OR cert_number GLOB '*[A-Za-z]*');
+
+    DELETE FROM cma_qualifications
+    WHERE (length(cert_number) >= 18 OR cert_number GLOB '*[A-Za-z]*')
+      AND cert_number NOT IN (SELECT cert_number FROM cma_labs);
+  `);
 }
 
 function ensureGuestUser(db: Database.Database): void {

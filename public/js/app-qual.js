@@ -22,25 +22,25 @@ function switchQualTab(tab) {
 
 async function doQualBatchVisual() {
   const input = document.getElementById('qualBatchInput');
-  const codes = [...new Set(input.value.split(/[\n\r,，;；]+/).map(s => s.trim()).filter(Boolean))];
+  const queries = [...new Set(input.value.split(/[\n\r,，;；]+/).map(s => s.trim()).filter(Boolean))];
   const stats = document.getElementById('qualVisualStats');
   const out = document.getElementById('qualVisualResults');
-  if (!codes.length) {
-    stats.innerHTML = '请输入标准号';
+  if (!queries.length) {
+    stats.innerHTML = '请输入关键词';
     out.innerHTML = '';
     return;
   }
-  stats.innerHTML = '<span class="spinner"></span> 查询中';
+  stats.innerHTML = '<span class="spinner"></span> 正在查询本地缓存';
   out.innerHTML = '';
   try {
-    const res = await fetch('/api/standards/qualifications', {
+    const res = await fetch('/api/qualifications/visual', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stdCodes: codes }),
+      body: JSON.stringify({ queries }),
     });
-    const data = await res.json();
+    const data = await readQualApiJson(res);
     if (!res.ok) throw new Error(data.message || '查询失败');
-    renderQualVisual(codes, data);
+    renderQualVisual(queries, data);
   } catch (e) {
     stats.innerHTML = `<span style="color:var(--danger)">查询失败: ${escapeHtml(e.message)}</span>`;
   }
@@ -52,38 +52,167 @@ function fillQualBatchFromSaved() {
   input.focus();
 }
 
-function renderQualVisual(codes, data) {
+function renderQualVisual(queries, data) {
   const stats = document.getElementById('qualVisualStats');
   const out = document.getElementById('qualVisualResults');
-  let covered = 0, cnas = 0, cma = 0, expired = 0;
   const now = beijingDate();
-  const cards = codes.map(code => {
-    const items = data[code] || [];
+  const visibleLabNames = new Set();
+
+  let covered = 0, cnas = 0, cma = 0, expired = 0;
+  for (const query of queries) {
+    const items = data[query] || [];
     if (items.length) covered++;
-    cnas += items.filter(i => i.source === 'CNAS').length;
-    cma += items.filter(i => i.source === 'CMA').length;
-    expired += items.filter(i => i.expiryDate && i.expiryDate < now).length;
-    const labs = [...new Map(items.map(i => [i.source + ':' + (i.labNo || i.labName), i])).values()];
-    return `<div class="qual-visual-result ${items.length ? '' : 'empty'}">
-      <div class="qual-visual-code">
-        <strong>${escapeHtml(code)}</strong>
-        <span>${items.length ? `${labs.length} 家机构 · ${items.length} 条能力` : '暂无能力记录'}</span>
-      </div>
-      <div class="qual-visual-bars">
-        <span style="--w:${Math.min(100, items.filter(i => i.source === 'CNAS').length * 12)}%" class="cnas">CNAS ${items.filter(i => i.source === 'CNAS').length}</span>
-        <span style="--w:${Math.min(100, items.filter(i => i.source === 'CMA').length * 12)}%" class="cma">CMA ${items.filter(i => i.source === 'CMA').length}</span>
-      </div>
-      <div class="qual-visual-labs">
-        ${labs.slice(0, 8).map(l => `<span>${escapeHtml(l.source)} · ${escapeHtml(l.labName || l.labNo || '机构')}</span>`).join('') || '<span>可在订阅管理中添加机构并同步能力</span>'}
-      </div>
-    </div>`;
-  }).join('');
+    for (const it of items) {
+      visibleLabNames.add(it.linkedLabName || it.labName || it.labNo || '未知机构');
+      if (it.source === 'CNAS') cnas++;
+      if (it.source === 'CMA') cma++;
+      if (it.expiryDate && it.expiryDate < now) expired++;
+    }
+  }
+
   stats.innerHTML = `
-    <div><strong>${covered}/${codes.length}</strong><span>有能力覆盖</span></div>
+    <div><strong>${covered}/${queries.length}</strong><span>关键词命中</span></div>
     <div><strong>${cnas}</strong><span>CNAS 能力</span></div>
     <div><strong>${cma}</strong><span>CMA 能力</span></div>
     <div class="${expired ? 'warn' : ''}"><strong>${expired}</strong><span>已过期记录</span></div>`;
-  out.innerHTML = `<div class="qual-visual-results">${cards}</div>`;
+
+  if (!queries.some(query => (data[query] || []).length)) {
+    out.innerHTML = '<div class="qual-visual-result empty">本地缓存暂无匹配资质。请先在订阅管理中订阅机构并同步能力。</div>';
+    return;
+  }
+
+  function cleanStdName(code, name) {
+    if (!name) return '';
+    const escaped = String(code || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return escaped
+      ? name.replace(new RegExp('\\s*' + escaped + '\\s*$', 'i'), '').trim()
+      : name;
+  }
+
+  function renderSourceColumn(title, sourceClass, items) {
+    const grouped = new Map();
+    for (const it of items) {
+      const code = it.stdCode || '未列标准号';
+      if (!grouped.has(code)) grouped.set(code, { code, name: cleanStdName(code, it.stdName || it.testStandard || ''), items: [] });
+      grouped.get(code).items.push(it);
+    }
+    const blocks = [...grouped.values()].map((g, idx) => {
+      const gid = `qv_${sourceClass}_${Math.random().toString(36).slice(2)}_${idx}`;
+      const rows = g.items.slice(0, 8).map(it => {
+        const expiredCls = it.expiryDate && it.expiryDate < now ? ' expired' : '';
+        const chips = [
+          it.category ? `<span>${escapeHtml(it.category)}</span>` : '',
+          it.matchedQuery ? `<span>命中 ${escapeHtml(it.matchedQuery)}</span>` : '',
+        ].filter(Boolean).join('');
+        return `<div class="qual-visual-cap${expiredCls}">
+          <div class="qual-visual-cap-main">${escapeHtml(it.testItem || it.testStandard || it.stdName || '能力记录')}</div>
+          ${chips ? `<div class="qual-visual-cap-chips">${chips}</div>` : ''}
+          ${it.testStandard ? `<div class="qual-visual-cap-std">${escapeHtml(it.testStandard)}</div>` : ''}
+          ${it.limitDesc && it.limitDesc !== '/' && it.limitDesc !== '—' ? `<div class="qual-visual-cap-limit">限制: ${escapeHtml(it.limitDesc)}</div>` : ''}
+          ${(it.effectiveDate || it.expiryDate) ? `<div class="qual-visual-cap-date">${it.effectiveDate ? '生效 ' + escapeHtml(it.effectiveDate) : ''}${it.expiryDate ? ' · 到期 ' + escapeHtml(it.expiryDate) : ''}</div>` : ''}
+        </div>`;
+      }).join('');
+      const more = g.items.length > 8 ? `<div class="qual-visual-more">还有 ${g.items.length - 8} 条匹配能力</div>` : '';
+      return `<div class="qual-visual-standard">
+        <div class="qual-visual-standard-head" onclick="toggleQualVisualStandard('${gid}')">
+          <div>
+            <span class="qual-visual-arrow" id="${gid}_arrow">▶</span>
+            <strong>${escapeHtml(g.code)}</strong>
+          </div>
+          <span>${g.items.length} 条</span>
+        </div>
+        ${g.name ? `<div class="qual-visual-standard-name">${escapeHtml(g.name)}</div>` : ''}
+        <div class="qual-visual-standard-body" id="${gid}_body" style="display:none">${rows}${more}</div>
+      </div>`;
+    }).join('');
+    return `<div class="qual-visual-source ${sourceClass}">
+      <div class="qual-visual-source-head"><strong>${title}</strong><span>${items.length ? items.length + ' 条' : '无匹配'}</span></div>
+      ${blocks || '<div class="qual-visual-empty-col">无本地缓存匹配</div>'}
+    </div>`;
+  }
+
+  const singleLab = visibleLabNames.size <= 1;
+  function buildResultCard(group) {
+    const total = group.cnas.length + group.cma.length;
+    const labNamesArr = [...group.labNames];
+    const labInfo = labNamesArr.length > 1 ? labNamesArr.map(n => escapeHtml(n)).join(' / ') : (labNamesArr[0] ? escapeHtml(labNamesArr[0]) : '');
+    return `<div class="qual-visual-lab-card">
+      <div class="qual-visual-lab-head">
+        <div>
+          ${labInfo && !singleLab ? `<h4>${labInfo}</h4>` : ''}
+          ${labInfo && singleLab ? `<span class="qual-visual-lab-muted">${escapeHtml(labInfo)}</span>` : ''}
+          <div><span>${escapeHtml(group.stdCode || '未列标准号')}</span><span>${total} 条匹配能力</span></div>
+          ${group.stdName ? `<p>${escapeHtml(group.stdName)}</p>` : ''}
+        </div>
+      </div>
+      <div class="qual-visual-source-grid">
+        ${renderSourceColumn('CMA', 'cma', group.cma)}
+        ${renderSourceColumn('CNAS', 'cnas', group.cnas)}
+      </div>
+    </div>`;
+  }
+
+  const sections = queries.map(query => {
+    const sourceItems = data[query] || [];
+    const itemSeen = new Set();
+    const groups = new Map();
+    for (const raw of sourceItems) {
+      const it = { ...raw, matchedQuery: query };
+      const dedupeKey = [it.source, it.labNo, it.stdCode, it.stdName, it.category, it.testItem, it.testStandard, it.limitDesc].join('|');
+      if (itemSeen.has(dedupeKey)) continue;
+      itemSeen.add(dedupeKey);
+      const stdCode = it.stdCode || '未列标准号';
+      // Group by stdCode only so CMA/CNAS for the same standard appear together
+      if (!groups.has(stdCode)) groups.set(stdCode, {
+        labNames: new Set(),
+        stdCode,
+        stdName: cleanStdName(stdCode, it.stdName || it.testStandard || ''),
+        cnas: [],
+        cma: [],
+      });
+      const g = groups.get(stdCode);
+      g[it.source === 'CNAS' ? 'cnas' : 'cma'].push(it);
+      g.labNames.add(it.linkedLabName || it.labName || it.labNo || '未知机构');
+    }
+    const cards = [...groups.values()].sort((a, b) => {
+      const scoreA = (a.cma.length ? 1000 : 0) + (a.cnas.length ? 500 : 0) + a.cma.length + a.cnas.length;
+      const scoreB = (b.cma.length ? 1000 : 0) + (b.cnas.length ? 500 : 0) + b.cma.length + b.cnas.length;
+      return scoreB - scoreA;
+    }).map(buildResultCard).join('');
+    const sectionId = `qvs_${Math.random().toString(36).slice(2)}`;
+    return `<section class="qual-visual-query-section" id="${sectionId}">
+      <div class="qual-visual-query-head">
+        <div><strong>${escapeHtml(query)}</strong><span>${groups.size ? groups.size + ' 条结果' : '无结果'}</span></div>
+        <div class="qual-visual-query-actions">
+          <button onclick="toggleQualVisualSection('${sectionId}', true)">全部展开</button>
+          <button onclick="toggleQualVisualSection('${sectionId}', false)">全部折叠</button>
+        </div>
+      </div>
+      ${cards || '<div class="qual-visual-result empty">本地缓存暂无匹配资质</div>'}
+    </section>`;
+  }).join('');
+
+  out.innerHTML = `<div class="qual-visual-results">${sections}</div>`;
+}
+
+function toggleQualVisualStandard(gid) {
+  const body = document.getElementById(gid + '_body');
+  const arrow = document.getElementById(gid + '_arrow');
+  if (!body) return;
+  const collapsed = body.style.display === 'none';
+  body.style.display = collapsed ? '' : 'none';
+  if (arrow) arrow.style.transform = collapsed ? 'rotate(90deg)' : '';
+}
+
+function toggleQualVisualSection(sectionId, expand) {
+  const section = document.getElementById(sectionId);
+  if (!section) return;
+  section.querySelectorAll('.qual-visual-standard-body').forEach(body => {
+    body.style.display = expand ? '' : 'none';
+  });
+  section.querySelectorAll('.qual-visual-arrow').forEach(arrow => {
+    arrow.style.transform = expand ? 'rotate(90deg)' : '';
+  });
 }
 
 function setQualFilter(btn, source) {
@@ -113,6 +242,7 @@ function renderQualSearchResults(items) {
   // Split by source
   const cnasItems = items.filter(it => it.source === 'CNAS');
   const cmaItems = items.filter(it => it.source === 'CMA');
+  const showLabName = new Set(items.map(it => it.linkedLabName || it.labName || it.labNo || '未知机构')).size > 1;
 
   const now = beijingDate();
 
@@ -148,6 +278,9 @@ function renderQualSearchResults(items) {
         if (it.category) {
           const cats = it.category.split('-').map(s => s.trim()).filter(Boolean);
           parts.push('<div style="margin-bottom:3px">' + cats.map(c => '<span style="display:inline-block;padding:1px 5px;background:var(--surface-h);border-radius:3px;font-size:10px;color:var(--text-2);margin-right:3px;margin-bottom:2px">' + escapeHtml(c) + '</span>').join('') + '</div>');
+        }
+        if (showLabName && (it.linkedLabName || it.labName || it.labNo)) {
+          parts.push('<div style="font-size:11px;color:var(--text-3);margin-bottom:3px">机构 ' + escapeHtml(it.linkedLabName || it.labName || it.labNo) + '</div>');
         }
         if (it.testItem) {
           parts.push('<div style="font-size:12px;color:var(--text);line-height:1.4"><span style="color:var(--text-3);font-size:10px">检测项目 </span>' + escapeHtml(it.testItem.length > 80 ? it.testItem.slice(0, 80) + '…' : it.testItem) + '</div>');
@@ -207,14 +340,31 @@ function toggleQualGroup(gid) {
 }
 
 // ── Qual Lab Management ──
+let qualCnasLabsCache = [];
+let qualCmaLabsCache = [];
+
 async function loadQualLabs() {
   try {
     const [cnasRes, cmaRes] = await Promise.all([fetch('/api/cnas/labs'), fetch('/api/cma/labs')]);
     const cnasLabs = await cnasRes.json();
     const cmaLabs = await cmaRes.json();
+    qualCnasLabsCache = cnasLabs || [];
+    qualCmaLabsCache = cmaLabs || [];
     renderQualLabs('cnas', cnasLabs);
     renderQualLabs('cma', cmaLabs);
   } catch (e) { /* silent */ }
+}
+
+function formatSyncStatus(lab) {
+  const statusColors = { success: 'var(--success)', syncing: 'var(--warning)', error: 'var(--danger)' };
+  const color = statusColors[lab.sync_status] || 'var(--text-3)';
+  const statusText = lab.sync_status || '—';
+  if (lab.sync_status === 'syncing' && lab.sync_progress) {
+    const { fetched, total } = lab.sync_progress;
+    const pct = total > 0 ? Math.round(fetched / total * 100) : 0;
+    return `<span style="color:${color}">同步中</span> <span style="color:var(--accent);font-weight:600">${fetched}/${total > 0 ? total : '?'}</span>${total > 0 ? ` (${pct}%)` : ''}`;
+  }
+  return `<span style="color:${color}">${statusText}</span>`;
 }
 
 function renderQualLabs(type, labs) {
@@ -222,25 +372,152 @@ function renderQualLabs(type, labs) {
   if (!labs.length) { container.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:8px 0">暂无订阅</div>'; return; }
   const nameField = type === 'cnas' ? 'lab_name' : 'lab_name';
   const idField = type === 'cnas' ? 'lab_no' : 'cert_number';
-  const statusColors = { success: 'var(--success)', syncing: 'var(--warning)', error: 'var(--danger)' };
   container.innerHTML = labs.map(lab => {
-    const statusColor = statusColors[lab.sync_status] || 'var(--text-3)';
     const syncInfo = lab.last_sync_at ? `<span>${utcToBeijing(lab.last_sync_at)}</span>` : '<span style="color:var(--text-3)">未同步</span>';
+    const statusHtml = formatSyncStatus(lab);
+    if (type === 'cma') {
+      const certStatusColor = /正常|有效/.test(lab.cert_status || '') ? 'var(--success)' : 'var(--warning)';
+      return `<div class="qual-lab-card">
+        <div class="qual-lab-header">
+          <div class="qual-lab-name">${escapeHtml(lab.lab_name || lab.cert_number)}</div>
+          <div class="qual-lab-actions">
+            <button onclick="linkQualLab('cma','${escapeHtml(lab.cert_number)}',${JSON.stringify(lab.lab_name || '').replace(/"/g, '&quot;')})">关联CNAS</button>
+            <button onclick="syncQualLab('cma','${escapeHtml(lab.cert_number)}')">同步</button>
+            <button class="danger" onclick="deleteQualLab('cma','${escapeHtml(lab.cert_number)}')">删除</button>
+          </div>
+        </div>
+        <div class="qual-lab-meta">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:4px 14px;line-height:1.6">
+            <div>地址: <span>${escapeHtml(lab.address || '—')}</span></div>
+            <div>证书编号: <span>${escapeHtml(lab.cert_number || '—')}</span></div>
+            <div>证书颁发时间: <span>${escapeHtml(lab.issue_date || '—')}</span></div>
+            <div>有效期起始: <span>${escapeHtml(lab.valid_from || '—')}</span></div>
+            <div>有效期截止: <span>${escapeHtml(lab.valid_to || '—')}</span></div>
+            <div>证书状态: <span style="color:${certStatusColor}">${escapeHtml(lab.cert_status || '—')}</span></div>
+          </div>
+          <div style="margin-top:6px">同步状态: ${statusHtml} | 记录: <span>${lab.record_count}</span> | 上次同步: ${syncInfo}</div>
+          ${lab.linked_cnas_lab_no ? `<div>已关联 CNAS: <span>${escapeHtml(lab.linked_cnas_lab_no)}</span> · <button class="qual-inline-btn" onclick="unlinkQualLab('CMA','${escapeHtml(lab.cert_number)}')">取消关联</button></div>` : ''}
+          ${lab.sync_error ? `<div style="color:var(--danger);font-size:11px">${escapeHtml(lab.sync_error)}</div>` : ''}
+        </div>
+      </div>`;
+    }
+    let certTasksHtml = '';
+    try {
+      const tasks = JSON.parse(lab.cert_tasks || '[]');
+      if (tasks.length) {
+        const taskRows = tasks.map(t => `<tr><td>${escapeHtml(t.taskNo)}</td><td>${escapeHtml(t.reviewType)}</td><td>${escapeHtml(t.signDate)}</td><td>${escapeHtml(t.scopeStatus)}</td></tr>`).join('');
+        certTasksHtml = `<div class="qual-lab-tasks"><div class="qual-lab-tasks-title">证书附件（能力范围）</div><table class="qual-lab-tasks-table"><thead><tr><th>任务编号</th><th>评审类型</th><th>签发日期</th><th>公布状态</th></tr></thead><tbody>${taskRows}</tbody></table></div>`;
+      }
+    } catch { /* ignore */ }
     return `<div class="qual-lab-card">
       <div class="qual-lab-header">
         <div class="qual-lab-name">${escapeHtml((lab[nameField] && !/^[?]+$/.test(lab[nameField]) && lab[nameField].length > 1) ? lab[nameField] + '（' + lab[idField] + '）' : lab[idField])}</div>
         <div class="qual-lab-actions">
           <button onclick="editQualLabName('${type}','${escapeHtml(lab[idField])}',${JSON.stringify(lab[nameField] || '').replace(/"/g, '&quot;')})">编辑</button>
+          <button onclick="linkQualLab('cnas','${escapeHtml(lab[idField])}',${JSON.stringify(lab[nameField] || '').replace(/"/g, '&quot;')})">关联CMA</button>
           <button onclick="syncQualLab('${type}','${escapeHtml(lab[idField])}')">同步</button>
           <button class="danger" onclick="deleteQualLab('${type}','${escapeHtml(lab[idField])}')">删除</button>
         </div>
       </div>
       <div class="qual-lab-meta">
-        <div>状态: <span style="color:${statusColor}">${lab.sync_status || '—'}</span> | 记录: <span>${lab.record_count}</span> | 上次同步: ${syncInfo}</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:3px 12px;line-height:1.6">
+          <div>注册编号: <span>${escapeHtml(lab.lab_no || '—')}</span></div>
+          ${lab.other_names ? `<div>其他名称: <span>${escapeHtml(lab.other_names)}</span></div>` : ''}
+          ${lab.org_address ? `<div>单位地址: <span>${escapeHtml(lab.org_address)}</span></div>` : ''}
+          ${lab.validity_period ? `<div>认可有效期限: <span>${escapeHtml(lab.validity_period)}</span></div>` : ''}
+          ${lab.cert_update_ts ? `<div>证书更新日期: <span>${escapeHtml(lab.cert_update_ts)}</span></div>` : ''}
+          ${lab.validate ? `<div>有效期至: <span>${escapeHtml(lab.validate)}</span></div>` : ''}
+        </div>
+        <div style="margin-top:5px">状态: ${statusHtml} | 记录: <span>${lab.record_count}</span> | 上次同步: ${syncInfo}</div>
+        ${lab.linked_cma_cert_number ? `<div>已关联 CMA: <span>${escapeHtml(lab.linked_cma_cert_number)}</span> · <button class="qual-inline-btn" onclick="unlinkQualLab('CNAS','${escapeHtml(lab[idField])}')">取消关联</button></div>` : ''}
         ${lab.sync_error ? `<div style="color:var(--danger);font-size:11px">${escapeHtml(lab.sync_error)}</div>` : ''}
       </div>
+      ${certTasksHtml}
     </div>`;
   }).join('');
+}
+
+async function searchCmaLabCandidates() {
+  const input = document.getElementById('qualCmaInput');
+  const container = document.getElementById('qualCmaCandidates');
+  const q = input.value.trim();
+  if (!q) return;
+  container.innerHTML = '<span class="spinner"></span> 正在搜索机构…';
+  try {
+    const res = await fetch(`/api/cma/search-labs?q=${encodeURIComponent(q)}`);
+    const data = await readQualApiJson(res);
+    if (!res.ok) throw new Error(data.message || '搜索失败');
+    const items = data.items || [];
+    if (!items.length) {
+      container.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:8px 0">未找到候选机构</div>';
+      return;
+    }
+    container.innerHTML = items.map(item => {
+      const id = escapeHtml(item.publicDetailId);
+      return `
+      <div class="qual-lab-card" style="margin-bottom:6px" data-cma-candidate="${id}">
+        <div class="qual-lab-header">
+          <div>
+            <div class="qual-lab-name">${escapeHtml(item.sysName || '未命名机构')}</div>
+            <div class="qual-lab-meta">行政区划: ${escapeHtml(item.areaName || '—')} | 行业: ${escapeHtml(item.majorCategory || '—')} | 状态: ${escapeHtml(item.licState || '—')}</div>
+          </div>
+          <div class="qual-lab-actions">
+            <button data-cma-subscribe="${id}" onclick="subscribeCmaCandidate('${id}')">订阅</button>
+          </div>
+        </div>
+        <div class="qual-cma-progress" data-cma-progress="${id}"></div>
+      </div>
+    `;
+    }).join('');
+  } catch (e) {
+    container.innerHTML = `<div style="color:var(--danger);font-size:12px;padding:8px 0">搜索失败: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function subscribeCmaCandidate(publicDetailId) {
+  const btn = document.querySelector(`[data-cma-subscribe="${cssEscape(publicDetailId)}"]`);
+  const progress = document.querySelector(`[data-cma-progress="${cssEscape(publicDetailId)}"]`);
+  const card = document.querySelector(`[data-cma-candidate="${cssEscape(publicDetailId)}"]`);
+  document.querySelectorAll('[data-cma-subscribe]').forEach(b => { b.disabled = true; });
+  if (btn) btn.innerHTML = '<span class="spinner"></span>订阅中';
+  if (card) card.classList.add('is-working');
+  if (progress) progress.innerHTML = '<span class="spinner"></span>正在获取证书详情，请稍候…';
+  try {
+    const res = await fetch('/api/cma/labs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ public_detail_id: publicDetailId }),
+    });
+    const data = await readQualApiJson(res);
+    if (!res.ok) throw new Error(data.message || '订阅失败');
+    if (progress) progress.innerHTML = `已订阅 ${escapeHtml(data.lab_name || data.cert_number || 'CMA 机构')}，正在刷新列表…`;
+    loadQualLabs();
+    setTimeout(() => { document.getElementById('qualCmaCandidates').innerHTML = ''; }, 900);
+    showToast(`已订阅 CMA 机构: ${data.lab_name || data.cert_number}`);
+  } catch (e) {
+    document.querySelectorAll('[data-cma-subscribe]').forEach(b => { b.disabled = false; });
+    if (btn) btn.innerHTML = '订阅';
+    if (card) card.classList.remove('is-working');
+    if (progress) progress.innerHTML = `<span style="color:var(--danger)">订阅失败: ${escapeHtml(e.message)}</span>`;
+    showToast(`订阅失败: ${e.message}`, 'fail');
+  }
+}
+
+function cssEscape(value) {
+  if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(value);
+  return String(value).replace(/["\\]/g, '\\$&');
+}
+
+async function readQualApiJson(res) {
+  const text = await res.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+      throw new Error('接口返回了页面 HTML，后端可能还没重启或未加载最新路由');
+    }
+    throw new Error('接口返回格式不是 JSON');
+  }
 }
 
 async function addQualLab(type) {
@@ -253,16 +530,15 @@ async function addQualLab(type) {
       // Try parsing as URL
       const parsed = val.includes('://') ? CnasScraper_parseUrl(val) : null;
       if (parsed) {
-        body = { lab_no: parsed.labNo, base_info_id: parsed.baseInfoId, cert_update_ts: parsed.certUpdateTs, validate: parsed.validate };
+        body = { lab_no: parsed.labNo, base_info_id: parsed.baseInfoId, cert_update_ts: parsed.certUpdateTs, validate: parsed.validate, url_params: parsed.urlParams };
       } else {
         body = { lab_no: val };
       }
       const res = await fetch('/api/cnas/labs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (!res.ok) { const d = await res.json(); throw new Error(d.message); }
     } else {
-      body = { cert_number: val };
-      const res = await fetch('/api/cma/labs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.message); }
+      await searchCmaLabCandidates();
+      return;
     }
     input.value = '';
     loadQualLabs();
@@ -290,6 +566,50 @@ async function editQualLabName(type, id, currentName) {
   }
 }
 
+async function linkQualLab(type, id, currentName) {
+  const candidates = type === 'cnas' ? qualCmaLabsCache : qualCnasLabsCache;
+  const targetLabel = type === 'cnas' ? 'CMA证书编号' : 'CNAS实验室编号';
+  const options = candidates.slice(0, 12).map(l => {
+    const candidateId = type === 'cnas' ? l.cert_number : l.lab_no;
+    return `${candidateId} - ${l.lab_name || ''}`;
+  }).join('\n');
+  const targetId = prompt(`输入要关联的${targetLabel}：\n\n可选项：\n${options || '暂无可选订阅'}`, '');
+  if (!targetId) return;
+  const displayName = prompt('输入合并后显示的机构名称', currentName || '');
+  if (!displayName) return;
+
+  const body = type === 'cnas'
+    ? { display_name: displayName, cnas_lab_no: id, cma_cert_number: targetId.trim() }
+    : { display_name: displayName, cnas_lab_no: targetId.trim(), cma_cert_number: id };
+
+  try {
+    const res = await fetch('/api/qualification-links', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await readQualApiJson(res);
+    if (!res.ok) throw new Error(data.message || '关联失败');
+    loadQualLabs();
+    showToast('机构关联已保存');
+  } catch (e) {
+    showToast(`关联失败: ${e.message}`, 'fail');
+  }
+}
+
+async function unlinkQualLab(source, id) {
+  if (!confirm('确定取消这组机构关联？')) return;
+  try {
+    const res = await fetch(`/api/qualification-links/${source}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const data = await readQualApiJson(res);
+    if (!res.ok) throw new Error(data.message || '取消关联失败');
+    loadQualLabs();
+    showToast('机构关联已取消');
+  } catch (e) {
+    showToast(`取消关联失败: ${e.message}`, 'fail');
+  }
+}
+
 function CnasScraper_parseUrl(url) {
   try {
     const u = new URL(url);
@@ -297,7 +617,13 @@ function CnasScraper_parseUrl(url) {
     const baseInfoId = p.get('baseInfoId');
     const licNo = p.get('licNo');
     if (!baseInfoId || !licNo) return null;
-    return { baseInfoId, labNo: licNo, certUpdateTs: p.get('certUpdateTs') || '', validate: p.get('validate') || '' };
+    const extraKeys = ['id', 'labType', 'scopeStr', 'orgEnOrCh', 'attactdate'];
+    const urlParams = {};
+    for (const key of extraKeys) {
+      const val = p.get(key);
+      if (val) urlParams[key] = val;
+    }
+    return { baseInfoId, labNo: licNo, certUpdateTs: p.get('certUpdateTs') || '', validate: p.get('validate') || '', urlParams };
   } catch { return null; }
 }
 
@@ -312,9 +638,25 @@ async function deleteQualLab(type, id) {
   } catch (e) { showToast(`删除失败: ${e.message}`, 'fail'); }
 }
 
+let _qualSyncPollTimer = null;
+
+function startSyncProgressPoll() {
+  if (_qualSyncPollTimer) return;
+  _qualSyncPollTimer = setInterval(async () => {
+    await loadQualLabs();
+    const anySyncing = qualCnasLabsCache.some(l => l.sync_status === 'syncing') || qualCmaLabsCache.some(l => l.sync_status === 'syncing');
+    if (!anySyncing) {
+      clearInterval(_qualSyncPollTimer);
+      _qualSyncPollTimer = null;
+      loadLabsSyncLogs();
+    }
+  }, 2000);
+}
+
 async function syncQualLab(type, id) {
   const url = type === 'cnas' ? `/api/cnas/sync?lab_no=${encodeURIComponent(id)}` : `/api/cma/sync?cert_number=${encodeURIComponent(id)}`;
   showToast(`正在同步 ${id}…`);
+  startSyncProgressPoll();
   try {
     const res = await fetch(url, { method: 'POST' });
     const data = await res.json();
@@ -327,6 +669,7 @@ async function syncQualLab(type, id) {
 
 async function syncAllQualLabs() {
   showToast('正在同步全部实验室…');
+  startSyncProgressPoll();
   try {
     const [cnasRes, cmaRes] = await Promise.all([
       fetch('/api/cnas/sync', { method: 'POST' }),
