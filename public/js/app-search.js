@@ -37,7 +37,8 @@ function pollGbwTextAvailability() {
       }
       if (updated) renderResults();
       // Stop polling if all gbw results have text availability determined or after 10 polls
-      const allChecked = gbwIds.every(id => data[id] !== undefined);
+      const hasAnyData = Object.keys(data).length > 0;
+      const allChecked = hasAnyData && gbwIds.every(id => data[id] !== undefined);
       if (allChecked || polls >= 10) { clearInterval(_gbwTextPollTimer); _gbwTextPollTimer = null; }
     } catch { /* ignore */ }
   }, 3000);
