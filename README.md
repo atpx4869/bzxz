@@ -54,10 +54,48 @@ start.bat
 
 支持查询 **CNAS**（中国合格评定国家认可委员会）和 **CMA**（检验检测机构资质认定）实验室的检测能力范围。
 
-- 按标准号批量查询：搜索结果自动标注具备该标准检测能力的实验室
-- 实验室管理：订阅/取消订阅实验室，自动同步资质数据
-- Playwright 自动采集：后台定时从 CNAS/CMA 官方系统拉取最新数据
-- 同步日志：记录每次同步的时间、状态、抓取记录数
+### 功能概览
+
+- **搜索**：按标准号/关键词搜索资质记录，支持来源过滤（CNAS/CMA/全部）
+- **可视化**：批量关键词查询，按标准号聚合展示 CMA/CNAS 能力，统计面板显示命中数、能力数、过期记录
+- **订阅管理**：订阅/取消订阅实验室，实时同步进度显示（如 `2541/6521 (39%)`）
+- **同步日志**：记录每次同步的时间、状态、抓取记录数
+
+### CNAS 订阅详情
+
+订阅 CNAS 实验室后自动采集并展示：
+
+| 字段 | 说明 |
+|------|------|
+| 注册编号 | CNAS 注册编号 |
+| 其他名称 | 报告/证书允许使用认可标识的其他名称 |
+| 单位地址 | 机构注册地址 |
+| 认可有效期限 | 认可有效期范围 |
+| 证书附件（能力范围） | 任务编号、评审类型、签发日期、公布状态 |
+
+### CMA 订阅详情
+
+订阅 CMA 机构后自动采集并展示：
+
+| 字段 | 说明 |
+|------|------|
+| 证书编号 | CMA 证书编号 |
+| 信用代码 | 组织机构代码/统一社会信用代码 |
+| 地址 / 行政区划 / 行业 | 机构基本信息 |
+| 证书颁发时间 / 有效期 | 证书时间范围 |
+| 证书状态 | 正常/注销等 |
+
+### 机构关联
+
+可将同一物理机构的 CNAS 和 CMA 资质关联，查询时自动合并显示名称。
+
+### 技术实现
+
+- CNAS：Playwright 无头浏览器 + Stealth 反检测，分页抓取能力范围 API
+- CMA：HTTP 请求 + Cheerio HTML 解析
+- 增量同步：对比证书日期避免不必要的全量抓取
+- 标准号模糊匹配：去除年份/类型后缀后比对（如 `GB/T 23440-2009` → `GB23440`）
+- 后台定时同步：默认每周日凌晨 3 点（可配置 cron 表达式）
 
 ## 账号管理
 
@@ -156,21 +194,27 @@ start.bat
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/standards/qualifications` | 按标准号批量查询资质 |
-| GET | `/api/qualifications/search?q=&source=` | 搜索资质记录 |
+| POST | `/api/standards/qualifications` | 按标准号批量查询资质（搜索结果徽章） |
+| GET | `/api/qualifications/search?q=&source=` | 关键词搜索资质记录 |
+| POST | `/api/qualifications/visual` | 可视化批量关键词查询 |
 | GET | `/api/qualifications/settings` | 资质同步设置 |
 | PUT | `/api/qualifications/settings` | 更新同步设置 |
 | GET | `/api/qualifications/stats` | 资质数据统计 |
-| GET | `/api/cnas/labs` | CNAS 实验室列表 |
-| POST | `/api/cnas/labs` | 添加 CNAS 实验室 |
+| GET | `/api/cnas/labs` | CNAS 订阅实验室列表（含同步进度） |
+| POST | `/api/cnas/labs` | 添加 CNAS 实验室（支持粘贴完整 URL） |
 | DELETE | `/api/cnas/labs/:labNo` | 删除 CNAS 实验室 |
-| POST | `/api/cnas/sync` | 触发 CNAS 数据同步 |
+| PUT | `/api/cnas/labs/:labNo` | 编辑 CNAS 实验室名称 |
+| POST | `/api/cnas/sync` | 触发 CNAS 同步（单个或全部） |
 | GET | `/api/cnas/sync-logs` | CNAS 同步日志 |
-| GET | `/api/cma/labs` | CMA 实验室列表 |
-| POST | `/api/cma/labs` | 添加 CMA 实验室 |
+| GET | `/api/cma/search-labs?q=` | 搜索 CMA 机构候选 |
+| GET | `/api/cma/labs` | CMA 订阅实验室列表（含同步进度） |
+| POST | `/api/cma/labs` | 订阅 CMA 实验室 |
 | DELETE | `/api/cma/labs/:certNumber` | 删除 CMA 实验室 |
-| POST | `/api/cma/sync` | 触发 CMA 数据同步 |
+| PUT | `/api/cma/labs/:certNumber` | 编辑 CMA 实验室名称 |
+| POST | `/api/cma/sync` | 触发 CMA 同步（单个或全部） |
 | GET | `/api/cma/sync-logs` | CMA 同步日志 |
+| POST | `/api/qualification-links` | 关联 CNAS/CMA 实验室 |
+| DELETE | `/api/qualification-links/:source/:id` | 取消关联 |
 
 ### 管理（需 admin）
 
@@ -215,7 +259,14 @@ start.bat
 - 登录/注册界面 + 用户菜单
 - 使用统计仪表盘（Chart.js 图表）
 - 管理员用户管理面板（批量操作、权限控制、使用明细）
-- 资质能力验证面板（CNAS/CMA 实验室管理 + 同步日志）
+- 资质能力验证面板：
+  - 搜索/可视化/订阅管理/同步日志 四个子标签页
+  - 搜索结果自动标注 CNAS/CMA 资质徽章（hover 详情）
+  - 可视化批量查询，按标准号聚合 CMA/CNAS 能力并排展示
+  - CNAS 订阅详情（注册编号、其他名称、单位地址、认可有效期、证书任务列表）
+  - CMA 订阅详情（证书编号、信用代码、地址、行业、证书状态）
+  - 实时同步进度显示（`2541/6521 (39%)`），2 秒轮询自动刷新
+  - 机构关联（CNAS/CMA 合并显示）
 
 ## Electron 桌面端
 
