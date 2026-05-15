@@ -1,3 +1,18 @@
+// ── Search status indicator ──
+const _searchStatusEl = document.createElement('div');
+_searchStatusEl.id = 'searchStatus';
+_searchStatusEl.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:400;display:none;align-items:center;gap:8px;padding:10px 18px;border-radius:8px;background:oklch(20% 0.016 255 / 0.92);backdrop-filter:blur(12px);border:1px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,0.4);font-size:13px;font-weight:500;color:var(--text);transition:opacity 0.25s;pointer-events:none;';
+document.body.appendChild(_searchStatusEl);
+function showSearchStatus(msg, spinning) {
+  _searchStatusEl.innerHTML = (spinning ? '<span class="spinner" style="width:14px;height:14px;border-width:2px"></span>' : '') + `<span>${escapeHtml(msg)}</span>`;
+  _searchStatusEl.style.display = 'flex';
+  _searchStatusEl.style.opacity = '1';
+}
+function hideSearchStatus() {
+  _searchStatusEl.style.opacity = '0';
+  setTimeout(() => { _searchStatusEl.style.display = 'none'; }, 300);
+}
+
 // ── Source tag init ──
 document.querySelectorAll('.source-tag').forEach(tag => {
   const src = tag.dataset.source;
@@ -39,7 +54,12 @@ function pollGbwTextAvailability() {
       // Stop polling if all gbw results have text availability determined or after 10 polls
       const hasAnyData = Object.keys(data).length > 0;
       const allChecked = hasAnyData && gbwIds.every(id => data[id] !== undefined);
-      if (allChecked || polls >= 10) { clearInterval(_gbwTextPollTimer); _gbwTextPollTimer = null; }
+      if (allChecked || polls >= 10) {
+        clearInterval(_gbwTextPollTimer); _gbwTextPollTimer = null;
+        const textCount = results.filter(r => r.previewAvailable).length;
+        showSearchStatus(`文本检测完成 (${textCount}/${results.length}条有文本)`, false);
+        setTimeout(hideSearchStatus, 3000);
+      }
     } catch { /* ignore */ }
   }, 3000);
 }
@@ -53,6 +73,7 @@ async function doSearch() {
   document.getElementById('searchBtn').innerHTML = '<span class="spinner"></span>取消';
   document.getElementById('searchBtn').disabled = false;
   results = []; selectedIds.clear(); updateToolbar(); searchAborted = false; qualData = {};
+  showSearchStatus('正在搜索...', true);
   // Show skeleton
   document.getElementById('results').innerHTML = Array.from({ length: 4 }, () =>
     `<div class="skeleton-card"><div class="skeleton-badge skeleton-line"></div><div class="skeleton-body"><div class="skeleton-line w80"></div><div class="skeleton-line w60"></div><div class="skeleton-line w40"></div></div></div>`
@@ -77,6 +98,7 @@ async function doSearch() {
     if (searchAborted) break;
     if (outcome.ok) { receivedResults.push(...outcome.items); addLog(`搜索 ${outcome.src}(${q}) 完成 (+${outcome.items.length} 条)`, 'success'); }
     else { addLog(`搜索 ${outcome.src}(${q}) 失败: ${outcome.error}`, 'fail'); }
+    showSearchStatus(`搜索中 ${receivedCount}/${sources.length} 源...`, true);
     results = dedupeResults(receivedResults); results.sort(sortByStatus);
     document.getElementById('summary').innerHTML = `<span class="count-anim">找到 ${results.length} 条结果 (${receivedCount}/${sources.length} 源)</span>`;
     document.getElementById('toolbar').style.display = results.length > 0 ? 'flex' : 'none';
@@ -94,8 +116,20 @@ async function doSearch() {
   if (searchAborted) {
     addLog('搜索已取消', 'fail');
     document.getElementById('summary').innerHTML = `<span class="count-anim">已取消 (${results.length} 条结果)</span>`;
+    hideSearchStatus();
   }
   document.getElementById('searchBtn').innerHTML = '搜索'; document.getElementById('searchBtn').disabled = false;
+  if (results.length > 0 && !searchAborted) {
+    const hasGbw = results.some(r => r._source === 'gbw' || (r.sources && r.sources.includes('gbw')));
+    if (hasGbw && results.some(r => r._source === 'gbw' && !r.previewAvailable)) {
+      showSearchStatus('正在检测文本...', true);
+    } else {
+      showSearchStatus(`搜索完成 (${results.length}条)`, false);
+      setTimeout(hideSearchStatus, 2000);
+    }
+  } else {
+    hideSearchStatus();
+  }
   // If qual badges weren't fetched yet (no results on first source), fetch now
   if (!qualFetched && results.length > 0) {
     const stdNums = results.map(r => r.standardNumber).filter(Boolean);
