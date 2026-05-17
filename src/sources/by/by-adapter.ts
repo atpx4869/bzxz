@@ -41,6 +41,9 @@ export class ByAdapter implements SourceAdapter {
 
   private sessionCookies: string | null = null;
   private loggedIn = false;
+  /** In-flight login: concurrent callers share the same Promise instead of each
+   * kicking off their own 3-step login dance against the upstream. */
+  private loginInFlight: Promise<boolean> | null = null;
 
   async searchStandards(input: SearchStandardsInput): Promise<StandardSummary[]> {
     const cacheKey = `by:search:${input.query}`;
@@ -182,10 +185,15 @@ export class ByAdapter implements SourceAdapter {
   }
 
   private async ensureLogin(): Promise<boolean> {
-    if (this.loggedIn) {
-      return true;
-    }
+    if (this.loggedIn) return true;
+    if (this.loginInFlight) return this.loginInFlight;
+    this.loginInFlight = this.performLogin().finally(() => {
+      this.loginInFlight = null;
+    });
+    return this.loginInFlight;
+  }
 
+  private async performLogin(): Promise<boolean> {
     try {
       // Step 1: GET login page
       const r1 = await pooledFetch(LOGIN_URL, { timeoutMs: TIMEOUT_MS, retries: 1 });
