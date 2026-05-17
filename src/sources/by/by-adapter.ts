@@ -12,6 +12,8 @@ import type {
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
 import { buildFileName, getExportsDir } from '../../shared/fs';
 import { createStandardId, parseStandardId } from '../../shared/id';
+import { searchCache } from '../../shared/cache';
+import { pooledFetch } from '../../shared/http';
 
 // BY 内网系统配置（仅在 172.16.0.0/12 内网可达；默认账号为部门共用账号，仅该账号有文本下载权限）
 const BY_BASE = 'http://172.16.100.72:8080';
@@ -41,6 +43,10 @@ export class ByAdapter implements SourceAdapter {
   private loggedIn = false;
 
   async searchStandards(input: SearchStandardsInput): Promise<StandardSummary[]> {
+    const cacheKey = `by:search:${input.query}`;
+    const cached = searchCache.get<StandardSummary[]>(cacheKey);
+    if (cached) return cached;
+
     if (!(await this.isAvailable())) {
       throw new UpstreamError('BY internal network is not accessible');
     }
@@ -61,11 +67,24 @@ export class ByAdapter implements SourceAdapter {
       }
     }
 
-    return items.map((item) => this.mapSearchItem(item));
+    const result = items.map((item) => this.mapSearchItem(item));
+    searchCache.set(cacheKey, result);
+    // Side cache: raw items keyed by sourceId so getStandardDetail can skip a round-trip
+    for (const item of items) {
+      const sid = item.siid || item.stdNo;
+      if (sid) searchCache.set(`by:item:${sid}`, item, 10 * 60 * 1000);
+    }
+    return result;
   }
 
   async getStandardDetail(id: string): Promise<StandardDetail> {
     const { sourceId } = parseStandardId(id);
+
+    // Fast path: use the raw item cached during a recent search
+    const cachedItem = searchCache.get<BySearchItem>(`by:item:${sourceId}`);
+    if (cachedItem) {
+      return this.mapDetail(cachedItem, id);
+    }
 
     if (!(await this.ensureLogin())) {
       throw new UpstreamError('BY login failed');
@@ -79,6 +98,7 @@ export class ByAdapter implements SourceAdapter {
     }
 
     const item = match ?? searchResults[0];
+    searchCache.set(`by:item:${sourceId}`, item, 10 * 60 * 1000);
     return this.mapDetail(item, id);
   }
 
@@ -114,9 +134,10 @@ export class ByAdapter implements SourceAdapter {
     const detailUrl = `${BY_BASE}/Manager/StandManager/StandDetail.aspx?SIId=${encodeURIComponent(sourceId)}`;
     let html: string;
     try {
-      const resp = await fetch(detailUrl, {
+      const resp = await pooledFetch(detailUrl, {
         headers: { Cookie: this.sessionCookies ?? '' },
-        signal: AbortSignal.timeout(TIMEOUT_FAST_MS),
+        timeoutMs: TIMEOUT_FAST_MS,
+        retries: 2,
       });
       if (!resp.ok) {
         throw new UpstreamError('BY detail page not accessible');
@@ -127,8 +148,8 @@ export class ByAdapter implements SourceAdapter {
     }
 
     // Extract standard info from detail page
-    const stdNo = extractStdNo(extractRegex(html, /id="txtA100"[^>]*>([^<]+)/));
-    const stdName = extractStdName(extractRegex(html, /id="txtA298"[^>]*>([^<]+)/));
+    const stdNo = stripHtml(extractRegex(html, /id="txtA100"[^>]*>([^<]+)/));
+    const stdName = stripHtml(extractRegex(html, /id="txtA298"[^>]*>([^<]+)/));
 
     // Extract PDF path from hidden field
     const pdfPathMatch = html.match(/name="hidB000"[^>]+value="([^"]+)"/);
@@ -152,9 +173,10 @@ export class ByAdapter implements SourceAdapter {
 
   private async isAvailable(): Promise<boolean> {
     try {
-      const resp = await fetch(BY_BASE, { method: 'HEAD', signal: AbortSignal.timeout(3000) });
+      const resp = await pooledFetch(BY_BASE, { method: 'HEAD', timeoutMs: 3000, retries: 1 });
       return resp.ok;
-    } catch {
+    } catch (err) {
+      console.warn('[by-adapter] isAvailable check failed:', err instanceof Error ? err.message : String(err));
       return false;
     }
   }
@@ -166,15 +188,21 @@ export class ByAdapter implements SourceAdapter {
 
     try {
       // Step 1: GET login page
-      const r1 = await fetch(LOGIN_URL, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-      if (!r1.ok) return false;
+      const r1 = await pooledFetch(LOGIN_URL, { timeoutMs: TIMEOUT_MS, retries: 1 });
+      if (!r1.ok) {
+        console.warn(`[by-adapter] login step 1 (GET login page) returned HTTP ${r1.status}`);
+        return false;
+      }
 
       const html1 = await r1.text();
       const cookies1 = extractSetCookie(r1);
       const vs1 = extractHiddenField(html1, '__VIEWSTATE');
       const ev1 = extractHiddenField(html1, '__EVENTVALIDATION');
 
-      if (!vs1 || !ev1) return false;
+      if (!vs1 || !ev1) {
+        console.warn('[by-adapter] login step 1: missing __VIEWSTATE or __EVENTVALIDATION');
+        return false;
+      }
 
       // Step 2: POST department selection
       const deptBody = new URLSearchParams({
@@ -185,20 +213,27 @@ export class ByAdapter implements SourceAdapter {
         ddlDept: DEPT_ID,
       });
 
-      const r2 = await fetch(LOGIN_URL, {
+      const r2 = await pooledFetch(LOGIN_URL, {
         method: 'POST',
         headers: mergeHeaders(cookies1, { 'Content-Type': 'application/x-www-form-urlencoded' }),
         body: deptBody.toString(),
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        timeoutMs: TIMEOUT_MS,
+        retries: 1,
       });
-      if (!r2.ok) return false;
+      if (!r2.ok) {
+        console.warn(`[by-adapter] login step 2 (dept select) returned HTTP ${r2.status}`);
+        return false;
+      }
 
       const html2 = await r2.text();
       const cookies2 = mergeCookies(cookies1, extractSetCookie(r2));
       const vs2 = extractHiddenField(html2, '__VIEWSTATE');
       const ev2 = extractHiddenField(html2, '__EVENTVALIDATION');
 
-      if (!vs2 || !ev2) return false;
+      if (!vs2 || !ev2) {
+        console.warn('[by-adapter] login step 2: missing __VIEWSTATE or __EVENTVALIDATION after dept select');
+        return false;
+      }
 
       // Step 3: POST credentials
       const loginBody = new URLSearchParams({
@@ -212,15 +247,19 @@ export class ByAdapter implements SourceAdapter {
         btnLogin: '登录',
       });
 
-      const r3 = await fetch(LOGIN_URL, {
+      const r3 = await pooledFetch(LOGIN_URL, {
         method: 'POST',
         headers: mergeHeaders(cookies2, { 'Content-Type': 'application/x-www-form-urlencoded' }),
         body: loginBody.toString(),
         redirect: 'manual',
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        timeoutMs: TIMEOUT_MS,
+        retries: 1,
       });
 
-      if (r3.status !== 302) return false;
+      if (r3.status !== 302) {
+        console.warn(`[by-adapter] login step 3 (credentials) expected 302 redirect, got HTTP ${r3.status} — credentials likely wrong`);
+        return false;
+      }
 
       const cookies3 = mergeCookies(cookies2, extractSetCookie(r3));
       const location = r3.headers.get('location');
@@ -228,9 +267,10 @@ export class ByAdapter implements SourceAdapter {
       // Step 4: Follow landing page
       if (location) {
         const landingUrl = location.startsWith('http') ? location : `${BY_BASE}${location}`;
-        const r4 = await fetch(landingUrl, {
+        const r4 = await pooledFetch(landingUrl, {
           headers: { Cookie: cookies3 },
-          signal: AbortSignal.timeout(TIMEOUT_MS),
+          timeoutMs: TIMEOUT_MS,
+          retries: 1,
         });
         this.sessionCookies = mergeCookies(cookies3, extractSetCookie(r4));
       } else {
@@ -239,7 +279,8 @@ export class ByAdapter implements SourceAdapter {
 
       this.loggedIn = true;
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('[by-adapter] login failed:', err instanceof Error ? err.message : String(err));
       return false;
     }
   }
@@ -250,9 +291,10 @@ export class ByAdapter implements SourceAdapter {
     const results: BySearchItem[] = [];
 
     try {
-      const r1 = await fetch(searchUrl, {
+      const r1 = await pooledFetch(searchUrl, {
         headers: { Cookie: cookieHeader },
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        timeoutMs: TIMEOUT_MS,
+        retries: 2,
       });
       if (!r1.ok) return [];
 
@@ -276,14 +318,15 @@ export class ByAdapter implements SourceAdapter {
           inputA298: '',
         });
 
-        const resp = await fetch(searchUrl, {
+        const resp = await pooledFetch(searchUrl, {
           method: 'POST',
           headers: {
             Cookie: cookieHeader,
             'Content-Type': 'application/x-www-form-urlencoded',
           },
           body: body.toString(),
-          signal: AbortSignal.timeout(TIMEOUT_MS),
+          timeoutMs: TIMEOUT_MS,
+          retries: 1,
         });
 
         if (!resp.ok) break;
@@ -294,8 +337,10 @@ export class ByAdapter implements SourceAdapter {
         viewstate = extractHiddenField(html, '__VIEWSTATE');
         eventvalidation = extractHiddenField(html, '__EVENTVALIDATION');
       }
-    } catch {
-      // skip pagination errors
+    } catch (err) {
+      // Pagination failure is non-fatal: we keep whatever we collected so far,
+      // but record the cause for diagnostics.
+      console.warn('[by-adapter] search pagination error:', err instanceof Error ? err.message : String(err));
     }
 
     return results;
@@ -315,40 +360,41 @@ export class ByAdapter implements SourceAdapter {
   private async downloadPdf(pdfUrlOrPath: string, filePath: string): Promise<boolean> {
     try {
       const url = pdfUrlOrPath.startsWith('http') ? pdfUrlOrPath : this.resolvePdfUrl(pdfUrlOrPath);
-      const resp = await fetch(url, {
+      const resp = await pooledFetch(url, {
         headers: { Cookie: this.sessionCookies ?? '' },
-        signal: AbortSignal.timeout(TIMEOUT_FAST_MS),
+        timeoutMs: TIMEOUT_FAST_MS,
+        retries: 2,
       });
-      if (!resp.ok) return false;
+      if (!resp.ok) {
+        console.warn(`[by-adapter] downloadPdf got HTTP ${resp.status} from ${url}`);
+        return false;
+      }
 
       const bytes = Buffer.from(await resp.arrayBuffer());
       await writeFile(filePath, bytes);
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('[by-adapter] downloadPdf failed:', err instanceof Error ? err.message : String(err));
       return false;
     }
   }
 
   private mapSearchItem(item: BySearchItem): StandardSummary {
-    const hasPdf = Boolean(item.pdfPath);
-    return {
-      id: createStandardId('by', item.siid || item.stdNo),
-      source: 'by',
-      sourceId: item.siid || item.stdNo,
-      standardNumber: item.stdNo,
-      title: item.stdName,
-      status: item.status || undefined,
-      publishDate: item.publish || null,
-      implementDate: item.implement || null,
-      abolishedDate: null,
-      previewAvailable: hasPdf,
-      detailUrl: `${BY_BASE}/Manager/StandManager/StandDetail.aspx?SIId=${item.siid}`,
-      meta: item as unknown as Record<string, unknown>,
-    };
+    return this.toSummary(item, createStandardId('by', item.siid || item.stdNo));
   }
 
   private mapDetail(item: BySearchItem, id: string): StandardDetail {
-    const hasPdf = Boolean(item.pdfPath);
+    return {
+      ...this.toSummary(item, id),
+      contentText: '',
+      moreInfo: {
+        siid: item.siid,
+        pdfPath: item.pdfPath,
+      },
+    };
+  }
+
+  private toSummary(item: BySearchItem, id: string): StandardSummary {
     return {
       id,
       source: 'by',
@@ -359,13 +405,8 @@ export class ByAdapter implements SourceAdapter {
       publishDate: item.publish || null,
       implementDate: item.implement || null,
       abolishedDate: null,
-      previewAvailable: hasPdf,
+      previewAvailable: Boolean(item.pdfPath),
       detailUrl: `${BY_BASE}/Manager/StandManager/StandDetail.aspx?SIId=${item.siid}`,
-      contentText: '',
-      moreInfo: {
-        siid: item.siid,
-        pdfPath: item.pdfPath,
-      },
       meta: item as unknown as Record<string, unknown>,
     };
   }
@@ -410,20 +451,8 @@ function mergeHeaders(cookie: string, extra: Record<string, string>): HeadersIni
   return headers;
 }
 
-function extractStdNo(value: string): string {
+function stripHtml(value: string): string {
   return value.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
-}
-
-function extractStdName(value: string): string {
-  return value.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
-}
-
-function extractStatus(value: string): string {
-  return value.replace(/<[^>]+>/g, '').trim();
-}
-
-function extractDate(value: string): string {
-  return value.replace(/<[^>]+>/g, '').trim();
 }
 
 
@@ -432,11 +461,11 @@ function parseSearchPage(html: string): BySearchItem[] {
   const blocks = html.match(/<table[\s\S]*?class="mt20"[\s\S]*?rpStand_HidSIId_\d[\s\S]*?<\/table>/gi) ?? [];
 
   return blocks.map((block, idx) => {
-    const stdNo = extractStdNo(extractRegex(block, /class="\s*c333 f16\s*">\s*([^<]+)/));
-    const stdName = extractStdName(extractRegex(block, /<p\s+class="c333 mt5">\s*([^<]+)/));
-    const status = extractStatus(extractRegex(block, /标准状态：<span\s+class='[^']*'>([^<]+)/));
-    const publish = extractDate(extractRegex(block, /发布日期：([0-9-]+)/));
-    const implement = extractDate(extractRegex(block, /实施日期：([0-9-]+)/));
+    const stdNo = stripHtml(extractRegex(block, /class="\s*c333 f16\s*">\s*([^<]+)/));
+    const stdName = stripHtml(extractRegex(block, /<p\s+class="c333 mt5">\s*([^<]+)/));
+    const status = stripHtml(extractRegex(block, /标准状态：<span\s+class='[^']*'>([^<]+)/));
+    const publish = stripHtml(extractRegex(block, /发布日期：([0-9-]+)/));
+    const implement = stripHtml(extractRegex(block, /实施日期：([0-9-]+)/));
     const siid = extractRegex(block, /id="rpStand_HidSIId_\d"\s+value="([^"]+)"/);
     const pdfPath = extractRegex(block, /id="rpStand_hdfB000_\d"\s+value="([^"]+)"/);
 

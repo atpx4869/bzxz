@@ -39,7 +39,10 @@ async function tryDdddocr(base64Image: string): Promise<OcrResult> {
       confidence: text.length >= 4 ? 100 : 0,
       rawText: raw.trim(),
     };
-  } catch {
+  } catch (err) {
+    // Falls through to tesseract; warn so we know whether the python bridge is broken
+    // (missing python / missing ddddocr package) vs just returning a poor result.
+    console.warn('[captcha-ocr] ddddocr bridge failed, falling back to tesseract:', err instanceof Error ? err.message : String(err));
     return { text: '', confidence: 0, rawText: '' };
   }
 }
