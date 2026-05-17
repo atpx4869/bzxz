@@ -158,17 +158,7 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
         const result = await svc.syncCnasLab(lab_no, force);
         res.json(result);
       } else {
-        const labs = svc.listCnasLabs();
-        const results = [];
-        for (const lab of labs) {
-          try {
-            const r = await svc.syncCnasLab(lab.lab_no, force);
-            results.push({ lab_no: lab.lab_no, ...r });
-          } catch (err) {
-            results.push({ lab_no: lab.lab_no, error: String(err) });
-          }
-        }
-        res.json(results);
+        res.json(await svc.syncAllCnasLabs(force));
       }
     } catch (e) { next(normalizeError(e)); }
   });
@@ -182,17 +172,7 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
         const result = await svc.syncCmaLab(cert_number, force);
         res.json(result);
       } else {
-        const labs = svc.listCmaLabs();
-        const results = [];
-        for (const lab of labs) {
-          try {
-            const r = await svc.syncCmaLab(lab.cert_number, force);
-            results.push({ cert_number: lab.cert_number, ...r });
-          } catch (err) {
-            results.push({ cert_number: lab.cert_number, error: String(err) });
-          }
-        }
-        res.json(results);
+        res.json(await svc.syncAllCmaLabs(force));
       }
     } catch (e) { next(normalizeError(e)); }
   });

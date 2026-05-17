@@ -9,6 +9,7 @@ import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain, session, 
 Menu.setApplicationMenu(null);
 import path from 'node:path';
 import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { unlink } from 'node:fs/promises';
 import { networkInterfaces } from 'node:os';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -189,6 +190,29 @@ function safeDownloadFileName(name: string): string {
   return name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 160) || 'bzxz-setup.exe';
 }
 
+// Limit asset download host to GitHub's own infrastructure. GitHub release downloads
+// either come directly from api.github.com / github.com or are redirected to
+// objects.githubusercontent.com (the asset CDN). Any other host is rejected.
+const TRUSTED_UPDATE_HOSTS = new Set([
+  'github.com',
+  'api.github.com',
+  'objects.githubusercontent.com',
+  'release-assets.githubusercontent.com',
+]);
+
+function assertTrustedUpdateHost(rawUrl: string): URL {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new Error('安装包下载地址无效');
+  }
+  if (parsed.protocol !== 'https:' || !TRUSTED_UPDATE_HOSTS.has(parsed.hostname)) {
+    throw new Error(`拒绝从非可信主机下载更新: ${parsed.hostname}`);
+  }
+  return parsed;
+}
+
 async function downloadAndInstallUpdate() {
   const info = await checkForUpdates();
   if (!info.updateAvailable) {
@@ -198,6 +222,7 @@ async function downloadAndInstallUpdate() {
   if (!asset) {
     throw new Error('未找到可自动安装的 Setup 安装包，请打开下载页手动下载');
   }
+  assertTrustedUpdateHost(asset.url);
 
   const updateDir = path.join(app.getPath('temp'), 'bzxz-updates');
   if (!existsSync(updateDir)) mkdirSync(updateDir, { recursive: true });
@@ -208,10 +233,13 @@ async function downloadAndInstallUpdate() {
       Accept: 'application/octet-stream',
       'User-Agent': `bzxz/${app.getVersion()}`,
     },
+    redirect: 'follow',
   });
   if (!response.ok || !response.body) {
     throw new Error(`下载安装包失败: HTTP ${response.status}`);
   }
+  // After redirects, response.url is the final URL — verify it's still a trusted host.
+  assertTrustedUpdateHost(response.url);
 
   const total = Number(response.headers.get('content-length')) || asset.size || 0;
   let downloaded = 0;
@@ -227,6 +255,13 @@ async function downloadAndInstallUpdate() {
   });
 
   await pipeline(body, createWriteStream(filePath));
+
+  // The Release API gives us the authoritative asset size — reject mismatched downloads.
+  if (asset.size > 0 && downloaded !== asset.size) {
+    try { await unlink(filePath); } catch { /* best-effort cleanup */ }
+    throw new Error(`安装包大小校验失败: 期望 ${asset.size} 字节，实际 ${downloaded} 字节`);
+  }
+
   mainWindow?.webContents.send('bzxz:update-download-progress', {
     downloaded: total || downloaded,
     total: total || downloaded,

@@ -98,15 +98,6 @@ export class QualificationService {
 
   // ─── Query ───
 
-  /** Extract base standard number (prefix + number, no year/type): "GB/T 23440-2009" → "GB23440" */
-  private extractBaseCode(code: string): string {
-    return code
-      .replace(/\s*-\s*\d{4}$/, '')  // remove year suffix
-      .replace(/\/[A-Z]+(?=\s)/i, '') // remove type designation: /T, /Z, /TR etc.
-      .replace(/[\s]/g, '')           // remove spaces
-      .toUpperCase();
-  }
-
   /** Batch query qualifications by standard codes (for search result badges) */
   queryByStdCodes(stdCodes: string[]): Record<string, Qualification[]> {
     if (stdCodes.length === 0) return {};
@@ -117,7 +108,7 @@ export class QualificationService {
     // Build base code → input codes mapping for fuzzy matching
     const baseToInputs = new Map<string, string[]>();
     for (const code of stdCodes) {
-      const base = this.extractBaseCode(code);
+      const base = extractBaseCode(code);
       if (!baseToInputs.has(base)) baseToInputs.set(base, []);
       baseToInputs.get(base)!.push(code);
     }
@@ -160,7 +151,7 @@ export class QualificationService {
         if (code === row.std_code) addMatch(code, qual);
       }
       // Fuzzy: add under all input codes with same base
-      const rowBase = this.extractBaseCode(row.std_code);
+      const rowBase = extractBaseCode(row.std_code);
       matchedCnasBases.add(rowBase);
       for (const input of baseToInputs.get(rowBase) ?? []) {
         addMatch(input, qual);
@@ -194,51 +185,69 @@ export class QualificationService {
         if (code === row.std_code) addMatch(code, qual);
       }
       // Fuzzy: add under all input codes with same base
-      const rowBase = this.extractBaseCode(row.std_code);
+      const rowBase = extractBaseCode(row.std_code);
       for (const input of baseToInputs.get(rowBase) ?? []) {
         addMatch(input, qual);
       }
     }
 
-    // For any input codes with no results, try loading all and fuzzy matching
+    // For any input codes with no results, narrow to plausible rows via SQL LIKE on
+    // the leading prefix (e.g. "GB"), then apply the exact base-code comparison in JS.
+    // Falls back from O(N) full-table scans to O(matching-prefix), capped by LIMIT.
     const unmatchedInputs = stdCodes.filter(code => !result[code]?.length);
     if (unmatchedInputs.length > 0) {
-      const allCnas = this.db.prepare(`
-        SELECT q.std_code, q.std_name, q.lab_no, l.lab_name,
-               q.effective_date, q.expiry_date, q.category,
-               q.test_object, q.test_param, q.test_standard, q.limit_desc
-        FROM cnas_qualifications q LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
-      `).all() as any[];
-      const allCma = this.db.prepare(`
-        SELECT q.std_code, q.std_name, q.cert_number, l.lab_name,
-               q.effective_date, q.expiry_date, q.category,
-               q.test_item, q.test_standard, q.limit_desc
-        FROM cma_qualifications q LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
-      `).all() as any[];
+      const FUZZY_LIMIT = 500;
+      const inputBases = unmatchedInputs.map(code => ({ input: code, base: extractBaseCode(code) }));
+      // Group inputs by their alphabetic prefix (GB / GBT / YY / etc.) for prefix-LIKE queries
+      const prefixes = new Set<string>();
+      for (const { base } of inputBases) {
+        const prefix = base.match(/^[A-Z]+/)?.[0];
+        if (prefix) prefixes.add(prefix);
+      }
+      if (prefixes.size > 0) {
+        const likeClauses = Array.from(prefixes).map(() => 'q.std_code LIKE ?').join(' OR ');
+        const likeArgs = Array.from(prefixes).map(p => `${p}%`);
 
-      for (const input of unmatchedInputs) {
-        const inputBase = this.extractBaseCode(input);
-        for (const row of allCnas) {
-          if (this.extractBaseCode(row.std_code) === inputBase) {
-            addMatch(input, {
-              source: 'CNAS', stdCode: row.std_code, stdName: row.std_name,
-              labNo: row.lab_no, labName: row.lab_name ?? '',
-              effectiveDate: row.effective_date, expiryDate: row.expiry_date,
-              category: row.category,
-              testItem: [row.test_object, row.test_param].filter(Boolean).join(' > '),
-              testStandard: row.test_standard, limitDesc: row.limit_desc,
-            });
+        const cnasCandidates = this.db.prepare(`
+          SELECT q.std_code, q.std_name, q.lab_no, l.lab_name,
+                 q.effective_date, q.expiry_date, q.category,
+                 q.test_object, q.test_param, q.test_standard, q.limit_desc
+          FROM cnas_qualifications q LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
+          WHERE ${likeClauses}
+          LIMIT ?
+        `).all(...likeArgs, FUZZY_LIMIT) as any[];
+        const cmaCandidates = this.db.prepare(`
+          SELECT q.std_code, q.std_name, q.cert_number, l.lab_name,
+                 q.effective_date, q.expiry_date, q.category,
+                 q.test_item, q.test_standard, q.limit_desc
+          FROM cma_qualifications q LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
+          WHERE ${likeClauses}
+          LIMIT ?
+        `).all(...likeArgs, FUZZY_LIMIT) as any[];
+
+        for (const { input, base: inputBase } of inputBases) {
+          for (const row of cnasCandidates) {
+            if (extractBaseCode(row.std_code) === inputBase) {
+              addMatch(input, {
+                source: 'CNAS', stdCode: row.std_code, stdName: row.std_name,
+                labNo: row.lab_no, labName: row.lab_name ?? '',
+                effectiveDate: row.effective_date, expiryDate: row.expiry_date,
+                category: row.category,
+                testItem: [row.test_object, row.test_param].filter(Boolean).join(' > '),
+                testStandard: row.test_standard, limitDesc: row.limit_desc,
+              });
+            }
           }
-        }
-        for (const row of allCma) {
-          if (this.extractBaseCode(row.std_code) === inputBase) {
-            addMatch(input, {
-              source: 'CMA', stdCode: row.std_code, stdName: row.std_name,
-              labNo: row.cert_number, labName: row.lab_name ?? '',
-              effectiveDate: row.effective_date, expiryDate: row.expiry_date,
-              category: row.category, testItem: row.test_item,
-              testStandard: row.test_standard, limitDesc: row.limit_desc,
-            });
+          for (const row of cmaCandidates) {
+            if (extractBaseCode(row.std_code) === inputBase) {
+              addMatch(input, {
+                source: 'CMA', stdCode: row.std_code, stdName: row.std_name,
+                labNo: row.cert_number, labName: row.lab_name ?? '',
+                effectiveDate: row.effective_date, expiryDate: row.expiry_date,
+                category: row.category, testItem: row.test_item,
+                testStandard: row.test_standard, limitDesc: row.limit_desc,
+              });
+            }
           }
         }
       }
@@ -736,6 +745,38 @@ export class QualificationService {
     this.db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?").run(key, value, value);
   }
 
+  /** Read qual_sync_concurrency setting, clamped to [1, 8]. */
+  private getSyncConcurrency(): number {
+    const raw = this.db.prepare("SELECT value FROM settings WHERE key = 'qual_sync_concurrency'").get() as { value: string } | undefined;
+    const n = Number.parseInt(raw?.value ?? '1', 10);
+    if (!Number.isFinite(n) || n < 1) return 1;
+    return Math.min(n, 8);
+  }
+
+  async syncAllCnasLabs(force = false): Promise<Array<{ lab_no: string; action?: string; records?: number; error?: string }>> {
+    const labs = this.listCnasLabs();
+    return runWithConcurrency(labs, this.getSyncConcurrency(), async (lab) => {
+      try {
+        const r = await this.syncCnasLab(lab.lab_no, force);
+        return { lab_no: lab.lab_no, ...r };
+      } catch (err) {
+        return { lab_no: lab.lab_no, error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+  }
+
+  async syncAllCmaLabs(force = false): Promise<Array<{ cert_number: string; action?: string; records?: number; error?: string }>> {
+    const labs = this.listCmaLabs();
+    return runWithConcurrency(labs, this.getSyncConcurrency(), async (lab) => {
+      try {
+        const r = await this.syncCmaLab(lab.cert_number, force);
+        return { cert_number: lab.cert_number, ...r };
+      } catch (err) {
+        return { cert_number: lab.cert_number, error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+  }
+
   // ─── Helpers ───
 
   private logCnasSync(labNo: string, action: string, startTime: string, status: string, records: number, error?: string): void {
@@ -745,4 +786,27 @@ export class QualificationService {
   private logCmaSync(certNumber: string, action: string, startTime: string, status: string, records: number, error?: string): void {
     this.db.prepare('INSERT INTO cma_sync_logs (cert_number, action, started_at, finished_at, status, records_fetched, error_message) VALUES (?, ?, ?, datetime(\'now\'), ?, ?, ?)').run(certNumber, action, startTime, status, records, error ?? null);
   }
+}
+
+async function runWithConcurrency<T, R>(items: T[], concurrency: number, worker: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+  const runners = Array.from({ length: Math.max(1, Math.min(concurrency, items.length)) }, async () => {
+    while (true) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      results[index] = await worker(items[index]);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
+/** "GB/T 23440-2009" → "GB23440" — strip year suffix, type designator, and whitespace. */
+function extractBaseCode(code: string): string {
+  return code
+    .replace(/\s*-\s*\d{4}$/, '')
+    .replace(/\/[A-Z]+(?=\s)/i, '')
+    .replace(/[\s]/g, '')
+    .toUpperCase();
 }

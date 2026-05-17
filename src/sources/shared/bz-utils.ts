@@ -29,7 +29,7 @@ export interface BzSearchRow {
   [key: string]: unknown;
 }
 
-export function mapBzSearchRow(row: BzSearchRow, source: 'bz' | 'bzvip'): StandardSummary {
+export function mapBzSearchRow(row: BzSearchRow, source: 'bz'): StandardSummary {
   return {
     id: createStandardId(source, String(row.id)),
     source,
@@ -47,7 +47,7 @@ export function mapBzSearchRow(row: BzSearchRow, source: 'bz' | 'bzvip'): Standa
   };
 }
 
-export function mapBzDetail(row: BzSearchRow, source: 'bz' | 'bzvip'): StandardDetail {
+export function mapBzDetail(row: BzSearchRow, source: 'bz'): StandardDetail {
   return {
     id: createStandardId(source, String(row.id)),
     source,

@@ -1,9 +1,9 @@
 const API = '';
 
 // ── Settings ──
-const ALL_SOURCES = ['gbw', 'bz', 'by', 'bzvip'];
-const DEFAULT_DOWNLOAD_SOURCES = ['gbw', 'bz', 'by', 'bzvip'];
-const SOURCE_LABELS = { gbw: 'BW', bz: 'BZ', by: 'BY', bzvip: 'BZVIP' };
+const ALL_SOURCES = ['gbw', 'bz', 'by'];
+const DEFAULT_DOWNLOAD_SOURCES = ['gbw', 'bz', 'by'];
+const SOURCE_LABELS = { gbw: 'BW', bz: 'BZ', by: 'BY' };
 function srcLabel(s) { return SOURCE_LABELS[s] || s.toUpperCase(); }
 const DEFAULT_CONCURRENCY = 3;
 
@@ -24,7 +24,7 @@ function normalizeSourceArray(value, fallback) {
 
 let downloadSources = normalizeSourceArray(safeJsonParse(localStorage.getItem('bzxz_download_sources'), DEFAULT_DOWNLOAD_SOURCES), DEFAULT_DOWNLOAD_SOURCES);
 let downloadConcurrency = (v => VALID_CONCURRENCY.includes(v) ? v : DEFAULT_CONCURRENCY)(parseInt(localStorage.getItem('bzxz_concurrency') || ''));
-let downloadPriority = normalizeSourceArray(safeJsonParse(localStorage.getItem('bzxz_priority'), ['bzvip', 'gbw', 'by', 'bz']), ['bzvip', 'gbw', 'by', 'bz']);
+let downloadPriority = normalizeSourceArray(safeJsonParse(localStorage.getItem('bzxz_priority'), ['gbw', 'by', 'bz']), ['gbw', 'by', 'bz']);
 let downloadTimeout = (v => VALID_TIMEOUTS.includes(v) ? v : 15)(parseInt(localStorage.getItem('bzxz_timeout') || ''));
 let downloadMode = localStorage.getItem('bzxz_download_mode') || 'cascade';
 if (!['cascade', 'race'].includes(downloadMode)) downloadMode = 'cascade';
@@ -83,10 +83,17 @@ setResultDensity(resultDensity);
 // ── Panel management (sidebar/tab layout) ──
 let activeDrag = null;
 
+// Per-tab cleanup registry: modules owning background pollers/timers register a stop
+// function here so switchTab can call them all before activating a new tab.
+window._tabCleanup = window._tabCleanup || {};
+
 function switchTab(tab) {
   // Permission check
   if (currentUser && currentUser.allowed_tabs && tab !== 'users') {
     if (currentUser.allowed_tabs.indexOf(tab) < 0) return;
+  }
+  for (const fn of Object.values(window._tabCleanup)) {
+    try { fn(); } catch (e) { /* ignore individual cleanup failure */ }
   }
   document.querySelectorAll('.page').forEach(function(p) { p.style.display = 'none'; });
   var page = document.getElementById('page-' + tab);

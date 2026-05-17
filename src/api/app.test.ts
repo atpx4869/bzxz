@@ -20,7 +20,7 @@ describe('createApp', () => {
     const response = await request(app()).get('/api/health');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ ok: true, sources: ['bz', 'gbw', 'by', 'bzvip'] });
+    expect(response.body).toEqual({ ok: true, sources: ['bz', 'gbw', 'by'] });
   });
 
   it('validates search query', async () => {

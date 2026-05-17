@@ -11,7 +11,6 @@
 | bz.gxzl.org.cn | `bz` | JSON API | 逐页 JPEG → pdf-lib 合并 PDF |
 | openstd.samr.gov.cn | `gbw` (显示为 BW) | JSON API | ddddocr 验证码 → 直接 PDF |
 | std.samr.gov.cn | `by` | JSON API | 直接 PDF |
-| bzuser.gxzl.org.cn | `bzvip` | 需登录 | 账号池 + JWT → 直链 PDF |
 
 ## 快速开始
 
@@ -140,7 +139,6 @@ start.bat
 │       ├── bz-zhenggui/ # BZ 标准在线
 │       ├── gbw/         # BW 国标网
 │       ├── by/          # BY 内部网
-│       ├── bz-vip/      # BZVIP 会员
 │       └── shared/      # OCR 验证码工具
 ├── docs/                # 源实现文档
 └── data/                # SQLite 数据库 (bzxz.db, .gitignore)

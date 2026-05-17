@@ -88,8 +88,11 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
   });
 
   // Search cache: key = "source:query", value = { items, expires }
+  // Map iteration is insertion-ordered, so we use it as a simple LRU: on hit we re-insert
+  // to bump recency, and on overflow we drop the oldest entry.
   const searchCache = new Map<string, { items: any[]; expires: number }>();
   const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  const CACHE_MAX_ENTRIES = 200;
 
   router.get('/api/standards/search', requireAuth, async (req, res, next) => {
     try {
@@ -105,14 +108,21 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       // Check cache
       const cached = searchCache.get(cacheKey);
       if (cached && cached.expires > Date.now()) {
+        searchCache.delete(cacheKey);
+        searchCache.set(cacheKey, cached); // bump to most-recent position
         trackEvent(db, req.user!.id, 'search', selectedSource, undefined, { query: q, resultCount: cached.items.length, cached: true });
         res.json({ items: cached.items, total: cached.items.length, sourceSummary: { requested: 1, succeeded: 1, failed: 0, source: selectedSource } });
         return;
       }
+      if (cached) searchCache.delete(cacheKey); // expired
 
       const service = new StandardService(sourceRegistry.get(selectedSource));
       const results = await service.searchStandards({ query: q });
-      // Store in cache
+      // Store in cache; evict oldest entry if at capacity
+      if (searchCache.size >= CACHE_MAX_ENTRIES) {
+        const oldestKey = searchCache.keys().next().value;
+        if (oldestKey !== undefined) searchCache.delete(oldestKey);
+      }
       searchCache.set(cacheKey, { items: results, expires: Date.now() + CACHE_TTL_MS });
       trackEvent(db, req.user!.id, 'search', selectedSource, undefined, { query: q, resultCount: results.length });
 
@@ -306,7 +316,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
     try {
       const bodySchema = z.object({
         sourceIds: z.record(z.string(), z.string()), // { gbw: 'gbw:xxx', bz: 'bz:yyy', ... }
-        sources: z.array(sourceEnum).min(1),          // priority order: ['bzvip','gbw','by','bz']
+        sources: z.array(sourceEnum).min(1),          // priority order: ['gbw','by','bz']
       });
       const { sourceIds, sources } = bodySchema.parse(req.body);
 

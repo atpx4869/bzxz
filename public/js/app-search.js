@@ -26,6 +26,11 @@ document.querySelectorAll('.source-tag').forEach(tag => {
 // ── GBW text availability polling ──
 let _gbwTextPollTimer = null;
 let _gbwTextPollAbort = false;
+function stopGbwTextPoll() {
+  if (_gbwTextPollTimer) { clearTimeout(_gbwTextPollTimer); _gbwTextPollTimer = null; }
+  _gbwTextPollAbort = true;
+}
+(window._tabCleanup = window._tabCleanup || {}).gbwTextPoll = stopGbwTextPoll;
 function pollGbwTextAvailability() {
   if (_gbwTextPollTimer) return;
   _gbwTextPollAbort = false;
@@ -291,7 +296,7 @@ function renderFilterBar() {
 
   const srcChips = [
     { key: '', label: '全部', count: results.length },
-    ...['bz','gbw','by','bzvip'].map(s => ({ key: s, label: srcLabel(s), count: srcCounts[s] || 0 }))
+    ...['bz','gbw','by'].map(s => ({ key: s, label: srcLabel(s), count: srcCounts[s] || 0 }))
   ];
   const statusChips = [
     { key: '', label: '全部', count: results.length },

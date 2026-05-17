@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;1,8..60,400&family=DM+Mono:ital,wght@0,400;0,500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="/vendor/chart.umd.min.js"></script>
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -82,7 +82,6 @@
           <span class="source-tag active" data-source="bz">BZ</span>
           <span class="source-tag active" data-source="gbw">BW</span>
           <span class="source-tag active" data-source="by">BY</span>
-          <span class="source-tag active" data-source="bzvip">BZVIP</span>
         </div>
         <button class="btn btn-primary" id="searchBtn">搜索</button>
         <div class="search-history" id="searchHistory"></div>
@@ -131,7 +130,7 @@
             <div class="batch-kicker">1 输入</div>
             <h3>标准号列表</h3>
           </div>
-          <span class="batch-mode-pill" id="batchSourceHint">级联顺序：BZVIP → BW → BY → BZ（超时 15s）</span>
+          <span class="batch-mode-pill" id="batchSourceHint">级联顺序：BW → BY → BZ（超时 15s）</span>
         </div>
         <textarea class="batch-textarea" id="batchInput" placeholder="粘贴标准号，每行一个&#10;例如：&#10;GB/T 1.1&#10;GB/T 12345-2020&#10;YY/T 0287&#10;DB44/T 1234"></textarea>
         <div class="batch-actions">

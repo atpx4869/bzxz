@@ -1,4 +1,4 @@
-export type SourceName = 'bz' | 'gbw' | 'by' | 'bzvip';
+export type SourceName = 'bz' | 'gbw' | 'by';
 
 export interface StandardSummary {
   id: string;

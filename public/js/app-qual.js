@@ -640,6 +640,11 @@ async function deleteQualLab(type, id) {
 
 let _qualSyncPollTimer = null;
 
+function stopQualSyncPoll() {
+  if (_qualSyncPollTimer) { clearInterval(_qualSyncPollTimer); _qualSyncPollTimer = null; }
+}
+(window._tabCleanup = window._tabCleanup || {}).qualSyncPoll = stopQualSyncPoll;
+
 function startSyncProgressPoll() {
   if (_qualSyncPollTimer) return;
   _qualSyncPollTimer = setInterval(async () => {

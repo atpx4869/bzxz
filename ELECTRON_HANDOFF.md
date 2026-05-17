@@ -7,7 +7,7 @@ Electron 桌面应用 + Web 版均可正常使用。所有已知路径/代理/�
 ## 功能清单
 
 ### 搜索
-- 4 个数据源：BZ（标准在线）、GBW（国标网）、BY（内部网）、BZVIP（VIP账号）
+- 3 个数据源：BZ（标准在线）、GBW（国标网）、BY（内部网）
 - 支持多源搜索去重，同一标准号合并结果
 - 批量解析标准号（粘贴换行分隔的标准号列表）
 
@@ -57,11 +57,10 @@ bzxz/
 │   ├── api/app.ts         # Express API
 │   ├── domain/standard.ts # 领域类型定义
 │   ├── services/          # 业务逻辑（任务队列、标准解析）
-│   ├── sources/           # 4 个数据源适配器
+│   ├── sources/           # 3 个数据源适配器
 │   │   ├── bz-zhenggui/   # BZ 标准在线（Playwright 截图 + 逐页下载）
 │   │   ├── gbw/           # GBW 国标网（验证码识别 + 下载）
 │   │   ├── by/            # BY 内部网
-│   │   ├── bz-vip/        # BZVIP 会员（账号池 + 打码）
 │   │   └── shared/        # OCR 验证码工具
 │   └── shared/            # 通用工具（路径、错误、ID 解析）
 ├── public/

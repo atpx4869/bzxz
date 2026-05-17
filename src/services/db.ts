@@ -189,21 +189,23 @@ function migrate(db: Database.Database): void {
     );
   `);
 
-  // Migration: add allowed_tabs column if missing (existing DBs)
-  try { db.exec("ALTER TABLE users ADD COLUMN allowed_tabs TEXT DEFAULT NULL"); } catch { /* column exists */ }
-  try { db.exec("ALTER TABLE cma_labs ADD COLUMN public_detail_id TEXT DEFAULT ''"); } catch { /* column exists */ }
-  try { db.exec("ALTER TABLE cma_labs ADD COLUMN address TEXT DEFAULT ''"); } catch { /* column exists */ }
-  try { db.exec("ALTER TABLE cma_labs ADD COLUMN area_name TEXT DEFAULT ''"); } catch { /* column exists */ }
-  try { db.exec("ALTER TABLE cma_labs ADD COLUMN industry TEXT DEFAULT ''"); } catch { /* column exists */ }
-  try { db.exec("ALTER TABLE cma_labs ADD COLUMN issue_date TEXT DEFAULT ''"); } catch { /* column exists */ }
-  try { db.exec("ALTER TABLE cma_labs ADD COLUMN valid_from TEXT DEFAULT ''"); } catch { /* column exists */ }
-  try { db.exec("ALTER TABLE cma_labs ADD COLUMN valid_to TEXT DEFAULT ''"); } catch { /* column exists */ }
-  try { db.exec("ALTER TABLE cma_labs ADD COLUMN cert_status TEXT DEFAULT ''"); } catch { /* column exists */ }
-  try { db.exec("ALTER TABLE cnas_labs ADD COLUMN url_params TEXT DEFAULT '{}'"); } catch { /* column exists */ }
-  try { db.exec("ALTER TABLE cnas_labs ADD COLUMN other_names TEXT DEFAULT ''"); } catch { /* column exists */ }
-  try { db.exec("ALTER TABLE cnas_labs ADD COLUMN org_address TEXT DEFAULT ''"); } catch { /* column exists */ }
-  try { db.exec("ALTER TABLE cnas_labs ADD COLUMN validity_period TEXT DEFAULT ''"); } catch { /* column exists */ }
-  try { db.exec("ALTER TABLE cnas_labs ADD COLUMN cert_tasks TEXT DEFAULT '[]'"); } catch { /* column exists */ }
+  // Schema migrations: add columns that may be missing on older DBs.
+  // We check column existence first so genuine SQL errors (file perms, disk, etc.) surface
+  // instead of being swallowed by a blanket try/catch.
+  addColumnIfMissing(db, 'users',    'allowed_tabs',    "TEXT DEFAULT NULL");
+  addColumnIfMissing(db, 'cma_labs', 'public_detail_id', "TEXT DEFAULT ''");
+  addColumnIfMissing(db, 'cma_labs', 'address',          "TEXT DEFAULT ''");
+  addColumnIfMissing(db, 'cma_labs', 'area_name',        "TEXT DEFAULT ''");
+  addColumnIfMissing(db, 'cma_labs', 'industry',         "TEXT DEFAULT ''");
+  addColumnIfMissing(db, 'cma_labs', 'issue_date',       "TEXT DEFAULT ''");
+  addColumnIfMissing(db, 'cma_labs', 'valid_from',       "TEXT DEFAULT ''");
+  addColumnIfMissing(db, 'cma_labs', 'valid_to',         "TEXT DEFAULT ''");
+  addColumnIfMissing(db, 'cma_labs', 'cert_status',      "TEXT DEFAULT ''");
+  addColumnIfMissing(db, 'cnas_labs', 'url_params',      "TEXT DEFAULT '{}'");
+  addColumnIfMissing(db, 'cnas_labs', 'other_names',     "TEXT DEFAULT ''");
+  addColumnIfMissing(db, 'cnas_labs', 'org_address',     "TEXT DEFAULT ''");
+  addColumnIfMissing(db, 'cnas_labs', 'validity_period', "TEXT DEFAULT ''");
+  addColumnIfMissing(db, 'cnas_labs', 'cert_tasks',      "TEXT DEFAULT '[]'");
   cleanupLegacyCmaData(db);
 
   ensureGuestUser(db);
@@ -222,6 +224,12 @@ function migrate(db: Database.Database): void {
     const existing = db.prepare('SELECT value FROM settings WHERE key = ?').get(k);
     if (!existing) db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(k, v);
   }
+}
+
+function addColumnIfMissing(db: Database.Database, table: string, column: string, definition: string): void {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (columns.some((c) => c.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
 function cleanupLegacyCmaData(db: Database.Database): void {

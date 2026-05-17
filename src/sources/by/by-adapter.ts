@@ -13,7 +13,7 @@ import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/erro
 import { buildFileName, getExportsDir } from '../../shared/fs';
 import { createStandardId, parseStandardId } from '../../shared/id';
 
-// BY 内网系统配置
+// BY 内网系统配置（仅在 172.16.0.0/12 内网可达；默认账号为部门共用账号，仅该账号有文本下载权限）
 const BY_BASE = 'http://172.16.100.72:8080';
 const LOGIN_URL = `${BY_BASE}/login.aspx`;
 const DEPT_ID = process.env.BY_DEPT_ID || 'fc4186fba640402188b91e6bd0d491a6';

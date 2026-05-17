@@ -41,10 +41,6 @@
       {
         "from": "scripts/ocr_ddddocr.py",
         "to": "scripts/ocr_ddddocr.py"
-      },
-      {
-        "from": "data/accounts.json",
-        "to": "data/accounts.json"
       }
     ],
     "win": {

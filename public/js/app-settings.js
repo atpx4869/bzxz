@@ -1,6 +1,6 @@
 // ── Settings (floating panel) ──
-const SETTINGS_LABELS = { gbw: 'BW源', bz: 'BZ源', by: 'BY源', bzvip: 'BZvip源' };
-const SETTINGS_NOTES = { gbw: '自动验证码 5~15s', bz: '合成PDF 30~90s', by: '直链PDF 2~5s', bzvip: '账号池 2~5s' };
+const SETTINGS_LABELS = { gbw: 'BW源', bz: 'BZ源', by: 'BY源' };
+const SETTINGS_NOTES = { gbw: '自动验证码 5~15s', bz: '合成PDF 30~90s', by: '直链PDF 2~5s' };
 var startupSettingState = { loaded: false, loading: false, enabled: false, supported: false, error: '' };
 var webAccessState = { loaded: false, loading: false, info: null, error: '' };
 var appUpdateState = { loaded: false, checking: false, installing: false, progress: null, info: null, error: '' };
@@ -566,7 +566,7 @@ function setDownloadMode(mode) { downloadMode = mode; saveSettings(); }
 function resetSettings() {
   downloadSources = [...DEFAULT_DOWNLOAD_SOURCES];
   downloadConcurrency = DEFAULT_CONCURRENCY;
-  downloadPriority = ['bzvip', 'gbw', 'by', 'bz'];
+  downloadPriority = ['gbw', 'by', 'bz'];
   downloadTimeout = 15; downloadMode = 'cascade';
   saveSettings();
 }

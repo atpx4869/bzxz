@@ -239,7 +239,6 @@ function raceSource(standardId, source, label, onProgress) {
     case 'gbw': return downloadGbw(srcId, onProgress);
     case 'bz':  return downloadBz(srcId, onProgress);
     case 'by':    return downloadBy(srcId, onProgress);
-    case 'bzvip': return downloadBzVip(srcId, onProgress);
     default: return Promise.reject(new Error(`Unknown source ${source}`));
   }
 }
@@ -290,18 +289,6 @@ async function downloadBy(id, onProgress) {
     };
     es.onerror = () => { clearTimeout(timeout); es.close(); reject(new Error('BY SSE连接失败')); };
   });
-}
-
-async function downloadBzVip(id, onProgress) {
-  if (onProgress) onProgress('BZVIP 下载中...');
-  const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}/auto-download`, { method: 'POST' });
-  const data = await readApiResponse(res);
-  if (!res.ok) throw new Error(downloadErrorMessage('BZVIP', res, data));
-  if (data.status === 'downloaded') {
-    const meta = data.meta || {};
-    return { source: 'bzvip', fileName: meta.fileName || data.fileName || '', fileSize: meta.fileSize };
-  }
-  throw new Error(downloadErrorMessage('BZVIP', res, data));
 }
 
 function stopAllDownloads() { downloadAborted = true; addLog('⏹ 中止下载', 'fail'); }
@@ -377,7 +364,7 @@ let batchResolved = [], batchUnmatched = [], batchDownloading = false, batchAbor
 
 function updateBatchSourceHint() {
   const sources = downloadPriority.filter(s => downloadSources.includes(s));
-  const labels = { bzvip: 'BZVIP', gbw: 'BW', by: 'BY', bz: 'BZ' };
+  const labels = { gbw: 'BW', by: 'BY', bz: 'BZ' };
   const el = document.getElementById('batchSourceHint');
   if (downloadMode === 'race') {
     if (el) el.textContent = `竞速模式：${sources.map(s => labels[s]||s).join(' + ')} 同时发起（超时 ${downloadTimeout}s）`;
@@ -569,7 +556,7 @@ async function doRaceDownload() {
     while (queue.length > 0 && !batchAborted) {
       const item = queue.shift();
       setRowDownloadState(item.standardId, 'downloading');
-      const sourceList = (sources.length > 0 ? sources : ['bzvip']).filter(s => downloadSources.includes(s));
+      const sourceList = (sources.length > 0 ? sources : ['gbw']).filter(s => downloadSources.includes(s));
       const logId = addLog(`${item.standardNumber} 竞速 [${sourceList.map(s => srcLabel(s)).join('+')}]`, 'pending');
       const taskId = createDownloadTask({
         standardId: item.standardId,

@@ -38,7 +38,7 @@ export function createApp() {
   });
 
   // Serve exported files for browser download
-  app.get('/api/downloads/:filename', (req, res) => {
+  app.get('/api/downloads/:filename', requireAuth, (req, res) => {
     const filename = String(req.params.filename);
     // Strict filename whitelist — no path separators or traversal
     if (!/^[a-zA-Z0-9一-鿿._\-\s()]+$/.test(filename)) {
@@ -78,7 +78,7 @@ export function createApp() {
           const s = await stat(filePath);
           if (!s.isFile()) return null;
           const standardNumber = name.match(/((?:GB|GB\/T|YY\/T|YY|JJG|DB\d+\/T|ISO)[\w./ -]*?\d{1,5}(?:[-—]\d{4})?)/i)?.[1]?.trim() ?? '';
-          const source = name.match(/_(gbw|bzvip|by|bz)_/i)?.[1] ?? '';
+          const source = name.match(/_(gbw|by|bz)_/i)?.[1] ?? '';
           return {
             fileName: name,
             size: s.size,

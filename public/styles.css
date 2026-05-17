@@ -199,7 +199,6 @@ body.compact-results .results-table-head { padding-bottom: 6px; }
 .source-bz { background: oklch(66% 0.20 250 / 0.12); color: oklch(72% 0.14 250); }
 .source-gbw { background: oklch(70% 0.16 158 / 0.12); color: oklch(76% 0.12 158); }
 .source-by { background: oklch(70% 0.14 85 / 0.12); color: oklch(76% 0.10 85); }
-.source-bzvip { background: oklch(60% 0.20 25 / 0.12); color: oklch(70% 0.14 25); }
 
 /* Search history dropdown */
 .search-history { display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 16px 48px rgba(0,0,0,0.45); z-index: 350; overflow: hidden; }

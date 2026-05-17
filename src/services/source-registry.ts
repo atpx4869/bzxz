@@ -16,10 +16,6 @@ const FACTORIES: Record<SourceName, AdapterFactory> = {
     const { ByAdapter } = require('../sources/by/by-adapter');
     return new ByAdapter();
   },
-  bzvip: () => {
-    const { BzVipAdapter } = require('../sources/bz-vip/bzvip-adapter');
-    return new BzVipAdapter();
-  },
 };
 
 export class SourceRegistry {
