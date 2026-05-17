@@ -160,6 +160,13 @@ export class GbwAdapter implements SourceAdapter {
       throw new BadRequestError(`gbw adapter cannot resolve id from source ${source}`);
     }
 
+    // Cache hit: avoid two upstream HTTP requests (detail page + openstd hasText check)
+    // on every autoDownload retry. The `meta.html` blob is omitted from the cache to
+    // keep memory footprint small.
+    const cacheKey = `gbw:detail:${id}`;
+    const cached = searchCache.get<StandardDetail>(cacheKey);
+    if (cached) return cached;
+
     const detailUrl = new URL('/gb/search/gbDetailed', GBW_STD_BASE);
     detailUrl.searchParams.set('id', sourceId);
 
@@ -167,6 +174,7 @@ export class GbwAdapter implements SourceAdapter {
       headers: {
         'User-Agent': USER_AGENT,
       },
+      retries: 2,
     });
 
     if (!response.ok) {
@@ -176,7 +184,6 @@ export class GbwAdapter implements SourceAdapter {
     const html = await response.text();
     const { load } = await import('cheerio');
     const $ = load(html);
-    const bodyText = $('body').text();
 
     const standardNumber = cleanText(extractBasicInfoField($, '标准号') ?? '');
     const title = cleanText($('.page-header h4').first().text());
@@ -190,13 +197,15 @@ export class GbwAdapter implements SourceAdapter {
       throw new NotFoundError(`gbw detail not found for ${id}`);
     }
 
-    // Check openstd page for actual text availability (ck_btn/xz_btn = has text)
-    let hasText = false;
-    if (hcno) {
+    // Use the cached availability flag if a prior batchCheckTextAvailability filled it;
+    // only fall back to a fresh openstd request when truly unknown.
+    let hasText = this.textCache.get(sourceId);
+    if (hasText === undefined && hcno) {
       hasText = await this.checkOpenstdHasText(hcno);
+      this.textCache.set(sourceId, hasText);
     }
 
-    return {
+    const result: StandardDetail = {
       id,
       source: 'gbw',
       sourceId,
@@ -207,7 +216,7 @@ export class GbwAdapter implements SourceAdapter {
       publishDate: extractBasicInfoField($, '发布日期') ?? null,
       implementDate: extractBasicInfoField($, '实施日期') ?? null,
       abolishedDate: null,
-      previewAvailable: hasText,
+      previewAvailable: Boolean(hasText),
       detailUrl: detailUrl.toString(),
       contentText: englishTitle || '',
       moreInfo: {
@@ -216,10 +225,10 @@ export class GbwAdapter implements SourceAdapter {
         hcno,
         openstdDetailUrl: hcno ? `${GBW_OPENSTD_BASE}/bzgk/std/newGbInfo?hcno=${hcno}` : null,
       },
-      meta: {
-        html,
-      },
+      meta: {},
     };
+    searchCache.set(cacheKey, result, 10 * 60 * 1000); // 10 min cache
+    return result;
   }
 
   async detectPreview(id: string): Promise<PreviewInfo> {
@@ -274,6 +283,7 @@ export class GbwAdapter implements SourceAdapter {
         Referer: `${GBW_OPENSTD_BASE}/`,
       },
       redirect: 'manual',
+      retries: 1,
     });
 
     const setCookies = showResponse.headers.getSetCookie?.() ?? [];
@@ -291,6 +301,7 @@ export class GbwAdapter implements SourceAdapter {
         Cookie: cookieHeader,
         Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
       },
+      retries: 1,
     });
 
     if (!captchaResponse.ok) {
@@ -329,6 +340,7 @@ export class GbwAdapter implements SourceAdapter {
 
     const cookieHeader = session.cookies.join('; ');
     const verifyUrl = `${GBW_DOWNLOAD_BASE}/bzgk/gb/verifyCode`;
+    // verifyCode is single-use; never retry on 5xx — would burn a fresh captcha.
     const response = await pooledFetch(verifyUrl, {
       method: 'POST',
       headers: {
@@ -340,6 +352,7 @@ export class GbwAdapter implements SourceAdapter {
         Cookie: cookieHeader,
       },
       body: new URLSearchParams({ verifyCode: normalizedCode }),
+      retries: 1,
     });
 
     if (!response.ok) {
@@ -399,11 +412,21 @@ export class GbwAdapter implements SourceAdapter {
     return stripDownloadSessionSecrets(session);
   }
 
-  async autoDownload(id: string, maxRetries: number = 5): Promise<DownloadSessionInfo> {
+  async autoDownload(id: string, maxRetries: number = 3): Promise<DownloadSessionInfo> {
     const attempts: OcrAttemptLog[] = [];
+    // First round creates the session (fetches cookie + captcha image). Subsequent
+    // rounds reuse the cookie and only fetch a new captcha image, saving one HTTP
+    // round-trip per retry.
+    let session: DownloadSessionInfo | undefined;
 
     for (let round = 1; round <= maxRetries; round++) {
-      const session = await this.createDownloadSession(id);
+      if (!session) {
+        session = await this.createDownloadSession(id);
+      } else {
+        const refreshed = await this.refreshSessionCaptcha(session.id);
+        if (refreshed) session = refreshed;
+        else session = await this.createDownloadSession(id); // session expired — restart
+      }
 
       if (!session.captchaImageBase64) {
         throw new UpstreamError('No captcha image in download session');
@@ -466,6 +489,36 @@ export class GbwAdapter implements SourceAdapter {
     };
   }
 
+  /**
+   * Re-fetch the captcha image on an existing session without rebuilding cookies.
+   * Returns undefined if the session has been evicted from the store (caller should
+   * fall back to createDownloadSession).
+   */
+  private async refreshSessionCaptcha(sessionId: string): Promise<DownloadSessionInfo | undefined> {
+    const record = this.downloadSessionStore.get(sessionId);
+    if (!record) return undefined;
+    const cookieHeader = record.cookies.join('; ');
+    const captchaUrl = `${GBW_DOWNLOAD_BASE}/bzgk/gb/gc?_${Date.now()}`;
+    const captchaResponse = await pooledFetch(captchaUrl, {
+      headers: {
+        'User-Agent': USER_AGENT,
+        Referer: record.showUrl,
+        Cookie: cookieHeader,
+        Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      },
+      retries: 1,
+    });
+    if (!captchaResponse.ok) return undefined;
+    const captchaBytes = Buffer.from(await captchaResponse.arrayBuffer());
+    const updated = this.downloadSessionStore.update(sessionId, {
+      status: 'captcha_required',
+      captchaImageBase64: captchaBytes.toString('base64'),
+      captchaContentType: captchaResponse.headers.get('content-type') ?? 'image/jpeg',
+    });
+    if (!updated) return undefined;
+    return stripDownloadSessionSecrets(updated);
+  }
+
   private async tryDownloadFinalFile(
     session: { cookies: string[]; showUrl: string; hcno: string; standardId: string },
     viewUrl: string,
@@ -481,6 +534,7 @@ export class GbwAdapter implements SourceAdapter {
         Cookie: cookieHeader,
       },
       redirect: 'manual',
+      retries: 1,
     });
 
     if (!response.ok) {

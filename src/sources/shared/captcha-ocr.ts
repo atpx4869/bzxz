@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { getRootDir } from '../../shared/fs';
 
@@ -23,28 +23,42 @@ export async function ocrCaptcha(base64Image: string): Promise<OcrResult> {
   return tryTesseract(base64Image);
 }
 
-async function tryDdddocr(base64Image: string): Promise<OcrResult> {
-  try {
-    const raw = execFileSync('python', [getPythonBridge()], {
-      input: base64Image,
-      encoding: 'utf-8',
-      timeout: 8000,
-      maxBuffer: 1024 * 1024,
-      windowsHide: true,
-    });
-
-    const text = raw.trim().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    return {
-      text,
-      confidence: text.length >= 4 ? 100 : 0,
-      rawText: raw.trim(),
-    };
-  } catch (err) {
-    // Falls through to tesseract; warn so we know whether the python bridge is broken
-    // (missing python / missing ddddocr package) vs just returning a poor result.
-    console.warn('[captcha-ocr] ddddocr bridge failed, falling back to tesseract:', err instanceof Error ? err.message : String(err));
-    return { text: '', confidence: 0, rawText: '' };
-  }
+/**
+ * Spawn the python ddddocr bridge. Uses async execFile so concurrent OCR jobs
+ * actually run in parallel — execFileSync blocks the Node event loop and would
+ * serialize multi-standard captcha solving even when the front end requested
+ * concurrency.
+ */
+function tryDdddocr(base64Image: string): Promise<OcrResult> {
+  return new Promise<OcrResult>((resolve) => {
+    const child = execFile(
+      'python',
+      [getPythonBridge()],
+      {
+        encoding: 'utf-8',
+        timeout: 8000,
+        maxBuffer: 1024 * 1024,
+        windowsHide: true,
+      },
+      (err, stdout) => {
+        if (err) {
+          console.warn('[captcha-ocr] ddddocr bridge failed, falling back to tesseract:', err.message);
+          resolve({ text: '', confidence: 0, rawText: '' });
+          return;
+        }
+        const raw = String(stdout || '');
+        const text = raw.trim().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+        resolve({
+          text,
+          confidence: text.length >= 4 ? 100 : 0,
+          rawText: raw.trim(),
+        });
+      },
+    );
+    if (child.stdin) {
+      child.stdin.end(base64Image);
+    }
+  });
 }
 
 async function tryTesseract(base64Image: string): Promise<OcrResult> {

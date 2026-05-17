@@ -305,7 +305,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         throw new BadRequestError(`Source ${parsed.source} does not support auto-download`);
       }
 
-      const result = await adapter.autoDownload(id, 5);
+      const result = await adapter.autoDownload(id, 3);
       trackEvent(db, req.user!.id, 'download', parsed.source, id);
       respond(res, toCamelCase(result));
     } catch (error) {
