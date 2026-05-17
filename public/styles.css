@@ -110,6 +110,23 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
 .btn-ghost { background: transparent; color: var(--text-2); border: 1px solid var(--border); }
 .btn-ghost:hover { border-color: var(--text-2); color: var(--text); background: oklch(22% 0.014 255 / 0.5); }
 .btn-sm { padding: 6px 14px; font-size: 12px; }
+.btn:disabled, .btn[disabled] { opacity: 0.5; cursor: not-allowed; background: oklch(22% 0.01 255 / 0.5); color: var(--text-3); border-color: oklch(28% 0.01 255 / 0.5); box-shadow: none; transform: none; }
+.btn:disabled:hover, .btn[disabled]:hover { background: oklch(22% 0.01 255 / 0.5); color: var(--text-3); transform: none; box-shadow: none; }
+
+/* Results "load more" sentinel */
+.results-more { display: flex; justify-content: center; padding: 16px 0; }
+
+/* Confirm modal */
+.confirm-overlay { position: fixed; inset: 0; background: oklch(8% 0.01 255 / 0.7); backdrop-filter: blur(4px); z-index: 1100; display: flex; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: opacity 0.18s ease, visibility 0.18s ease; }
+.confirm-overlay.open { opacity: 1; visibility: visible; }
+.confirm-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 24px; max-width: 420px; min-width: 300px; box-shadow: 0 20px 60px oklch(0% 0 0 / 0.5); transform: translateY(-12px); transition: transform 0.18s var(--ease-out); }
+.confirm-overlay.open .confirm-card { transform: translateY(0); }
+.confirm-title { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+.confirm-body { font-size: 13px; color: var(--text-2); line-height: 1.55; margin-bottom: 18px; }
+.confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.confirm-card.danger .confirm-title { color: var(--danger); }
+.confirm-actions .btn-danger { background: var(--danger); color: #fff; }
+.confirm-actions .btn-danger:hover { background: oklch(55% 0.20 25); }
 
 /* Summary & toolbar */
 .summary { margin: 0 0 20px; color: var(--text-2); font-size: 13px; letter-spacing: 0.01em; }
@@ -165,7 +182,10 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
 .result-card .card-actions button[data-action="download"] { background: var(--accent); color: #fff; box-shadow: 0 2px 8px oklch(66% 0.20 250 / 0.18); }
 .result-card .card-actions button[data-action="download"]:hover { background: var(--accent-h); }
 .result-card .card-actions button[data-action="save"].saved { border-color: oklch(70% 0.14 85 / 0.45); background: oklch(70% 0.14 85 / 0.13); color: var(--warning); }
-.result-card .card-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
+.result-card .card-actions button:disabled,
+.result-card .card-actions button[disabled] { opacity: 0.5; cursor: not-allowed; background: oklch(20% 0.01 255 / 0.4); color: var(--text-3); border-color: transparent; box-shadow: none; }
+.result-card .card-actions button:disabled:hover,
+.result-card .card-actions button[disabled]:hover { background: oklch(20% 0.01 255 / 0.4); color: var(--text-3); }
 .result-card .card-actions button .btn-spinner { display: none; width: 12px; height: 12px; border: 2px solid var(--text-3); border-top-color: transparent; border-radius: 50%; animation: btn-spin 0.6s linear infinite; vertical-align: middle; margin-right: 4px; }
 @keyframes btn-spin { to { transform: rotate(360deg); } }
 .result-card.downloading { border-color: var(--accent); box-shadow: 0 0 16px oklch(66% 0.20 250 / 0.2); }

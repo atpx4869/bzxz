@@ -524,7 +524,7 @@ function copyFilePath(filePath) {
 }
 
 async function deleteLibraryFile(fileName) {
-  if (!confirm(`删除文件 ${fileName}？`)) return;
+  if (!await showConfirm({ title: '删除文件', body: `确定删除「${fileName}」？此操作不可恢复。`, danger: true, confirmText: '删除' })) return;
   try {
     const res = await fetch(`/api/downloads/${encodeURIComponent(fileName)}`, { method: 'DELETE' });
     const data = await readApiResponse(res);
@@ -548,9 +548,65 @@ function showToast(msg, type, duration) {
   setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.2s'; setTimeout(() => toast.remove(), 200); }, duration);
 }
 
+/**
+ * Promise-based confirmation modal. Replaces native `confirm()` which is ugly,
+ * blocks the page, and on Electron can be inconsistent.
+ *   const ok = await showConfirm({ title: '确认删除', body: '...', danger: true });
+ * Returns true if user clicked confirm, false otherwise.
+ */
+function showConfirm(opts) {
+  const { title = '请确认', body = '', confirmText = '确定', cancelText = '取消', danger = false } = opts || {};
+  return new Promise(resolve => {
+    let overlay = document.getElementById('confirmOverlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'confirmOverlay';
+      overlay.className = 'confirm-overlay';
+      document.body.appendChild(overlay);
+    }
+    overlay.innerHTML = `
+      <div class="confirm-card${danger ? ' danger' : ''}" role="dialog" aria-modal="true">
+        <div class="confirm-title">${escapeHtml(title)}</div>
+        <div class="confirm-body">${escapeHtml(body)}</div>
+        <div class="confirm-actions">
+          <button class="btn btn-ghost btn-sm" data-confirm-action="cancel">${escapeHtml(cancelText)}</button>
+          <button class="btn btn-sm ${danger ? 'btn-danger' : 'btn-primary'}" data-confirm-action="confirm">${escapeHtml(confirmText)}</button>
+        </div>
+      </div>`;
+    requestAnimationFrame(() => overlay.classList.add('open'));
+
+    const finish = (result) => {
+      overlay.classList.remove('open');
+      setTimeout(() => { overlay.innerHTML = ''; }, 200);
+      document.removeEventListener('keydown', onKey);
+      resolve(result);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); finish(false); }
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    };
+    document.addEventListener('keydown', onKey);
+    overlay.querySelector('[data-confirm-action="cancel"]').addEventListener('click', () => finish(false));
+    overlay.querySelector('[data-confirm-action="confirm"]').addEventListener('click', () => finish(true));
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) finish(false); }, { once: true });
+    overlay.querySelector('[data-confirm-action="confirm"]').focus();
+  });
+}
+
 // ── Keyboard shortcuts ──
+// Guard: if the user is typing inside an input/textarea/contenteditable, only
+// allow Escape and Enter to act as global shortcuts. Other accelerators
+// (Ctrl+K / Ctrl+D / Alt+1..6 / a) would interrupt typing.
+function isEditingContext(target) {
+  if (!target) return false;
+  if (target.isContentEditable) return true;
+  const tag = (target.tagName || '').toLowerCase();
+  return tag === 'input' || tag === 'textarea' || tag === 'select';
+}
+
 document.addEventListener('keydown', e => {
-  if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey && document.activeElement === document.body) {
+  const editing = isEditingContext(e.target);
+  if (e.key === '?' && !editing && !e.ctrlKey && !e.metaKey && !e.altKey) {
     document.getElementById('shortcutsOverlay').classList.add('open');
   }
   if (e.key === 'Escape') {
@@ -569,22 +625,22 @@ document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd') {
     e.preventDefault();
     toggleDownloadCenter();
-  } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+  } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && !editing) {
     e.preventDefault();
     const btn = document.getElementById('downloadSelected');
     if (btn && !btn.disabled) btn.click();
   }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j') {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j' && !editing) {
     e.preventDefault();
     setResultDensity(resultDensity === 'compact' ? 'comfortable' : 'compact');
     if (typeof renderSavedToolbar === 'function') renderSavedToolbar();
   }
-  if (e.altKey && !e.ctrlKey && !e.metaKey && /^[1-6]$/.test(e.key)) {
+  if (e.altKey && !e.ctrlKey && !e.metaKey && /^[1-6]$/.test(e.key) && !editing) {
     e.preventDefault();
     const tabs = ['search', 'batch', 'complete', 'history', 'qual', 'settings'];
     switchTab(tabs[Number(e.key) - 1]);
   }
-  if ((e.ctrlKey || e.metaKey) && e.key === 'a' && document.activeElement === document.body) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'a' && !editing) {
     e.preventDefault();
     const filtered = getFilteredResults();
     const allSelected = filtered.length > 0 && filtered.every(r => selectedIds.has(r.id));

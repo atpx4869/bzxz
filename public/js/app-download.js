@@ -507,14 +507,14 @@ async function doCascadeDownload() {
           const errMsg = data.message || (perSource ? Object.values(perSource).join('; ') : '下载失败');
           updateLog(logId, `${item.standardNumber} ❌ ${errMsg}`, 'fail');
           setRowDownloadState(item.standardId, 'fail');
-          allFailedItems.push(item);
+          allFailedItems.push({ ...item, _failReason: errMsg });
           completeDownloadTask(taskId, 'fail', { error: errMsg, progress: errMsg });
         }
       } catch (e) {
         const msg = (e && e.message) || '请求失败';
         updateLog(logId, `${item.standardNumber} ❌ ${msg}`, 'fail');
         setRowDownloadState(item.standardId, 'fail');
-        allFailedItems.push(item);
+        allFailedItems.push({ ...item, _failReason: msg });
         completeDownloadTask(taskId, 'fail', { error: msg, progress: msg });
       }
       completed++; updateProgress();
@@ -577,8 +577,8 @@ async function doRaceDownload() {
         if (winner.fileName) { triggerDownload(winner.fileName); recordDownload(winner.source, winner.fileName, item.standardNumber); }
         completeDownloadTask(taskId, 'success', { source: winner.source, fileName: winner.fileName, fileSize: winner.fileSize, progress: `${srcLabel(winner.source)} 下载完成` });
       } catch (e) {
-        allFailedItems.push(item);
         const msgs = e instanceof AggregateError ? [...new Set(e.errors.map(err => err.message))].slice(0, 3).join('; ') : (e.message || '未知错误');
+        allFailedItems.push({ ...item, _failReason: msgs });
         updateLog(logId, `${item.standardNumber} ❌ ${msgs}`, 'fail');
         setRowDownloadState(item.standardId, 'fail');
         completeDownloadTask(taskId, 'fail', { error: msgs, progress: msgs });
@@ -646,9 +646,12 @@ function showBatchResultModal(successItems, allFailedItems, finalFailed, elapsed
       <span style="font:500 13px 'DM Mono',monospace;color:var(--accent);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(it.standardNumber)}</span>
     </div>`).join('');
   const failRows = finalFailed.map(it => `
-    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;border-bottom:1px solid var(--border)">
-      <span style="color:var(--danger)">❌</span>
-      <span style="font:500 13px 'DM Mono',monospace;color:var(--text-3);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(it.standardNumber)}</span>
+    <div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;font-size:13px;border-bottom:1px solid var(--border)">
+      <span style="color:var(--danger);flex:0 0 auto">❌</span>
+      <div style="min-width:0;flex:1">
+        <div style="font:500 13px 'DM Mono',monospace;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(it.standardNumber)}</div>
+        ${it._failReason ? `<div style="font-size:11px;color:var(--text-3);margin-top:2px;line-height:1.4">${escapeHtml(it._failReason)}</div>` : ''}
+      </div>
     </div>`).join('');
   document.getElementById('modalBody').innerHTML = `
     <h3 style="margin-bottom:16px">📊 批量下载结果</h3>

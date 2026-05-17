@@ -164,8 +164,8 @@ function showChangePwd() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ oldPassword: oldPwd, newPassword: newPwd }),
   }).then(r => readApiResponse(r)).then(d => {
-    if (d.ok) alert('密码已修改');
-    else alert(d.message || '修改失败');
+    if (d.ok) showToast('密码已修改', 'success');
+    else showToast(d.message || '修改失败', 'fail');
   });
 }
 
@@ -290,7 +290,7 @@ async function batchSetActive(active) {
   const ids = [...selectedUserIds];
   if (!ids.length) return;
   const label = active ? '启用' : '禁用';
-  if (!confirm('确定' + label + '选中的 ' + ids.length + ' 个用户？')) return;
+  if (!await showConfirm({ title: label + '用户', body: '确定' + label + '选中的 ' + ids.length + ' 个用户？', confirmText: label })) return;
   await Promise.all(ids.map(id =>
     apiFetch('/api/admin/users/' + id, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -305,7 +305,7 @@ async function batchSetActive(active) {
 async function batchDeleteUsers() {
   const ids = [...selectedUserIds];
   if (!ids.length) return;
-  if (!confirm('确定删除选中的 ' + ids.length + ' 个用户？此操作不可恢复')) return;
+  if (!await showConfirm({ title: '批量删除用户', body: '确定删除选中的 ' + ids.length + ' 个用户？此操作不可恢复。', danger: true, confirmText: '删除' })) return;
   await Promise.all(ids.map(id => apiFetch('/api/admin/users/' + id, { method: 'DELETE' })));
   selectedUserIds.clear();
   showToast('已删除 ' + ids.length + ' 个用户');
@@ -371,7 +371,7 @@ async function changeUserRole(id, role) {
 }
 
 async function deleteUser(id, username) {
-  if (!confirm('确定删除用户「' + username + '」？此操作不可恢复')) return;
+  if (!await showConfirm({ title: '删除用户', body: '确定删除用户「' + username + '」？此操作不可恢复。', danger: true, confirmText: '删除' })) return;
   const res = await apiFetch('/api/admin/users/' + id, { method: 'DELETE' });
   const d = await readApiResponse(res);
   if (d.ok) { showToast('用户已删除'); loadUsers(); }

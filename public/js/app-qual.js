@@ -609,7 +609,7 @@ async function linkQualLab(type, id, currentName) {
 }
 
 async function unlinkQualLab(source, id) {
-  if (!confirm('确定取消这组机构关联？')) return;
+  if (!await showConfirm({ title: '取消关联', body: '确定取消这组机构关联？', confirmText: '确定取消' })) return;
   try {
     const res = await fetch(`/api/qualifications/links/${source}/${encodeURIComponent(id)}`, { method: 'DELETE' });
     const data = await readQualApiJson(res);
@@ -639,7 +639,7 @@ function CnasScraper_parseUrl(url) {
 }
 
 async function deleteQualLab(type, id) {
-  if (!confirm(`确定删除 ${id} 及其所有资质数据？`)) return;
+  if (!await showConfirm({ title: '删除订阅', body: `确定删除 ${id} 及其所有资质数据？此操作不可恢复。`, danger: true, confirmText: '删除' })) return;
   const url = type === 'cnas' ? `/api/qualifications/labs/cnas/${encodeURIComponent(id)}` : `/api/qualifications/labs/cma/${encodeURIComponent(id)}`;
   try {
     const res = await fetch(url, { method: 'DELETE' });

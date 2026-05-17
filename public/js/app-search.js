@@ -333,28 +333,21 @@ function renderFilterBar() {
 }
 
 // ── Render cards ──
-function renderResults() {
-  const filtered = getFilteredResults();
-  const idxMap = new Map(results.map((r, i) => [r.id, i]));
-  const header = filtered.length ? `
-    <div class="results-table-head">
-      <span></span>
-      <span>标准号</span>
-      <span>标准名称</span>
-      <span>状态</span>
-      <span>来源</span>
-      <span>日期</span>
-      <span>操作</span>
-    </div>` : '';
-  const cards = filtered.map((r, fi) => {
-    const i = idxMap.get(r.id);
-    const srcBadges = (r.sources || [r._source]).map(s => `<span class="source-badge source-${escapeHtml(String(s))}">${escapeHtml(srcLabel(String(s)))}</span>`).join(' ');
-    const sCls = statusClass(r.status); const hasText = r.previewAvailable;
-    const saved = isStandardSaved(r);
-    const statusBadge = r.status ? `<span class="status-indicator ${sCls}"><span class="dot"></span>${escapeHtml(r.status)}</span>` : '';
-    const textBadge = !hasText ? '<span class="no-text-badge">无文本</span>' : '<span class="has-text-badge">有文本</span>';
-    return `
-    <div class="result-card card-enter${hasText ? '' : ' no-text'}${saved ? ' saved' : ''}" data-sid="${escapeHtml(r.id)}" style="animation-delay:${fi * 40}ms">
+// Progressive rendering: first batch is cheap (100 rows), then either user
+// clicks "show all" or scrolls past the sentinel which triggers the next batch.
+const RESULTS_FIRST_BATCH = 100;
+const RESULTS_NEXT_BATCH = 200;
+let _resultsRenderedCount = 0;
+let _resultsLastFilteredCache = null;
+
+function buildResultCardHtml(r, i) {
+  const srcBadges = (r.sources || [r._source]).map(s => `<span class="source-badge source-${escapeHtml(String(s))}">${escapeHtml(srcLabel(String(s)))}</span>`).join(' ');
+  const sCls = statusClass(r.status); const hasText = r.previewAvailable;
+  const saved = isStandardSaved(r);
+  const statusBadge = r.status ? `<span class="status-indicator ${sCls}"><span class="dot"></span>${escapeHtml(r.status)}</span>` : '';
+  const textBadge = !hasText ? '<span class="no-text-badge">无文本</span>' : '<span class="has-text-badge">有文本</span>';
+  return `
+    <div class="result-card card-enter${hasText ? '' : ' no-text'}${saved ? ' saved' : ''}" data-sid="${escapeHtml(r.id)}">
       <div class="check-col"><input type="checkbox" data-idx="${i}" ${selectedIds.has(r.id) ? 'checked' : ''}></div>
       <div class="card-id">
         <div class="card-number">${escapeHtml(r.standardNumber)}</div>
@@ -381,8 +374,29 @@ function renderResults() {
         <button data-action="download" data-id="${escapeHtml(r.id)}" ${hasText ? '' : 'disabled'}>下载</button>
       </div>
     </div>`;
-  }).join('');
-  document.getElementById('results').innerHTML = header + cards;
+}
+
+function renderResults() {
+  const filtered = getFilteredResults();
+  const idxMap = new Map(results.map((r, i) => [r.id, i]));
+  _resultsLastFilteredCache = filtered;
+  _resultsRenderedCount = Math.min(RESULTS_FIRST_BATCH, filtered.length);
+
+  const header = filtered.length ? `
+    <div class="results-table-head">
+      <span></span>
+      <span>标准号</span>
+      <span>标准名称</span>
+      <span>状态</span>
+      <span>来源</span>
+      <span>日期</span>
+      <span>操作</span>
+    </div>` : '';
+  const firstBatchHtml = filtered.slice(0, _resultsRenderedCount).map(r => buildResultCardHtml(r, idxMap.get(r.id))).join('');
+  const moreHtml = filtered.length > _resultsRenderedCount
+    ? `<div id="resultsMore" class="results-more"><button class="btn btn-ghost btn-sm" id="resultsLoadMoreBtn">显示更多（还剩 ${filtered.length - _resultsRenderedCount} 条）</button></div>`
+    : '';
+  document.getElementById('results').innerHTML = header + firstBatchHtml + moreHtml;
   document.querySelectorAll('input[data-idx]').forEach(cb => {
     cb.addEventListener('change', () => {
       const idx = parseInt(cb.dataset.idx);
@@ -392,6 +406,36 @@ function renderResults() {
       updateToolbar();
     });
   });
+  const moreBtn = document.getElementById('resultsLoadMoreBtn');
+  if (moreBtn) moreBtn.addEventListener('click', appendNextResultsBatch);
+}
+
+function appendNextResultsBatch() {
+  const filtered = _resultsLastFilteredCache;
+  if (!filtered) return;
+  const idxMap = new Map(results.map((r, i) => [r.id, i]));
+  const end = Math.min(_resultsRenderedCount + RESULTS_NEXT_BATCH, filtered.length);
+  const html = filtered.slice(_resultsRenderedCount, end).map(r => buildResultCardHtml(r, idxMap.get(r.id))).join('');
+  const moreEl = document.getElementById('resultsMore');
+  if (moreEl) moreEl.insertAdjacentHTML('beforebegin', html);
+  // Re-bind checkboxes for newly inserted rows
+  document.querySelectorAll('input[data-idx]:not([data-bound])').forEach(cb => {
+    cb.setAttribute('data-bound', '1');
+    cb.addEventListener('change', () => {
+      const idx = parseInt(cb.dataset.idx);
+      const r = results[idx];
+      if (!r) return;
+      cb.checked ? selectedIds.add(r.id) : selectedIds.delete(r.id);
+      updateToolbar();
+    });
+  });
+  _resultsRenderedCount = end;
+  if (_resultsRenderedCount >= filtered.length) {
+    if (moreEl) moreEl.remove();
+  } else if (moreEl) {
+    const remaining = filtered.length - _resultsRenderedCount;
+    moreEl.querySelector('button').textContent = `显示更多（还剩 ${remaining} 条）`;
+  }
 }
 
 // Filter bar chip clicks
