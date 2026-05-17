@@ -13,7 +13,11 @@ interface OcrResult {
 const CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const READY_SENTINEL = '__BZXZ_OCR_READY__';
 const REQUEST_TIMEOUT_MS = 8000;
-const STARTUP_TIMEOUT_MS = 20_000;
+// Aggressive startup timeout: ddddocr import in a working environment takes
+// 1-3s. If we don't hear READY within 5s we treat the worker as broken and
+// fall back to tesseract immediately — much better than blocking the first
+// captcha for the full 20s pessimistic timeout.
+const STARTUP_TIMEOUT_MS = 5_000;
 const PYTHON_CANDIDATES = process.platform === 'win32'
   ? ['python', 'python3', 'py']
   : ['python3', 'python'];
@@ -305,13 +309,37 @@ process.once('exit', shutdown);
 process.once('SIGINT', shutdown);
 process.once('SIGTERM', shutdown);
 
+// ─── Long-lived tesseract worker ─────────────────────────────────────────────
+// tesseract.js's createWorker is ~500ms-1s due to traineddata loading. Building
+// a fresh worker per captcha kills throughput when ddddocr is unavailable, so
+// we keep one alive and serialize requests through a tiny in-process mutex.
+
+type TesseractWorker = Awaited<ReturnType<typeof import('tesseract.js').createWorker>>;
+let tesseractWorker: TesseractWorker | null = null;
+let tesseractInit: Promise<TesseractWorker> | null = null;
+let tesseractChain: Promise<unknown> = Promise.resolve();
+
+async function getTesseractWorker(): Promise<TesseractWorker> {
+  if (tesseractWorker) return tesseractWorker;
+  if (tesseractInit) return tesseractInit;
+  tesseractInit = (async () => {
+    const { createWorker } = await import('tesseract.js');
+    const w = await createWorker('eng', 1, { logger: () => {}, errorHandler: () => {} });
+    await w.setParameters({
+      tessedit_char_whitelist: CHARSET,
+      tessedit_pageseg_mode: '7' as unknown as undefined,
+    });
+    tesseractWorker = w;
+    return w;
+  })();
+  return tesseractInit;
+}
+
 async function tryTesseract(base64Image: string): Promise<OcrResult> {
   if (ocrStatus.engine === 'unknown') ocrStatus.engine = 'tesseract';
   const buffer = Buffer.from(base64Image, 'base64');
 
   const { default: sharp } = await import('sharp');
-  const { createWorker } = await import('tesseract.js');
-
   const preprocessed = await sharp(buffer)
     .resize({ width: 200, fit: 'inside' })
     .grayscale()
@@ -319,26 +347,14 @@ async function tryTesseract(base64Image: string): Promise<OcrResult> {
     .toFormat('png')
     .toBuffer();
 
-  const worker = await createWorker('eng', 1, {
-    logger: () => {},
-    errorHandler: () => {},
-  });
-
-  try {
-    await worker.setParameters({
-      tessedit_char_whitelist: CHARSET,
-      tessedit_pageseg_mode: '7' as unknown as undefined,
-    });
-
-    const { data } = await worker.recognize(preprocessed);
+  // Serialize through a single tesseract worker — calling recognize concurrently
+  // on the same worker can corrupt internal state.
+  const myTurn = tesseractChain.then(async () => {
+    const w = await getTesseractWorker();
+    const { data } = await w.recognize(preprocessed);
     const text = data.text.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().trim();
-
-    return {
-      text,
-      confidence: data.confidence,
-      rawText: data.text,
-    };
-  } finally {
-    await worker.terminate();
-  }
+    return { text, confidence: data.confidence, rawText: data.text };
+  });
+  tesseractChain = myTurn.catch(() => undefined);
+  return myTurn;
 }
