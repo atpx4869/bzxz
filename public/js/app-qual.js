@@ -345,7 +345,7 @@ let qualCmaLabsCache = [];
 
 async function loadQualLabs() {
   try {
-    const [cnasRes, cmaRes] = await Promise.all([fetch('/api/cnas/labs'), fetch('/api/cma/labs')]);
+    const [cnasRes, cmaRes] = await Promise.all([fetch('/api/qualifications/labs/cnas'), fetch('/api/qualifications/labs/cma')]);
     const cnasData = await readApiResponse(cnasRes);
     const cmaData = await readApiResponse(cmaRes);
     const cnasLabs = cnasData.items || cnasData || [];
@@ -446,7 +446,7 @@ async function searchCmaLabCandidates() {
   if (!q) return;
   container.innerHTML = '<span class="spinner"></span> 正在搜索机构…';
   try {
-    const res = await fetch(`/api/cma/search-labs?q=${encodeURIComponent(q)}`);
+    const res = await fetch(`/api/qualifications/labs/cma/search?q=${encodeURIComponent(q)}`);
     const data = await readQualApiJson(res);
     if (!res.ok) throw new Error(data.message || '搜索失败');
     const items = data.items || [];
@@ -485,7 +485,7 @@ async function subscribeCmaCandidate(publicDetailId) {
   if (card) card.classList.add('is-working');
   if (progress) progress.innerHTML = '<span class="spinner"></span>正在获取证书详情，请稍候…';
   try {
-    const res = await fetch('/api/cma/labs', {
+    const res = await fetch('/api/qualifications/labs/cma', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ publicDetailId: publicDetailId }),
@@ -541,11 +541,11 @@ async function addQualLab(type) {
       // Try parsing as URL
       const parsed = val.includes('://') ? CnasScraper_parseUrl(val) : null;
       if (parsed) {
-        body = { lab_no: parsed.labNo, base_info_id: parsed.baseInfoId, cert_update_ts: parsed.certUpdateTs, validate: parsed.validate, url_params: parsed.urlParams };
+        body = { labNo: parsed.labNo, baseInfoId: parsed.baseInfoId, certUpdateTs: parsed.certUpdateTs, validate: parsed.validate, urlParams: parsed.urlParams };
       } else {
-        body = { lab_no: val };
+        body = { labNo: val };
       }
-      const res = await fetch('/api/cnas/labs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const res = await fetch('/api/qualifications/labs/cnas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (!res.ok) { const d = await readApiResponse(res); throw new Error(d.message); }
     } else {
       await searchCmaLabCandidates();
@@ -562,7 +562,7 @@ async function addQualLab(type) {
 async function editQualLabName(type, id, currentName) {
   const newName = prompt('输入机构名称', currentName || '');
   if (newName === null) return;
-  const url = type === 'cnas' ? `/api/cnas/labs/${encodeURIComponent(id)}` : `/api/cma/labs/${encodeURIComponent(id)}`;
+  const url = type === 'cnas' ? `/api/qualifications/labs/cnas/${encodeURIComponent(id)}` : `/api/qualifications/labs/cma/${encodeURIComponent(id)}`;
   try {
     const res = await fetch(url, {
       method: 'PUT',
@@ -594,7 +594,7 @@ async function linkQualLab(type, id, currentName) {
     : { display_name: displayName, cnas_lab_no: targetId.trim(), cma_cert_number: id };
 
   try {
-    const res = await fetch('/api/qualification-links', {
+    const res = await fetch('/api/qualifications/links', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -611,7 +611,7 @@ async function linkQualLab(type, id, currentName) {
 async function unlinkQualLab(source, id) {
   if (!confirm('确定取消这组机构关联？')) return;
   try {
-    const res = await fetch(`/api/qualification-links/${source}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const res = await fetch(`/api/qualifications/links/${source}/${encodeURIComponent(id)}`, { method: 'DELETE' });
     const data = await readQualApiJson(res);
     if (!res.ok) throw new Error(data.message || '取消关联失败');
     loadQualLabs();
@@ -640,7 +640,7 @@ function CnasScraper_parseUrl(url) {
 
 async function deleteQualLab(type, id) {
   if (!confirm(`确定删除 ${id} 及其所有资质数据？`)) return;
-  const url = type === 'cnas' ? `/api/cnas/labs/${encodeURIComponent(id)}` : `/api/cma/labs/${encodeURIComponent(id)}`;
+  const url = type === 'cnas' ? `/api/qualifications/labs/cnas/${encodeURIComponent(id)}` : `/api/qualifications/labs/cma/${encodeURIComponent(id)}`;
   try {
     const res = await fetch(url, { method: 'DELETE' });
     if (!res.ok) throw new Error((await readApiResponse(res)).message);
@@ -670,7 +670,7 @@ function startSyncProgressPoll() {
 }
 
 async function syncQualLab(type, id) {
-  const url = type === 'cnas' ? `/api/cnas/sync?lab_no=${encodeURIComponent(id)}` : `/api/cma/sync?cert_number=${encodeURIComponent(id)}`;
+  const url = type === 'cnas' ? `/api/qualifications/labs/cnas/sync?labNo=${encodeURIComponent(id)}` : `/api/qualifications/labs/cma/sync?certNumber=${encodeURIComponent(id)}`;
   showToast(`正在同步 ${id}…`);
   startSyncProgressPoll();
   try {
@@ -688,8 +688,8 @@ async function syncAllQualLabs() {
   startSyncProgressPoll();
   try {
     const [cnasRes, cmaRes] = await Promise.all([
-      fetch('/api/cnas/sync', { method: 'POST' }),
-      fetch('/api/cma/sync', { method: 'POST' }),
+      fetch('/api/qualifications/labs/cnas/sync', { method: 'POST' }),
+      fetch('/api/qualifications/labs/cma/sync', { method: 'POST' }),
     ]);
     await readApiResponse(cnasRes); await readApiResponse(cmaRes);
     loadQualLabs();
@@ -736,8 +736,8 @@ async function loadLabsSyncLogs() {
   if (!container) return;
   try {
     const [cnasRes, cmaRes] = await Promise.all([
-      fetch('/api/cnas/sync-logs?limit=15'),
-      fetch('/api/cma/sync-logs?limit=15'),
+      fetch('/api/qualifications/labs/cnas/sync-logs?limit=15'),
+      fetch('/api/qualifications/labs/cma/sync-logs?limit=15'),
     ]);
     const cnasData = await readApiResponse(cnasRes);
     const cmaData = await readApiResponse(cmaRes);
@@ -830,7 +830,7 @@ async function fetchQualBadges(standardNumbers) {
   if (!standardNumbers.length) return;
   try {
     const unique = [...new Set(standardNumbers)].filter(Boolean);
-    const res = await fetch('/api/standards/qualifications', {
+    const res = await fetch('/api/qualifications/batch-query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stdCodes: unique }),
