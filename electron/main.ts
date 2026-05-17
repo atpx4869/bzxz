@@ -311,9 +311,9 @@ function webAccessGate(req: Request, res: Response, next: NextFunction) {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1280,
+    width: 1360,
     height: 860,
-    minWidth: 900,
+    minWidth: 960,
     minHeight: 600,
     title: 'bzxz · 标准检索',
     icon: path.join(__dirname, '..', '..', 'public', 'favicon-256.png'),
