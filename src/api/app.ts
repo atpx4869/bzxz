@@ -14,6 +14,8 @@ import { createQualificationRoutes } from './cnas-routes';
 import { createStandardsRoutes } from './standards-routes';
 import { AppError } from '../shared/errors';
 import { respond, respondError } from '../shared/response';
+import { getOcrStatus } from '../sources/shared/captcha-ocr';
+import { getRecentLogs } from '../shared/log-buffer';
 
 /**
  * Legacy → canonical route rewrites. Express matches by url, so we just patch req.url
@@ -154,6 +156,25 @@ export function createApp() {
 
   app.get('/api/health', (_req, res) => {
     respond(res, { ok: true, sources: sourceRegistry.list() });
+  });
+
+  // ─── Diagnostics ──────────────────────────────────────────────────────────
+  // Surface OCR engine health and recent server logs so the user can debug
+  // slow downloads without opening the Electron dev console.
+  app.get('/api/diagnostics/ocr', requireAuth, (_req, res) => {
+    const status = getOcrStatus();
+    const avg = (n: { count: number; totalMs: number }) => (n.count === 0 ? 0 : Math.round(n.totalMs / n.count));
+    respond(res, {
+      ...status,
+      solves: {
+        ddddocr: { ...status.solves.ddddocr, avgMs: avg(status.solves.ddddocr) },
+        tesseract: { ...status.solves.tesseract, avgMs: avg(status.solves.tesseract) },
+      },
+    });
+  });
+  app.get('/api/diagnostics/logs', requireAuth, (req, res) => {
+    const limit = Math.max(1, Math.min(parseInt((req.query.limit as string) || '200', 10) || 200, 500));
+    respond(res, { items: getRecentLogs(limit) });
   });
 
   app.use(createStandardsRoutes({ db, sourceRegistry, exportTaskStore, requireAuth, baseDir }));

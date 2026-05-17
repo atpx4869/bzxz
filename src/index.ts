@@ -4,6 +4,10 @@ for (const key of ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'AL
 }
 process.env.NO_PROXY = '*';
 
+// Install console interceptor as early as possible so the diagnostics endpoint
+// sees every warning produced at startup (OCR worker boot, source registry, …).
+import './shared/log-buffer';
+
 import { createServer } from 'node:http';
 
 import { createApp } from './api/app';

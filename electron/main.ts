@@ -4,6 +4,9 @@ for (const key of ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'AL
 }
 process.env.NO_PROXY = '*';
 
+// Capture early server-side warnings into the diagnostics buffer.
+import '../src/shared/log-buffer';
+
 import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain, session, shell, clipboard } from 'electron';
 
 Menu.setApplicationMenu(null);

@@ -14,24 +14,78 @@ const CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const READY_SENTINEL = '__BZXZ_OCR_READY__';
 const REQUEST_TIMEOUT_MS = 8000;
 const STARTUP_TIMEOUT_MS = 20_000;
+const PYTHON_CANDIDATES = process.platform === 'win32'
+  ? ['python', 'python3', 'py']
+  : ['python3', 'python'];
 
 function getPythonBridge(): string {
   return path.join(getRootDir(), 'scripts', 'ocr_ddddocr.py');
 }
 
 export async function ocrCaptcha(base64Image: string): Promise<OcrResult> {
-  const ddddResult = await tryDdddocr(base64Image);
-  if (ddddResult.text.length >= 4) {
-    return ddddResult;
+  // Skip ddddocr entirely if a previous attempt proved it's unavailable —
+  // otherwise each captcha eats the 8s startup timeout for nothing.
+  if (ocrStatus.engine !== 'unavailable') {
+    const t0 = Date.now();
+    const ddddResult = await tryDdddocr(base64Image);
+    if (ddddResult.text.length >= 4) {
+      recordSolve('ddddocr', Date.now() - t0);
+      return ddddResult;
+    }
   }
 
-  return tryTesseract(base64Image);
+  const t0 = Date.now();
+  const tess = await tryTesseract(base64Image);
+  recordSolve('tesseract', Date.now() - t0);
+  return tess;
+}
+
+// ─── Diagnostics ─────────────────────────────────────────────────────────────
+// Exposed via /api/diagnostics/ocr so the user can see what's actually running
+// without opening the Electron dev console.
+
+export interface OcrStatus {
+  engine: 'ddddocr' | 'tesseract' | 'unavailable' | 'unknown';
+  workerPid: number | null;
+  startupAttempts: number;
+  lastError: string | null;
+  pythonCommand: string | null;
+  bridgePath: string;
+  solves: {
+    ddddocr: { count: number; totalMs: number };
+    tesseract: { count: number; totalMs: number };
+  };
+}
+
+const ocrStatus: OcrStatus = {
+  engine: 'unknown',
+  workerPid: null,
+  startupAttempts: 0,
+  lastError: null,
+  pythonCommand: null,
+  bridgePath: getPythonBridge(),
+  solves: {
+    ddddocr: { count: 0, totalMs: 0 },
+    tesseract: { count: 0, totalMs: 0 },
+  },
+};
+
+function recordSolve(engine: 'ddddocr' | 'tesseract', ms: number): void {
+  ocrStatus.solves[engine].count += 1;
+  ocrStatus.solves[engine].totalMs += ms;
+}
+
+export function getOcrStatus(): OcrStatus {
+  return {
+    ...ocrStatus,
+    solves: {
+      ddddocr: { ...ocrStatus.solves.ddddocr },
+      tesseract: { ...ocrStatus.solves.tesseract },
+    },
+  };
 }
 
 // ─── Long-lived Python OCR worker ────────────────────────────────────────────
-// The worker is started lazily on the first OCR request. It survives across
-// many solves so we pay the ~1-3s `import ddddocr` cost only once. If it dies
-// (crash, OOM, killed by Windows), the next OCR call transparently restarts it.
 
 interface PendingRequest {
   resolve: (text: string) => void;
@@ -42,10 +96,8 @@ interface PendingRequest {
 let worker: ChildProcessWithoutNullStreams | null = null;
 let workerReady: Promise<void> | null = null;
 const pending = new Map<string, PendingRequest>();
-let workerLastError: string | null = null;
 
 function failAllPending(reason: string) {
-  workerLastError = reason;
   for (const [id, req] of pending) {
     clearTimeout(req.timer);
     req.reject(new Error(reason));
@@ -53,18 +105,58 @@ function failAllPending(reason: string) {
   }
 }
 
+function trySpawnPython(): { proc: ChildProcessWithoutNullStreams; command: string } | null {
+  let lastErr: string | null = null;
+  for (const command of PYTHON_CANDIDATES) {
+    try {
+      const proc = spawn(command, ['-u', getPythonBridge()], {
+        windowsHide: true,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      // Catch immediate spawn errors (ENOENT, EACCES) before returning. Without
+      // this `proc.on('error')`, the rejection lands as an unhandled error event.
+      let immediateError: Error | null = null;
+      proc.once('error', (err) => { immediateError = err; });
+      // Small synchronous wait: spawn errors fire on next tick, so anything
+      // happening *now* is bookkeeping only. We attach the real error handler
+      // in startWorker and just reuse the proc if it didn't die instantly.
+      if (immediateError) {
+        lastErr = (immediateError as Error).message;
+        continue;
+      }
+      ocrStatus.pythonCommand = command;
+      return { proc, command };
+    } catch (err) {
+      lastErr = err instanceof Error ? err.message : String(err);
+    }
+  }
+  ocrStatus.lastError = `Could not spawn python (tried ${PYTHON_CANDIDATES.join(', ')}): ${lastErr ?? 'unknown'}`;
+  return null;
+}
+
 function startWorker(): Promise<void> {
   if (workerReady) return workerReady;
+  if (ocrStatus.engine === 'unavailable') {
+    return Promise.reject(new Error(ocrStatus.lastError ?? 'ddddocr worker permanently unavailable'));
+  }
 
-  const proc = spawn('python', ['-u', getPythonBridge()], {
-    windowsHide: true,
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
+  ocrStatus.startupAttempts += 1;
+  const spawned = trySpawnPython();
+  if (!spawned) {
+    ocrStatus.engine = 'unavailable';
+    return Promise.reject(new Error(ocrStatus.lastError ?? 'no python interpreter found'));
+  }
+  const proc = spawned.proc;
   worker = proc;
 
+  const stderrBuffer: string[] = [];
   const stderrLines = readline.createInterface({ input: proc.stderr });
   stderrLines.on('line', (line) => {
-    if (line) console.warn('[ocr-worker stderr]', line);
+    if (line) {
+      stderrBuffer.push(line);
+      if (stderrBuffer.length > 20) stderrBuffer.shift();
+      console.warn('[ocr-worker stderr]', line);
+    }
   });
 
   workerReady = new Promise<void>((resolve, reject) => {
@@ -79,10 +171,12 @@ function startWorker(): Promise<void> {
         if (line.includes(READY_SENTINEL)) {
           ready = true;
           clearTimeout(startupTimer);
+          ocrStatus.engine = 'ddddocr';
+          ocrStatus.workerPid = proc.pid ?? null;
+          ocrStatus.lastError = null;
           resolve();
-        } else {
-          // Pre-ready noise (warnings, etc.) — log and ignore
-          if (line.trim()) console.warn('[ocr-worker stdout]', line);
+        } else if (line.trim()) {
+          console.warn('[ocr-worker stdout]', line);
         }
         return;
       }
@@ -95,16 +189,27 @@ function startWorker(): Promise<void> {
     });
 
     proc.on('exit', (code, signal) => {
-      const reason = `OCR worker exited (code=${code}, signal=${signal})`;
+      const reason = `OCR worker exited (code=${code}, signal=${signal})${stderrBuffer.length ? '; stderr: ' + stderrBuffer.slice(-3).join(' | ') : ''}`;
       console.warn(`[ocr-worker] ${reason}`);
       worker = null;
       workerReady = null;
+      ocrStatus.workerPid = null;
+      // Exit before READY = startup failure (missing ddddocr package, etc.)
+      // Mark unavailable permanently so we don't keep wasting startup-timeout
+      // budget on every captcha.
+      if (!ready) {
+        ocrStatus.engine = 'unavailable';
+        ocrStatus.lastError = reason;
+      }
       failAllPending(reason);
     });
   });
 
   workerReady.catch((err) => {
-    console.warn('[ocr-worker] startup failed:', err.message);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[ocr-worker] startup failed:', msg);
+    ocrStatus.lastError = msg;
+    ocrStatus.engine = 'unavailable';
     worker = null;
     workerReady = null;
     try { proc.kill(); } catch { /* ignore */ }
@@ -138,7 +243,8 @@ async function tryDdddocr(base64Image: string): Promise<OcrResult> {
   try {
     await startWorker();
   } catch (err) {
-    console.warn('[captcha-ocr] worker unavailable, falling back to tesseract:', err instanceof Error ? err.message : String(err));
+    // Don't log here — startWorker already logged once, and we'd be noisy
+    // per-captcha during fallback periods.
     return { text: '', confidence: 0, rawText: '' };
   }
   if (!worker || !worker.stdin.writable) {
@@ -168,12 +274,10 @@ async function tryDdddocr(base64Image: string): Promise<OcrResult> {
       rawText: text.trim(),
     };
   } catch (err) {
-    console.warn('[captcha-ocr] worker request failed, falling back to tesseract:', err instanceof Error ? err.message : String(err));
     return { text: '', confidence: 0, rawText: '' };
   }
 }
 
-// Best-effort cleanup if the host process is going away (Electron quit, etc.).
 function shutdown() {
   if (worker) {
     try { worker.kill(); } catch { /* ignore */ }
@@ -187,6 +291,7 @@ process.once('SIGINT', shutdown);
 process.once('SIGTERM', shutdown);
 
 async function tryTesseract(base64Image: string): Promise<OcrResult> {
+  if (ocrStatus.engine === 'unknown') ocrStatus.engine = 'tesseract';
   const buffer = Buffer.from(base64Image, 'base64');
 
   const { default: sharp } = await import('sharp');

@@ -452,6 +452,7 @@ function renderSettings() {
       <div id="sourceStatusList" class="source-status-list">点击“全部检测”或单个源的“重试”按钮</div>
     </div>
     <div class="settings-actions">
+      <button class="btn btn-ghost btn-sm" onclick="showDiagnostics()">🩺 诊断</button>
       <button class="btn btn-ghost btn-sm" onclick="resetSettings();renderSettings()">恢复默认</button>
     </div>`;
   initDragSort();
@@ -562,6 +563,69 @@ function toggleDownloadSource(source, enabled) {
 function setConcurrency(n) { downloadConcurrency = n; saveSettings(); }
 function setTimeoutVal(n) { downloadTimeout = n; saveSettings(); }
 function setDownloadMode(mode) { downloadMode = mode; saveSettings(); }
+
+// ── Diagnostics: OCR engine status + recent server logs ──
+async function showDiagnostics() {
+  const modalBody = document.getElementById('modalBody');
+  const overlay = document.getElementById('modalOverlay');
+  modalBody.innerHTML = '<h3 style="margin-bottom:12px">🩺 诊断信息</h3><div style="padding:24px;text-align:center;color:var(--text-3)"><span class="spinner"></span> 加载中…</div>';
+  overlay.classList.add('open');
+
+  try {
+    const [ocrRes, logsRes] = await Promise.all([
+      fetch('/api/diagnostics/ocr').then(r => readApiResponse(r)),
+      fetch('/api/diagnostics/logs?limit=100').then(r => readApiResponse(r)),
+    ]);
+    const ocr = ocrRes || {};
+    const logs = (logsRes && logsRes.items) || [];
+
+    const engineLabel = {
+      ddddocr: '<span style="color:var(--success)">✅ ddddocr（最优）</span>',
+      tesseract: '<span style="color:var(--warning)">⚠️ tesseract（慢，fallback）</span>',
+      unavailable: '<span style="color:var(--danger)">❌ ddddocr 不可用，将用 tesseract</span>',
+      unknown: '<span style="color:var(--text-3)">尚未触发 OCR</span>',
+    }[ocr.engine] || ocr.engine;
+
+    const solveStats = ['ddddocr', 'tesseract'].map(eng => {
+      const s = (ocr.solves && ocr.solves[eng]) || { count: 0, avgMs: 0 };
+      return `<div><b>${eng}</b>: ${s.count} 次 · 平均 ${s.avgMs}ms</div>`;
+    }).join('');
+
+    const logHtml = logs.length === 0
+      ? '<div style="color:var(--text-3);padding:8px">暂无日志</div>'
+      : logs.map(l => {
+          const color = l.level === 'error' ? 'var(--danger)' : l.level === 'warn' ? 'var(--warning)' : 'var(--text-3)';
+          const time = l.ts ? l.ts.slice(11, 19) : '';
+          return `<div style="padding:3px 0;font:11px 'DM Mono',monospace;border-bottom:1px solid var(--border)"><span style="color:var(--text-3)">${time}</span> <span style="color:${color}">${l.level.toUpperCase()}</span> ${escapeHtml(l.message)}</div>`;
+        }).join('');
+
+    modalBody.innerHTML = `
+      <h3 style="margin-bottom:14px">🩺 诊断信息</h3>
+      <section style="margin-bottom:18px">
+        <div style="font-size:12px;color:var(--text-3);margin-bottom:6px">OCR 引擎</div>
+        <div style="font-size:14px;margin-bottom:8px">${engineLabel}</div>
+        <div style="font-size:12px;color:var(--text-2);line-height:1.7">
+          ${ocr.pythonCommand ? `<div>Python 命令: <code>${escapeHtml(ocr.pythonCommand)}</code></div>` : ''}
+          <div>桥接脚本: <code>${escapeHtml(ocr.bridgePath || '?')}</code></div>
+          <div>worker PID: <code>${ocr.workerPid ?? '—'}</code></div>
+          <div>启动尝试次数: <b>${ocr.startupAttempts ?? 0}</b></div>
+          ${ocr.lastError ? `<div style="color:var(--danger);word-break:break-all">最近错误: ${escapeHtml(ocr.lastError)}</div>` : ''}
+        </div>
+        <div style="margin-top:10px;font-size:12px;color:var(--text-2);line-height:1.7">${solveStats}</div>
+        ${ocr.engine === 'unavailable' ? '<div style="margin-top:10px;padding:8px 12px;background:oklch(58% 0.20 25 / 0.1);border-left:3px solid var(--danger);font-size:12px;line-height:1.6">⚠️ ddddocr 不可用是 BW 下载慢的主要原因。请确认：<br>1. 已安装 Python 3.8+（命令行能跑 <code>python --version</code>）<br>2. 已执行 <code>pip install ddddocr</code></div>' : ''}
+      </section>
+      <section>
+        <div style="font-size:12px;color:var(--text-3);margin-bottom:6px">最近服务端日志（${logs.length} 条）</div>
+        <div style="max-height:300px;overflow-y:auto;background:oklch(14% 0.014 255);padding:8px;border-radius:var(--radius-sm);border:1px solid var(--border)">${logHtml}</div>
+      </section>
+      <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">
+        <button class="btn btn-ghost btn-sm" onclick="showDiagnostics()">刷新</button>
+        <button class="btn btn-primary btn-sm" data-action="modal-close">关闭</button>
+      </div>`;
+  } catch (e) {
+    modalBody.innerHTML = `<h3>诊断信息</h3><p style="color:var(--danger)">加载失败: ${escapeHtml(e.message)}</p><div style="margin-top:14px;text-align:right"><button class="btn btn-primary btn-sm" data-action="modal-close">关闭</button></div>`;
+  }
+}
 
 function resetSettings() {
   downloadSources = [...DEFAULT_DOWNLOAD_SOURCES];
