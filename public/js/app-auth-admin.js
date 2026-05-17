@@ -78,6 +78,7 @@ function onAuthReady() {
   if (typeof refreshSourceHealth === 'function' && Date.now() - (sourceHealthCheckedAt || 0) > 5 * 60 * 1000) {
     refreshSourceHealth();
   }
+  if (typeof pollEnvironmentCheck === 'function') pollEnvironmentCheck();
 }
 
 var TAB_LABELS = {search:'标准检索',batch:'批量下载',complete:'标准补全',history:'下载历史',qual:'资质查询',stats:'使用统计',users:'用户管理',settings:'系统设置'};

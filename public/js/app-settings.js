@@ -564,7 +564,67 @@ function setConcurrency(n) { downloadConcurrency = n; saveSettings(); }
 function setTimeoutVal(n) { downloadTimeout = n; saveSettings(); }
 function setDownloadMode(mode) { downloadMode = mode; saveSettings(); }
 
-// ── Diagnostics: OCR engine status + recent server logs ──
+// ── Diagnostics: environment self-check + OCR engine status + recent server logs ──
+
+const ENV_CHECK_BADGE = {
+  ok:      { icon: '✅', color: 'var(--success)' },
+  fail:    { icon: '❌', color: 'var(--danger)' },
+  pending: { icon: '⏳', color: 'var(--text-3)' },
+  skip:    { icon: '⏭️', color: 'var(--text-3)' },
+};
+
+/** Poll /api/diagnostics/environment until it finishes (or 30s timeout),
+ *  then render the warning banner if anything failed.  Triggered on login. */
+async function pollEnvironmentCheck() {
+  const bannerEl = document.getElementById('envWarning');
+  const textEl = document.getElementById('envWarningText');
+  if (!bannerEl || !textEl) return;
+
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch('/api/diagnostics/environment');
+      const report = await readApiResponse(res);
+      if (report && report.finishedAt) {
+        renderEnvironmentBanner(report);
+        return;
+      }
+    } catch { /* keep trying */ }
+    await new Promise(r => setTimeout(r, 1500));
+  }
+}
+
+function renderEnvironmentBanner(report) {
+  const bannerEl = document.getElementById('envWarning');
+  const textEl = document.getElementById('envWarningText');
+  if (!bannerEl || !textEl) return;
+  const failed = Object.values(report.checks || {}).filter(c => c.status === 'fail');
+  if (!failed.length) { bannerEl.style.display = 'none'; return; }
+  const labels = failed.map(c => c.label.replace(/\s*\(.+/, '')).join('、');
+  textEl.textContent = `检测到 ${failed.length} 项异常: ${labels}`;
+  bannerEl.style.display = 'flex';
+}
+
+function envCheckListHtml(checks) {
+  return Object.values(checks || {}).map(c => {
+    const badge = ENV_CHECK_BADGE[c.status] || ENV_CHECK_BADGE.pending;
+    const tail = c.status === 'ok' && c.ms != null
+      ? `<span style="color:var(--text-3);font-size:11px">· ${c.ms}ms</span>`
+      : '';
+    const detail = c.detail
+      ? `<div style="font-size:11px;color:var(--text-3);margin-left:24px;word-break:break-all">${escapeHtml(c.detail)}</div>`
+      : '';
+    return `<div style="padding:6px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+        <span style="color:${badge.color}">${badge.icon}</span>
+        <span>${escapeHtml(c.label)}</span>
+        ${tail}
+      </div>
+      ${detail}
+    </div>`;
+  }).join('');
+}
+
 async function showDiagnostics() {
   const modalBody = document.getElementById('modalBody');
   const overlay = document.getElementById('modalOverlay');
@@ -572,12 +632,16 @@ async function showDiagnostics() {
   overlay.classList.add('open');
 
   try {
-    const [ocrRes, logsRes] = await Promise.all([
+    const [envRes, ocrRes, logsRes] = await Promise.all([
+      fetch('/api/diagnostics/environment').then(r => readApiResponse(r)),
       fetch('/api/diagnostics/ocr').then(r => readApiResponse(r)),
       fetch('/api/diagnostics/logs?limit=100').then(r => readApiResponse(r)),
     ]);
+    const env = envRes || {};
     const ocr = ocrRes || {};
     const logs = (logsRes && logsRes.items) || [];
+
+    renderEnvironmentBanner(env);
 
     const engineLabel = {
       ddddocr: '<span style="color:var(--success)">✅ ddddocr（最优）</span>',
@@ -602,7 +666,14 @@ async function showDiagnostics() {
     modalBody.innerHTML = `
       <h3 style="margin-bottom:14px">🩺 诊断信息</h3>
       <section style="margin-bottom:18px">
-        <div style="font-size:12px;color:var(--text-3);margin-bottom:6px">OCR 引擎</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div style="font-size:12px;color:var(--text-3)">环境自检</div>
+          <button class="btn btn-ghost btn-sm" onclick="recheckEnvironment()">重新检查</button>
+        </div>
+        ${envCheckListHtml(env.checks)}
+      </section>
+      <section style="margin-bottom:18px">
+        <div style="font-size:12px;color:var(--text-3);margin-bottom:6px">OCR 引擎详细</div>
         <div style="font-size:14px;margin-bottom:8px">${engineLabel}</div>
         <div style="font-size:12px;color:var(--text-2);line-height:1.7">
           ${ocr.pythonCommand ? `<div>Python 命令: <code>${escapeHtml(ocr.pythonCommand)}</code></div>` : ''}
@@ -625,6 +696,13 @@ async function showDiagnostics() {
   } catch (e) {
     modalBody.innerHTML = `<h3>诊断信息</h3><p style="color:var(--danger)">加载失败: ${escapeHtml(e.message)}</p><div style="margin-top:14px;text-align:right"><button class="btn btn-primary btn-sm" data-action="modal-close">关闭</button></div>`;
   }
+}
+
+async function recheckEnvironment() {
+  try {
+    await fetch('/api/diagnostics/environment/recheck', { method: 'POST' });
+  } catch { /* ignore */ }
+  showDiagnostics();
 }
 
 function resetSettings() {

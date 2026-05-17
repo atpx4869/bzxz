@@ -85,6 +85,21 @@ export function getOcrStatus(): OcrStatus {
   };
 }
 
+/**
+ * Eagerly start the OCR worker so the first real captcha doesn't pay the
+ * 1-3s import-ddddocr penalty. Resolves once the worker is ready or has
+ * permanently failed. Safe to call multiple times; subsequent calls reuse the
+ * existing worker.
+ */
+export async function warmupOcr(): Promise<void> {
+  try {
+    await startWorker();
+  } catch {
+    // startWorker already records the failure into ocrStatus; we resolve so
+    // callers can decide based on getOcrStatus().engine.
+  }
+}
+
 // ─── Long-lived Python OCR worker ────────────────────────────────────────────
 
 interface PendingRequest {

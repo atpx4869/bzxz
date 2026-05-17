@@ -16,6 +16,7 @@ import { AppError } from '../shared/errors';
 import { respond, respondError } from '../shared/response';
 import { getOcrStatus } from '../sources/shared/captcha-ocr';
 import { getRecentLogs } from '../shared/log-buffer';
+import { getEnvironmentReport, runEnvironmentCheck } from '../services/environment-check';
 
 /**
  * Legacy → canonical route rewrites. Express matches by url, so we just patch req.url
@@ -176,6 +177,20 @@ export function createApp() {
     const limit = Math.max(1, Math.min(parseInt((req.query.limit as string) || '200', 10) || 200, 500));
     respond(res, { items: getRecentLogs(limit) });
   });
+  app.get('/api/diagnostics/environment', requireAuth, (_req, res) => {
+    respond(res, getEnvironmentReport());
+  });
+  app.post('/api/diagnostics/environment/recheck', requireAuth, async (_req, res, next) => {
+    try {
+      await runEnvironmentCheck();
+      respond(res, getEnvironmentReport());
+    } catch (e) { next(e); }
+  });
+
+  // Kick off the self-check at server boot. Fire-and-forget — the check runs
+  // in parallel with normal request handling, results land in /api/diagnostics
+  // /environment when ready.
+  void runEnvironmentCheck();
 
   app.use(createStandardsRoutes({ db, sourceRegistry, exportTaskStore, requireAuth, baseDir }));
 

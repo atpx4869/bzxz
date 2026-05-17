@@ -116,6 +116,24 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
 /* Results "load more" sentinel */
 .results-more { display: flex; justify-content: center; padding: 16px 0; }
 
+/* Environment warning banner — shown when startup self-check finds problems */
+.env-warning {
+  background: oklch(58% 0.20 25 / 0.12);
+  border-bottom: 1px solid oklch(58% 0.20 25 / 0.3);
+  color: var(--text);
+  padding: 8px 18px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out);
+}
+.env-warning:hover { background: oklch(58% 0.20 25 / 0.18); }
+.env-warning-icon { font-size: 14px; flex: 0 0 auto; }
+.env-warning-text { flex: 1; color: var(--text-2); }
+.env-warning-link { color: var(--danger); font-weight: 600; flex: 0 0 auto; }
+
 /* Confirm modal */
 .confirm-overlay { position: fixed; inset: 0; background: oklch(8% 0.01 255 / 0.7); backdrop-filter: blur(4px); z-index: 1100; display: flex; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: opacity 0.18s ease, visibility 0.18s ease; }
 .confirm-overlay.open { opacity: 1; visibility: visible; }
