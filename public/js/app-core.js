@@ -83,9 +83,9 @@ const ALL_SOURCES = ['gbw', 'bz', 'by'];
 const DEFAULT_DOWNLOAD_SOURCES = ['gbw', 'bz', 'by'];
 const SOURCE_LABELS = { gbw: 'BW', bz: 'BZ', by: 'BY' };
 function srcLabel(s) { return SOURCE_LABELS[s] || s.toUpperCase(); }
-const DEFAULT_CONCURRENCY = 3;
+const DEFAULT_CONCURRENCY = 5;
 
-const VALID_CONCURRENCY = [1, 2, 3, 4, 5];
+const VALID_CONCURRENCY = [1, 2, 3, 4, 5, 6, 8];
 const VALID_TIMEOUTS = [10, 15, 20, 30, 60];
 
 function safeJsonParse(raw, fallback) {

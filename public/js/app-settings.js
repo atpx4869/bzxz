@@ -387,7 +387,7 @@ function renderSettings() {
     </div>`;
   }).join('');
 
-  const concurrencyOpts = [1, 2, 3, 4, 5].map(n => {
+  const concurrencyOpts = VALID_CONCURRENCY.map(n => {
     return `<button class="btn btn-sm ${n === downloadConcurrency ? 'btn-primary' : 'btn-ghost'}" onclick="setConcurrency(${n});renderSettings()">${n}</button>`;
   }).join('');
 
