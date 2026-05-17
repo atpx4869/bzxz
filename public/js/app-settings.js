@@ -680,6 +680,7 @@ async function showDiagnostics() {
           <div>桥接脚本: <code>${escapeHtml(ocr.bridgePath || '?')}</code></div>
           <div>worker PID: <code>${ocr.workerPid ?? '—'}</code></div>
           <div>启动尝试次数: <b>${ocr.startupAttempts ?? 0}</b></div>
+          ${ocr.envPath ? `<details style="margin-top:6px"><summary style="cursor:pointer;color:var(--text-3);font-size:11px">查看 PATH 环境变量 (用于排查 python 找不到)</summary><div style="font:11px 'DM Mono',monospace;color:var(--text-3);margin-top:4px;word-break:break-all;max-height:120px;overflow-y:auto">${escapeHtml(ocr.envPath)}</div></details>` : ''}
           ${ocr.lastError ? `<div style="color:var(--danger);word-break:break-all">最近错误: ${escapeHtml(ocr.lastError)}</div>` : ''}
         </div>
         <div style="margin-top:10px;font-size:12px;color:var(--text-2);line-height:1.7">${solveStats}</div>

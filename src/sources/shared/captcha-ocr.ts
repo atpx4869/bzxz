@@ -55,6 +55,10 @@ export interface OcrStatus {
   lastError: string | null;
   pythonCommand: string | null;
   bridgePath: string;
+  /** PATH the OCR worker would inherit when spawning python. Surfaced in diagnostics
+   *  so the user can confirm their Python install directory is on PATH (a frequent
+   *  cause of "ddddocr unavailable" when launched from a desktop shortcut). */
+  envPath: string;
   solves: {
     ddddocr: { count: number; totalMs: number };
     tesseract: { count: number; totalMs: number };
@@ -68,6 +72,7 @@ const ocrStatus: OcrStatus = {
   lastError: null,
   pythonCommand: null,
   bridgePath: getPythonBridge(),
+  envPath: process.env.PATH || process.env.Path || '',
   solves: {
     ddddocr: { count: 0, totalMs: 0 },
     tesseract: { count: 0, totalMs: 0 },
@@ -124,7 +129,13 @@ function failAllPending(reason: string) {
   }
 }
 
-function trySpawnPython(): { proc: ChildProcessWithoutNullStreams; command: string } | null {
+/**
+ * Try each python candidate in turn. spawn() itself never throws for
+ * ENOENT — it returns a proc that emits an 'error' event asynchronously.
+ * To probe whether the binary actually exists, we wait for *either*
+ * 'spawn' (success) or 'error' (failure) on next tick before committing.
+ */
+async function trySpawnPython(): Promise<{ proc: ChildProcessWithoutNullStreams; command: string } | null> {
   let lastErr: string | null = null;
   for (const command of PYTHON_CANDIDATES) {
     try {
@@ -132,15 +143,19 @@ function trySpawnPython(): { proc: ChildProcessWithoutNullStreams; command: stri
         windowsHide: true,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
-      // Catch immediate spawn errors (ENOENT, EACCES) before returning. Without
-      // this `proc.on('error')`, the rejection lands as an unhandled error event.
-      let immediateError: Error | null = null;
-      proc.once('error', (err) => { immediateError = err; });
-      // Small synchronous wait: spawn errors fire on next tick, so anything
-      // happening *now* is bookkeeping only. We attach the real error handler
-      // in startWorker and just reuse the proc if it didn't die instantly.
-      if (immediateError) {
-        lastErr = (immediateError as Error).message;
+      const probe = await new Promise<{ ok: boolean; err?: string }>((resolve) => {
+        const onSpawn = () => { cleanup(); resolve({ ok: true }); };
+        const onError = (err: Error) => { cleanup(); resolve({ ok: false, err: err.message }); };
+        const cleanup = () => {
+          proc.removeListener('spawn', onSpawn);
+          proc.removeListener('error', onError);
+        };
+        proc.once('spawn', onSpawn);
+        proc.once('error', onError);
+      });
+      if (!probe.ok) {
+        lastErr = probe.err ?? 'unknown spawn error';
+        try { proc.kill(); } catch { /* ignore */ }
         continue;
       }
       ocrStatus.pythonCommand = command;
@@ -160,78 +175,79 @@ function startWorker(): Promise<void> {
   }
 
   ocrStatus.startupAttempts += 1;
-  const spawned = trySpawnPython();
-  if (!spawned) {
-    ocrStatus.engine = 'unavailable';
-    return Promise.reject(new Error(ocrStatus.lastError ?? 'no python interpreter found'));
-  }
-  const proc = spawned.proc;
-  worker = proc;
-
-  const stderrBuffer: string[] = [];
-  const stderrLines = readline.createInterface({ input: proc.stderr });
-  stderrLines.on('line', (line) => {
-    if (line) {
-      stderrBuffer.push(line);
-      if (stderrBuffer.length > 20) stderrBuffer.shift();
-      console.warn('[ocr-worker stderr]', line);
+  workerReady = (async () => {
+    const spawned = await trySpawnPython();
+    if (!spawned) {
+      ocrStatus.engine = 'unavailable';
+      throw new Error(ocrStatus.lastError ?? 'no python interpreter found');
     }
-  });
+    const proc = spawned.proc;
+    worker = proc;
 
-  workerReady = new Promise<void>((resolve, reject) => {
-    const startupTimer = setTimeout(() => {
-      reject(new Error(`OCR worker did not become ready within ${STARTUP_TIMEOUT_MS}ms`));
-    }, STARTUP_TIMEOUT_MS);
+    const stderrBuffer: string[] = [];
+    const stderrLines = readline.createInterface({ input: proc.stderr });
+    stderrLines.on('line', (line) => {
+      if (line) {
+        stderrBuffer.push(line);
+        if (stderrBuffer.length > 20) stderrBuffer.shift();
+        console.warn('[ocr-worker stderr]', line);
+      }
+    });
 
-    const stdoutLines = readline.createInterface({ input: proc.stdout });
-    let ready = false;
-    stdoutLines.on('line', (line) => {
-      if (!ready) {
-        if (line.includes(READY_SENTINEL)) {
-          ready = true;
-          clearTimeout(startupTimer);
-          ocrStatus.engine = 'ddddocr';
-          ocrStatus.workerPid = proc.pid ?? null;
-          ocrStatus.lastError = null;
-          resolve();
-        } else if (line.trim()) {
-          console.warn('[ocr-worker stdout]', line);
+    await new Promise<void>((resolve, reject) => {
+      const startupTimer = setTimeout(() => {
+        reject(new Error(`OCR worker did not become ready within ${STARTUP_TIMEOUT_MS}ms`));
+      }, STARTUP_TIMEOUT_MS);
+
+      const stdoutLines = readline.createInterface({ input: proc.stdout });
+      let ready = false;
+      stdoutLines.on('line', (line) => {
+        if (!ready) {
+          if (line.includes(READY_SENTINEL)) {
+            ready = true;
+            clearTimeout(startupTimer);
+            ocrStatus.engine = 'ddddocr';
+            ocrStatus.workerPid = proc.pid ?? null;
+            ocrStatus.lastError = null;
+            resolve();
+          } else if (line.trim()) {
+            console.warn('[ocr-worker stdout]', line);
+          }
+          return;
         }
-        return;
-      }
-      handleLine(line);
-    });
+        handleLine(line);
+      });
 
-    proc.on('error', (err) => {
-      clearTimeout(startupTimer);
-      reject(err);
-    });
+      proc.on('error', (err) => {
+        clearTimeout(startupTimer);
+        reject(err);
+      });
 
-    proc.on('exit', (code, signal) => {
-      const reason = `OCR worker exited (code=${code}, signal=${signal})${stderrBuffer.length ? '; stderr: ' + stderrBuffer.slice(-3).join(' | ') : ''}`;
-      console.warn(`[ocr-worker] ${reason}`);
-      worker = null;
-      workerReady = null;
-      ocrStatus.workerPid = null;
-      // Exit before READY = startup failure (missing ddddocr package, etc.)
-      // Mark unavailable permanently so we don't keep wasting startup-timeout
-      // budget on every captcha.
-      if (!ready) {
-        ocrStatus.engine = 'unavailable';
-        ocrStatus.lastError = reason;
-      }
-      failAllPending(reason);
+      proc.on('exit', (code, signal) => {
+        const reason = `OCR worker exited (code=${code}, signal=${signal})${stderrBuffer.length ? '; stderr: ' + stderrBuffer.slice(-3).join(' | ') : ''}`;
+        console.warn(`[ocr-worker] ${reason}`);
+        worker = null;
+        workerReady = null;
+        ocrStatus.workerPid = null;
+        if (!ready) {
+          ocrStatus.engine = 'unavailable';
+          ocrStatus.lastError = reason;
+        }
+        failAllPending(reason);
+      });
     });
-  });
+  })();
 
   workerReady.catch((err) => {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn('[ocr-worker] startup failed:', msg);
     ocrStatus.lastError = msg;
     ocrStatus.engine = 'unavailable';
+    if (worker) {
+      try { worker.kill(); } catch { /* ignore */ }
+    }
     worker = null;
     workerReady = null;
-    try { proc.kill(); } catch { /* ignore */ }
   });
 
   return workerReady;
