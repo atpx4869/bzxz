@@ -17,6 +17,7 @@ import { respond, respondError } from '../shared/response';
 import { getOcrStatus } from '../sources/shared/captcha-ocr';
 import { getRecentLogs } from '../shared/log-buffer';
 import { getEnvironmentReport, runEnvironmentCheck } from '../services/environment-check';
+import { getHostStats } from '../shared/http';
 
 /**
  * Legacy → canonical route rewrites. Express matches by url, so we just patch req.url
@@ -185,6 +186,9 @@ export function createApp() {
       await runEnvironmentCheck();
       respond(res, getEnvironmentReport());
     } catch (e) { next(e); }
+  });
+  app.get('/api/diagnostics/hosts', requireAuth, (_req, res) => {
+    respond(res, { hosts: getHostStats() });
   });
 
   // Kick off the self-check at server boot. Fire-and-forget — the check runs

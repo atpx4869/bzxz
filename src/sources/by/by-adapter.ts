@@ -44,6 +44,11 @@ export class ByAdapter implements SourceAdapter {
   /** In-flight login: concurrent callers share the same Promise instead of each
    * kicking off their own 3-step login dance against the upstream. */
   private loginInFlight: Promise<boolean> | null = null;
+  /** Negative cache: once isAvailable fails (e.g. outside the LAN), don't
+   * waste 3 seconds on every search/download call re-checking. Re-probe at
+   * most every 60s so connectivity returning is detected without spamming. */
+  private availabilityCache: { value: boolean; checkedAt: number } | null = null;
+  private static readonly AVAILABILITY_CACHE_TTL_MS = 60_000;
 
   async searchStandards(input: SearchStandardsInput): Promise<StandardSummary[]> {
     const cacheKey = `by:search:${input.query}`;
@@ -175,11 +180,21 @@ export class ByAdapter implements SourceAdapter {
   // --- Internal Methods ---
 
   private async isAvailable(): Promise<boolean> {
+    const cached = this.availabilityCache;
+    if (cached && Date.now() - cached.checkedAt < ByAdapter.AVAILABILITY_CACHE_TTL_MS) {
+      return cached.value;
+    }
     try {
       const resp = await pooledFetch(BY_BASE, { method: 'HEAD', timeoutMs: 3000, retries: 1 });
+      this.availabilityCache = { value: resp.ok, checkedAt: Date.now() };
       return resp.ok;
     } catch (err) {
-      console.warn('[by-adapter] isAvailable check failed:', err instanceof Error ? err.message : String(err));
+      // Only log the first failure within a cache window — repeated logs from
+      // every search/download call outside the corporate LAN are pure noise.
+      if (!cached || cached.value) {
+        console.warn('[by-adapter] isAvailable check failed (will cache 60s):', err instanceof Error ? err.message : String(err));
+      }
+      this.availabilityCache = { value: false, checkedAt: Date.now() };
       return false;
     }
   }

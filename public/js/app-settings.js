@@ -632,13 +632,15 @@ async function showDiagnostics() {
   overlay.classList.add('open');
 
   try {
-    const [envRes, ocrRes, logsRes] = await Promise.all([
+    const [envRes, ocrRes, hostsRes, logsRes] = await Promise.all([
       fetch('/api/diagnostics/environment').then(r => readApiResponse(r)),
       fetch('/api/diagnostics/ocr').then(r => readApiResponse(r)),
+      fetch('/api/diagnostics/hosts').then(r => readApiResponse(r)),
       fetch('/api/diagnostics/logs?limit=100').then(r => readApiResponse(r)),
     ]);
     const env = envRes || {};
     const ocr = ocrRes || {};
+    const hosts = (hostsRes && hostsRes.hosts) || {};
     const logs = (logsRes && logsRes.items) || [];
 
     renderEnvironmentBanner(env);
@@ -685,6 +687,22 @@ async function showDiagnostics() {
         </div>
         <div style="margin-top:10px;font-size:12px;color:var(--text-2);line-height:1.7">${solveStats}</div>
         ${ocr.engine === 'unavailable' ? '<div style="margin-top:10px;padding:8px 12px;background:oklch(58% 0.20 25 / 0.1);border-left:3px solid var(--danger);font-size:12px;line-height:1.6">⚠️ ddddocr 不可用是 BW 下载慢的主要原因。请确认：<br>1. 已安装 Python 3.8+（命令行能跑 <code>python --version</code>）<br>2. 已执行 <code>pip install ddddocr</code></div>' : ''}
+      </section>
+      <section style="margin-bottom:18px">
+        <div style="font-size:12px;color:var(--text-3);margin-bottom:6px">上游延迟统计（每个 host 最近一次/平均/最大）</div>
+        ${Object.keys(hosts).length === 0
+          ? '<div style="color:var(--text-3);font-size:12px;padding:4px 0">暂无请求记录</div>'
+          : Object.entries(hosts).map(([host, s]) => {
+              const slow = s.avgMs > 2000;
+              const color = slow ? 'var(--warning)' : s.avgMs > 5000 ? 'var(--danger)' : 'var(--text-2)';
+              return `<div style="padding:4px 0;font-size:12px;display:flex;gap:10px;align-items:center;border-bottom:1px solid var(--border)">
+                <code style="font-size:11px;color:var(--text-3);min-width:200px">${escapeHtml(host)}</code>
+                <span style="color:${color}">avg <b>${s.avgMs}ms</b></span>
+                <span style="color:var(--text-3)">max ${s.maxMs}ms</span>
+                <span style="color:var(--text-3)">last ${s.lastMs}ms</span>
+                <span style="color:var(--text-3)">${s.count}次${s.errors ? ` · <span style="color:var(--danger)">${s.errors}失败</span>` : ''}</span>
+              </div>`;
+            }).join('')}
       </section>
       <section>
         <div style="font-size:12px;color:var(--text-3);margin-bottom:6px">最近服务端日志（${logs.length} 条）</div>
