@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import type Database from 'better-sqlite3';
 import { parseCookie } from '../shared/errors';
 import { getSetting, GUEST_USERNAME } from '../services/db';
+import { respondError } from '../shared/response';
 
 export interface AuthUser {
   id: number;
@@ -98,7 +99,7 @@ export function createAuthMiddleware(db: Database.Database) {
     // Login required — normal auth flow
     const token = parseCookie(req.headers.cookie, 'bzxz_session');
     if (!token) {
-      res.status(401).json({ code: 'UNAUTHORIZED', message: '请先登录' });
+      respondError(res, 401, 'UNAUTHORIZED', '请先登录');
       return;
     }
 
@@ -119,7 +120,7 @@ export function createAuthMiddleware(db: Database.Database) {
       if (row) {
         db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
       }
-      res.status(401).json({ code: 'UNAUTHORIZED', message: '会话已过期，请重新登录' });
+      respondError(res, 401, 'UNAUTHORIZED', '会话已过期，请重新登录');
       return;
     }
 
@@ -137,7 +138,7 @@ export function createAuthMiddleware(db: Database.Database) {
   function requireAdmin(req: Request, res: Response, next: NextFunction): void {
     requireAuth(req, res, () => {
       if (req.user?.role !== 'admin') {
-        res.status(403).json({ code: 'FORBIDDEN', message: '需要管理员权限' });
+        respondError(res, 403, 'FORBIDDEN', '需要管理员权限');
         return;
       }
       next();

@@ -13,6 +13,33 @@ import { createStatsRoutes } from './stats-routes';
 import { createQualificationRoutes } from './cnas-routes';
 import { createStandardsRoutes } from './standards-routes';
 import { AppError } from '../shared/errors';
+import { respond, respondError } from '../shared/response';
+
+/**
+ * Legacy → canonical route rewrites. Express matches by url, so we just patch req.url
+ * before the router sees it. New code should only emit canonical paths.
+ */
+const LEGACY_ROUTE_REWRITES: Array<[RegExp, string]> = [
+  [/^\/api\/standards\/qualifications(\?|$)/, '/api/qualifications/batch-query$1'],
+  [/^\/api\/cnas\/labs(\/.*)?$/, '/api/qualifications/labs/cnas$1'],
+  [/^\/api\/cnas\/sync(\?|$)/, '/api/qualifications/labs/cnas/sync$1'],
+  [/^\/api\/cnas\/sync-logs(\?|$)/, '/api/qualifications/labs/cnas/sync-logs$1'],
+  [/^\/api\/cma\/search-labs(\?|$)/, '/api/qualifications/labs/cma/search$1'],
+  [/^\/api\/cma\/labs(\/.*)?$/, '/api/qualifications/labs/cma$1'],
+  [/^\/api\/cma\/sync(\?|$)/, '/api/qualifications/labs/cma/sync$1'],
+  [/^\/api\/cma\/sync-logs(\?|$)/, '/api/qualifications/labs/cma/sync-logs$1'],
+  [/^\/api\/qualification-links(\/.*)?$/, '/api/qualifications/links$1'],
+];
+
+function legacyRouteAlias(req: Request, _res: Response, next: NextFunction): void {
+  for (const [pattern, replacement] of LEGACY_ROUTE_REWRITES) {
+    if (pattern.test(req.url)) {
+      req.url = req.url.replace(pattern, replacement);
+      break;
+    }
+  }
+  next();
+}
 
 export function createApp() {
   const app = express();
@@ -26,6 +53,10 @@ export function createApp() {
 
   app.use(express.json());
   app.use(express.static(path.join(baseDir, 'public')));
+
+  // Legacy route aliases: rewrite old paths to new canonical paths in-place so the actual
+  // route handlers below only know about the new layout. Removed in a future major.
+  app.use(legacyRouteAlias);
 
   // Serve index.html at root
   app.get('/', (_req, res) => {
@@ -42,17 +73,17 @@ export function createApp() {
     const filename = String(req.params.filename);
     // Strict filename whitelist — no path separators or traversal
     if (!/^[a-zA-Z0-9一-鿿._\-\s()]+$/.test(filename)) {
-      res.status(400).json({ code: 'BAD_REQUEST', message: 'Invalid filename' });
+      respondError(res, 400, 'BAD_REQUEST', 'Invalid filename');
       return;
     }
     const exportsDir = path.resolve(baseDir, 'data', 'exports');
     const filePath = path.resolve(exportsDir, filename);
     if (!filePath.startsWith(exportsDir + path.sep)) {
-      res.status(400).json({ code: 'BAD_REQUEST', message: 'Invalid filename' });
+      respondError(res, 400, 'BAD_REQUEST', 'Invalid filename');
       return;
     }
     if (!existsSync(filePath)) {
-      res.status(404).json({ code: 'NOT_FOUND', message: 'File not found' });
+      respondError(res, 404, 'NOT_FOUND', 'File not found');
       return;
     }
     if (req.query.inline === '1') {
@@ -66,7 +97,7 @@ export function createApp() {
     try {
       const exportsDir = path.resolve(baseDir, 'data', 'exports');
       if (!existsSync(exportsDir)) {
-        res.json({ items: [] });
+        respond(res, { items: [] });
         return;
       }
       const names = await readdir(exportsDir);
@@ -89,7 +120,7 @@ export function createApp() {
             downloadUrl: `/api/downloads/${encodeURIComponent(name)}`,
           };
         }));
-      res.json({ items: items.filter(Boolean).sort((a: any, b: any) => String(b.mtime).localeCompare(String(a.mtime))) });
+      respond(res, { items: items.filter(Boolean).sort((a: any, b: any) => String(b.mtime).localeCompare(String(a.mtime))) });
     } catch (error) {
       next(error);
     }
@@ -99,17 +130,17 @@ export function createApp() {
     try {
       const filename = String(req.params.filename);
       if (!/^[a-zA-Z0-9一-鿿._\-\s()]+$/.test(filename)) {
-        res.status(400).json({ code: 'BAD_REQUEST', message: 'Invalid filename' });
+        respondError(res, 400, 'BAD_REQUEST', 'Invalid filename');
         return;
       }
       const exportsDir = path.resolve(baseDir, 'data', 'exports');
       const filePath = path.resolve(exportsDir, filename);
       if (!filePath.startsWith(exportsDir + path.sep)) {
-        res.status(400).json({ code: 'BAD_REQUEST', message: 'Invalid filename' });
+        respondError(res, 400, 'BAD_REQUEST', 'Invalid filename');
         return;
       }
       await unlink(filePath);
-      res.json({ ok: true });
+      respond(res, { ok: true });
     } catch (error) {
       next(error);
     }
@@ -122,7 +153,7 @@ export function createApp() {
   app.use(createQualificationRoutes(db, requireAuth));
 
   app.get('/api/health', (_req, res) => {
-    res.json({ ok: true, sources: sourceRegistry.list() });
+    respond(res, { ok: true, sources: sourceRegistry.list() });
   });
 
   app.use(createStandardsRoutes({ db, sourceRegistry, exportTaskStore, requireAuth, baseDir }));
@@ -132,24 +163,17 @@ export function createApp() {
     const multerCodes = new Set(['LIMIT_FILE_SIZE', 'LIMIT_UNEXPECTED_FILE', 'LIMIT_FILE_COUNT', 'LIMIT_FIELD_KEY', 'LIMIT_FIELD_VALUE', 'LIMIT_FIELD_COUNT', 'LIMIT_PART_COUNT']);
     if (multerCodes.has((error as any)?.code)) {
       const msg = (error as any)?.code === 'LIMIT_FILE_SIZE' ? '文件大小不能超过 10MB' : (error as any).message || '上传错误';
-      res.status(400).json({ code: 'BAD_REQUEST', message: msg });
+      respondError(res, 400, 'BAD_REQUEST', msg);
       return;
     }
     // AppError instances
     if (error instanceof AppError) {
-      res.status(error.statusCode).json({
-        code: error.code,
-        message: error.message,
-        details: error.details,
-      });
+      respondError(res, error.statusCode, error.code, error.message, error.details);
       return;
     }
 
     console.error(error);
-    res.status(500).json({
-      code: 'INTERNAL_SERVER_ERROR',
-      message: 'Unexpected server error',
-    });
+    respondError(res, 500, 'INTERNAL_SERVER_ERROR', 'Unexpected server error');
   });
 
   return app;

@@ -1,5 +1,83 @@
 const API = '';
 
+// ── API client ──
+// All server JSON responses are { data, error } envelopes (see src/shared/response.ts).
+// apiRequest unwraps that envelope: on success returns data; on { error } throws an
+// Error with .code and .details attached. Non-JSON (HTML, network errors) raise a
+// generic NETWORK_ERROR.
+async function apiRequest(path, init) {
+  let res;
+  try {
+    res = await fetch(API + path, init);
+  } catch (e) {
+    const err = new Error(e && e.message ? e.message : '网络错误');
+    err.code = 'NETWORK_ERROR';
+    throw err;
+  }
+  let body = null;
+  try { body = await res.json(); } catch { /* non-JSON response */ }
+  if (body && typeof body === 'object' && 'data' in body && 'error' in body) {
+    if (body.error) {
+      const err = new Error(body.error.message || 'Request failed');
+      err.code = body.error.code || 'UNKNOWN';
+      err.details = body.error.details;
+      err.status = res.status;
+      throw err;
+    }
+    return body.data;
+  }
+  if (!res.ok) {
+    const err = new Error('HTTP ' + res.status);
+    err.code = 'HTTP_ERROR';
+    err.status = res.status;
+    throw err;
+  }
+  // Body present but not a Result envelope — return as-is (used by streaming endpoints).
+  return body;
+}
+
+// Convenience wrappers
+async function apiGet(path) { return apiRequest(path, { method: 'GET' }); }
+async function apiPostJson(path, body) {
+  return apiRequest(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+}
+async function apiPutJson(path, body) {
+  return apiRequest(path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+}
+async function apiDelete(path) { return apiRequest(path, { method: 'DELETE' }); }
+
+// Legacy-style helper for code that already does `const res = await fetch(...); const data = await res.json();`.
+// Parses body, unwraps Result envelope if present, and on error returns { code, message, details }
+// so callers can still check `if (!res.ok) throw new Error(data.message)`.
+async function readApiResponse(res) {
+  const raw = await res.text();
+  if (!raw) return {};
+  let parsed;
+  try { parsed = JSON.parse(raw); }
+  catch { return { message: raw }; }
+  if (parsed && typeof parsed === 'object' && 'data' in parsed && 'error' in parsed) {
+    if (parsed.error) {
+      return { code: parsed.error.code, message: parsed.error.message, details: parsed.error.details };
+    }
+    return parsed.data == null ? {} : parsed.data;
+  }
+  return parsed;
+}
+
+// SSE/streaming event parser: server emits `data: {data,error}` lines.
+// Returns { ok: bool, value, error } so the consumer doesn't redo this unwrap.
+function parseSseEvent(eventData) {
+  let parsed;
+  try { parsed = JSON.parse(eventData); }
+  catch { return { ok: false, error: { code: 'PARSE_ERROR', message: 'Invalid SSE payload' } }; }
+  if (parsed && typeof parsed === 'object' && 'data' in parsed && 'error' in parsed) {
+    if (parsed.error) return { ok: false, error: parsed.error };
+    return { ok: true, value: parsed.data };
+  }
+  // Pre-envelope payload — pass through
+  return { ok: true, value: parsed };
+}
+
 // ── Settings ──
 const ALL_SOURCES = ['gbw', 'bz', 'by'];
 const DEFAULT_DOWNLOAD_SOURCES = ['gbw', 'bz', 'by'];
@@ -89,8 +167,8 @@ window._tabCleanup = window._tabCleanup || {};
 
 function switchTab(tab) {
   // Permission check
-  if (currentUser && currentUser.allowed_tabs && tab !== 'users') {
-    if (currentUser.allowed_tabs.indexOf(tab) < 0) return;
+  if (currentUser && currentUser.allowedTabs && tab !== 'users') {
+    if (currentUser.allowedTabs.indexOf(tab) < 0) return;
   }
   for (const fn of Object.values(window._tabCleanup)) {
     try { fn(); } catch (e) { /* ignore individual cleanup failure */ }

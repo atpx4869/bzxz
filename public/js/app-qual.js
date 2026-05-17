@@ -228,7 +228,7 @@ async function doQualSearch() {
   try {
     const url = `/api/qualifications/search?q=${encodeURIComponent(q)}${qualSearchSource ? '&source=' + qualSearchSource : ''}`;
     const res = await fetch(url);
-    const data = await res.json();
+    const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message);
     renderQualSearchResults(data.items || []);
   } catch (e) {
@@ -346,10 +346,12 @@ let qualCmaLabsCache = [];
 async function loadQualLabs() {
   try {
     const [cnasRes, cmaRes] = await Promise.all([fetch('/api/cnas/labs'), fetch('/api/cma/labs')]);
-    const cnasLabs = await cnasRes.json();
-    const cmaLabs = await cmaRes.json();
-    qualCnasLabsCache = cnasLabs || [];
-    qualCmaLabsCache = cmaLabs || [];
+    const cnasData = await readApiResponse(cnasRes);
+    const cmaData = await readApiResponse(cmaRes);
+    const cnasLabs = cnasData.items || cnasData || [];
+    const cmaLabs = cmaData.items || cmaData || [];
+    qualCnasLabsCache = cnasLabs;
+    qualCmaLabsCache = cmaLabs;
     renderQualLabs('cnas', cnasLabs);
     renderQualLabs('cma', cmaLabs);
   } catch (e) { /* silent */ }
@@ -357,10 +359,10 @@ async function loadQualLabs() {
 
 function formatSyncStatus(lab) {
   const statusColors = { success: 'var(--success)', syncing: 'var(--warning)', error: 'var(--danger)' };
-  const color = statusColors[lab.sync_status] || 'var(--text-3)';
-  const statusText = lab.sync_status || '—';
-  if (lab.sync_status === 'syncing' && lab.sync_progress) {
-    const { fetched, total } = lab.sync_progress;
+  const color = statusColors[lab.syncStatus] || 'var(--text-3)';
+  const statusText = lab.syncStatus || '—';
+  if (lab.syncStatus === 'syncing' && lab.syncProgress) {
+    const { fetched, total } = lab.syncProgress;
     const pct = total > 0 ? Math.round(fetched / total * 100) : 0;
     return `<span style="color:${color}">同步中</span> <span style="color:var(--accent);font-weight:600">${fetched}/${total > 0 ? total : '?'}</span>${total > 0 ? ` (${pct}%)` : ''}`;
   }
@@ -373,37 +375,37 @@ function renderQualLabs(type, labs) {
   const nameField = type === 'cnas' ? 'lab_name' : 'lab_name';
   const idField = type === 'cnas' ? 'lab_no' : 'cert_number';
   container.innerHTML = labs.map(lab => {
-    const syncInfo = lab.last_sync_at ? `<span>${utcToBeijing(lab.last_sync_at)}</span>` : '<span style="color:var(--text-3)">未同步</span>';
+    const syncInfo = lab.lastSyncAt ? `<span>${utcToBeijing(lab.lastSyncAt)}</span>` : '<span style="color:var(--text-3)">未同步</span>';
     const statusHtml = formatSyncStatus(lab);
     if (type === 'cma') {
-      const certStatusColor = /正常|有效/.test(lab.cert_status || '') ? 'var(--success)' : 'var(--warning)';
+      const certStatusColor = /正常|有效/.test(lab.certStatus || '') ? 'var(--success)' : 'var(--warning)';
       return `<div class="qual-lab-card">
         <div class="qual-lab-header">
-          <div class="qual-lab-name">${escapeHtml(lab.lab_name || lab.cert_number)}</div>
+          <div class="qual-lab-name">${escapeHtml(lab.labName || lab.certNumber)}</div>
           <div class="qual-lab-actions">
-            <button onclick="linkQualLab('cma','${escapeHtml(lab.cert_number)}',${JSON.stringify(lab.lab_name || '').replace(/"/g, '&quot;')})">关联CNAS</button>
-            <button onclick="syncQualLab('cma','${escapeHtml(lab.cert_number)}')">同步</button>
-            <button class="danger" onclick="deleteQualLab('cma','${escapeHtml(lab.cert_number)}')">删除</button>
+            <button onclick="linkQualLab('cma','${escapeHtml(lab.certNumber)}',${JSON.stringify(lab.labName || '').replace(/"/g, '&quot;')})">关联CNAS</button>
+            <button onclick="syncQualLab('cma','${escapeHtml(lab.certNumber)}')">同步</button>
+            <button class="danger" onclick="deleteQualLab('cma','${escapeHtml(lab.certNumber)}')">删除</button>
           </div>
         </div>
         <div class="qual-lab-meta">
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:4px 14px;line-height:1.6">
             <div>地址: <span>${escapeHtml(lab.address || '—')}</span></div>
-            <div>证书编号: <span>${escapeHtml(lab.cert_number || '—')}</span></div>
-            <div>证书颁发时间: <span>${escapeHtml(lab.issue_date || '—')}</span></div>
-            <div>有效期起始: <span>${escapeHtml(lab.valid_from || '—')}</span></div>
-            <div>有效期截止: <span>${escapeHtml(lab.valid_to || '—')}</span></div>
-            <div>证书状态: <span style="color:${certStatusColor}">${escapeHtml(lab.cert_status || '—')}</span></div>
+            <div>证书编号: <span>${escapeHtml(lab.certNumber || '—')}</span></div>
+            <div>证书颁发时间: <span>${escapeHtml(lab.issueDate || '—')}</span></div>
+            <div>有效期起始: <span>${escapeHtml(lab.validFrom || '—')}</span></div>
+            <div>有效期截止: <span>${escapeHtml(lab.validTo || '—')}</span></div>
+            <div>证书状态: <span style="color:${certStatusColor}">${escapeHtml(lab.certStatus || '—')}</span></div>
           </div>
-          <div style="margin-top:6px">同步状态: ${statusHtml} | 记录: <span>${lab.record_count}</span> | 上次同步: ${syncInfo}</div>
-          ${lab.linked_cnas_lab_no ? `<div>已关联 CNAS: <span>${escapeHtml(lab.linked_cnas_lab_no)}</span> · <button class="qual-inline-btn" onclick="unlinkQualLab('CMA','${escapeHtml(lab.cert_number)}')">取消关联</button></div>` : ''}
-          ${lab.sync_error ? `<div style="color:var(--danger);font-size:11px">${escapeHtml(lab.sync_error)}</div>` : ''}
+          <div style="margin-top:6px">同步状态: ${statusHtml} | 记录: <span>${lab.recordCount}</span> | 上次同步: ${syncInfo}</div>
+          ${lab.linkedCnasLabNo ? `<div>已关联 CNAS: <span>${escapeHtml(lab.linkedCnasLabNo)}</span> · <button class="qual-inline-btn" onclick="unlinkQualLab('CMA','${escapeHtml(lab.certNumber)}')">取消关联</button></div>` : ''}
+          ${lab.syncError ? `<div style="color:var(--danger);font-size:11px">${escapeHtml(lab.syncError)}</div>` : ''}
         </div>
       </div>`;
     }
     let certTasksHtml = '';
     try {
-      const tasks = JSON.parse(lab.cert_tasks || '[]');
+      const tasks = JSON.parse(lab.certTasks || '[]');
       if (tasks.length) {
         const taskRows = tasks.map(t => `<tr><td>${escapeHtml(t.taskNo)}</td><td>${escapeHtml(t.reviewType)}</td><td>${escapeHtml(t.signDate)}</td><td>${escapeHtml(t.scopeStatus)}</td></tr>`).join('');
         certTasksHtml = `<div class="qual-lab-tasks"><div class="qual-lab-tasks-title">证书附件（能力范围）</div><table class="qual-lab-tasks-table"><thead><tr><th>任务编号</th><th>评审类型</th><th>签发日期</th><th>公布状态</th></tr></thead><tbody>${taskRows}</tbody></table></div>`;
@@ -421,16 +423,16 @@ function renderQualLabs(type, labs) {
       </div>
       <div class="qual-lab-meta">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:3px 12px;line-height:1.6">
-          <div>注册编号: <span>${escapeHtml(lab.lab_no || '—')}</span></div>
-          ${lab.other_names ? `<div>其他名称: <span>${escapeHtml(lab.other_names)}</span></div>` : ''}
-          ${lab.org_address ? `<div>单位地址: <span>${escapeHtml(lab.org_address)}</span></div>` : ''}
-          ${lab.validity_period ? `<div>认可有效期限: <span>${escapeHtml(lab.validity_period)}</span></div>` : ''}
-          ${lab.cert_update_ts ? `<div>证书更新日期: <span>${escapeHtml(lab.cert_update_ts)}</span></div>` : ''}
+          <div>注册编号: <span>${escapeHtml(lab.labNo || '—')}</span></div>
+          ${lab.otherNames ? `<div>其他名称: <span>${escapeHtml(lab.otherNames)}</span></div>` : ''}
+          ${lab.orgAddress ? `<div>单位地址: <span>${escapeHtml(lab.orgAddress)}</span></div>` : ''}
+          ${lab.validityPeriod ? `<div>认可有效期限: <span>${escapeHtml(lab.validityPeriod)}</span></div>` : ''}
+          ${lab.certUpdateTs ? `<div>证书更新日期: <span>${escapeHtml(lab.certUpdateTs)}</span></div>` : ''}
           ${lab.validate ? `<div>有效期至: <span>${escapeHtml(lab.validate)}</span></div>` : ''}
         </div>
-        <div style="margin-top:5px">状态: ${statusHtml} | 记录: <span>${lab.record_count}</span> | 上次同步: ${syncInfo}</div>
-        ${lab.linked_cma_cert_number ? `<div>已关联 CMA: <span>${escapeHtml(lab.linked_cma_cert_number)}</span> · <button class="qual-inline-btn" onclick="unlinkQualLab('CNAS','${escapeHtml(lab[idField])}')">取消关联</button></div>` : ''}
-        ${lab.sync_error ? `<div style="color:var(--danger);font-size:11px">${escapeHtml(lab.sync_error)}</div>` : ''}
+        <div style="margin-top:5px">状态: ${statusHtml} | 记录: <span>${lab.recordCount}</span> | 上次同步: ${syncInfo}</div>
+        ${lab.linkedCmaCertNumber ? `<div>已关联 CMA: <span>${escapeHtml(lab.linkedCmaCertNumber)}</span> · <button class="qual-inline-btn" onclick="unlinkQualLab('CNAS','${escapeHtml(lab[idField])}')">取消关联</button></div>` : ''}
+        ${lab.syncError ? `<div style="color:var(--danger);font-size:11px">${escapeHtml(lab.syncError)}</div>` : ''}
       </div>
       ${certTasksHtml}
     </div>`;
@@ -486,14 +488,14 @@ async function subscribeCmaCandidate(publicDetailId) {
     const res = await fetch('/api/cma/labs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ public_detail_id: publicDetailId }),
+      body: JSON.stringify({ publicDetailId: publicDetailId }),
     });
     const data = await readQualApiJson(res);
     if (!res.ok) throw new Error(data.message || '订阅失败');
-    if (progress) progress.innerHTML = `已订阅 ${escapeHtml(data.lab_name || data.cert_number || 'CMA 机构')}，正在刷新列表…`;
+    if (progress) progress.innerHTML = `已订阅 ${escapeHtml(data.labName || data.certNumber || 'CMA 机构')}，正在刷新列表…`;
     loadQualLabs();
     setTimeout(() => { document.getElementById('qualCmaCandidates').innerHTML = ''; }, 900);
-    showToast(`已订阅 CMA 机构: ${data.lab_name || data.cert_number}`);
+    showToast(`已订阅 CMA 机构: ${data.labName || data.certNumber}`);
   } catch (e) {
     document.querySelectorAll('[data-cma-subscribe]').forEach(b => { b.disabled = false; });
     if (btn) btn.innerHTML = '订阅';
@@ -510,14 +512,23 @@ function cssEscape(value) {
 
 async function readQualApiJson(res) {
   const text = await res.text();
+  let parsed;
   try {
-    return text ? JSON.parse(text) : {};
+    parsed = text ? JSON.parse(text) : {};
   } catch {
     if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
       throw new Error('接口返回了页面 HTML，后端可能还没重启或未加载最新路由');
     }
     throw new Error('接口返回格式不是 JSON');
   }
+  // Unwrap Result envelope { data, error } if present
+  if (parsed && typeof parsed === 'object' && 'data' in parsed && 'error' in parsed) {
+    if (parsed.error) {
+      return { code: parsed.error.code, message: parsed.error.message, details: parsed.error.details };
+    }
+    return parsed.data == null ? {} : parsed.data;
+  }
+  return parsed;
 }
 
 async function addQualLab(type) {
@@ -535,7 +546,7 @@ async function addQualLab(type) {
         body = { lab_no: val };
       }
       const res = await fetch('/api/cnas/labs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.message); }
+      if (!res.ok) { const d = await readApiResponse(res); throw new Error(d.message); }
     } else {
       await searchCmaLabCandidates();
       return;
@@ -556,9 +567,9 @@ async function editQualLabName(type, id, currentName) {
     const res = await fetch(url, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lab_name: newName }),
+      body: JSON.stringify({ labName: newName }),
     });
-    if (!res.ok) { const d = await res.json(); throw new Error(d.message); }
+    if (!res.ok) { const d = await readApiResponse(res); throw new Error(d.message); }
     loadQualLabs();
     showToast('名称已更新');
   } catch (e) {
@@ -570,8 +581,8 @@ async function linkQualLab(type, id, currentName) {
   const candidates = type === 'cnas' ? qualCmaLabsCache : qualCnasLabsCache;
   const targetLabel = type === 'cnas' ? 'CMA证书编号' : 'CNAS实验室编号';
   const options = candidates.slice(0, 12).map(l => {
-    const candidateId = type === 'cnas' ? l.cert_number : l.lab_no;
-    return `${candidateId} - ${l.lab_name || ''}`;
+    const candidateId = type === 'cnas' ? l.certNumber : l.labNo;
+    return `${candidateId} - ${l.labName || ''}`;
   }).join('\n');
   const targetId = prompt(`输入要关联的${targetLabel}：\n\n可选项：\n${options || '暂无可选订阅'}`, '');
   if (!targetId) return;
@@ -632,7 +643,7 @@ async function deleteQualLab(type, id) {
   const url = type === 'cnas' ? `/api/cnas/labs/${encodeURIComponent(id)}` : `/api/cma/labs/${encodeURIComponent(id)}`;
   try {
     const res = await fetch(url, { method: 'DELETE' });
-    if (!res.ok) throw new Error((await res.json()).message);
+    if (!res.ok) throw new Error((await readApiResponse(res)).message);
     loadQualLabs();
     showToast('已删除');
   } catch (e) { showToast(`删除失败: ${e.message}`, 'fail'); }
@@ -649,7 +660,7 @@ function startSyncProgressPoll() {
   if (_qualSyncPollTimer) return;
   _qualSyncPollTimer = setInterval(async () => {
     await loadQualLabs();
-    const anySyncing = qualCnasLabsCache.some(l => l.sync_status === 'syncing') || qualCmaLabsCache.some(l => l.sync_status === 'syncing');
+    const anySyncing = qualCnasLabsCache.some(l => l.syncStatus === 'syncing') || qualCmaLabsCache.some(l => l.syncStatus === 'syncing');
     if (!anySyncing) {
       clearInterval(_qualSyncPollTimer);
       _qualSyncPollTimer = null;
@@ -664,7 +675,7 @@ async function syncQualLab(type, id) {
   startSyncProgressPoll();
   try {
     const res = await fetch(url, { method: 'POST' });
-    const data = await res.json();
+    const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message);
     loadQualLabs();
     loadLabsSyncLogs();
@@ -680,7 +691,7 @@ async function syncAllQualLabs() {
       fetch('/api/cnas/sync', { method: 'POST' }),
       fetch('/api/cma/sync', { method: 'POST' }),
     ]);
-    await cnasRes.json(); await cmaRes.json();
+    await readApiResponse(cnasRes); await readApiResponse(cmaRes);
     loadQualLabs();
     loadLabsSyncLogs();
     showToast('全部同步完成');
@@ -701,19 +712,20 @@ function switchLogSource(btn, source) {
 async function loadQualSyncLogs(source) {
   try {
     const res = await fetch(`/api/${source}/sync-logs?limit=30`);
-    const logs = await res.json();
+    const data = await readApiResponse(res);
+    const logs = data.items || data || [];
     const container = document.getElementById('qualSyncLogs');
     if (!logs.length) { container.innerHTML = '<div style="color:var(--text-3);padding:16px 0;text-align:center">暂无同步记录</div>'; return; }
     const statusColors = { success: 'var(--success)', error: 'var(--danger)' };
     container.innerHTML = logs.map(l => {
-      const time = utcToBeijing(l.started_at);
-      const idField = l.lab_no || l.cert_number || '';
+      const time = utcToBeijing(l.startedAt);
+      const idField = l.labNo || l.certNumber || '';
       return `<div class="qual-sync-log">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span><span style="color:var(--text)">${escapeHtml(idField)}</span> ${escapeHtml(l.action)}</span>
           <span style="color:${statusColors[l.status] || 'var(--text-3)'}">${l.status}</span>
         </div>
-        <div class="log-time">${time} | ${l.records_fetched} 条${l.error_message ? ' | <span style="color:var(--danger)">' + escapeHtml(l.error_message) + '</span>' : ''}</div>
+        <div class="log-time">${time} | ${l.recordsFetched} 条${l.errorMessage ? ' | <span style="color:var(--danger)">' + escapeHtml(l.errorMessage) + '</span>' : ''}</div>
       </div>`;
     }).join('');
   } catch (e) { /* silent */ }
@@ -727,23 +739,25 @@ async function loadLabsSyncLogs() {
       fetch('/api/cnas/sync-logs?limit=15'),
       fetch('/api/cma/sync-logs?limit=15'),
     ]);
-    const cnasLogs = await cnasRes.json();
-    const cmaLogs = await cmaRes.json();
+    const cnasData = await readApiResponse(cnasRes);
+    const cmaData = await readApiResponse(cmaRes);
+    const cnasLogs = cnasData.items || cnasData || [];
+    const cmaLogs = cmaData.items || cmaData || [];
     const allLogs = [
       ...cnasLogs.map(l => ({ ...l, _src: 'CNAS' })),
       ...cmaLogs.map(l => ({ ...l, _src: 'CMA' })),
-    ].sort((a, b) => (b.started_at || '').localeCompare(a.started_at || ''));
+    ].sort((a, b) => (b.startedAt || '').localeCompare(a.startedAt || ''));
     if (!allLogs.length) { container.innerHTML = '<div style="color:var(--text-3);padding:16px 0;text-align:center">暂无同步记录</div>'; return; }
     const statusColors = { success: 'var(--success)', error: 'var(--danger)' };
     container.innerHTML = allLogs.slice(0, 30).map(l => {
-      const time = utcToBeijing(l.started_at);
-      const idField = l.lab_no || l.cert_number || '';
+      const time = utcToBeijing(l.startedAt);
+      const idField = l.labNo || l.certNumber || '';
       return `<div class="qual-sync-log">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span><span style="color:var(--text-2);font-size:10px;margin-right:4px">${l._src}</span><span style="color:var(--text)">${escapeHtml(idField)}</span> ${escapeHtml(l.action)}</span>
           <span style="color:${statusColors[l.status] || 'var(--text-3)'}">${l.status}</span>
         </div>
-        <div class="log-time">${time} | ${l.records_fetched} 条${l.error_message ? ' | <span style="color:var(--danger)">' + escapeHtml(l.error_message) + '</span>' : ''}</div>
+        <div class="log-time">${time} | ${l.recordsFetched} 条${l.errorMessage ? ' | <span style="color:var(--danger)">' + escapeHtml(l.errorMessage) + '</span>' : ''}</div>
       </div>`;
     }).join('');
   } catch (e) { container.innerHTML = ''; }
@@ -822,7 +836,7 @@ async function fetchQualBadges(standardNumbers) {
       body: JSON.stringify({ stdCodes: unique }),
     });
     if (!res.ok) return;
-    const data = await res.json();
+    const data = await readApiResponse(res);
     qualData = data;
   } catch { /* silent */ }
 }

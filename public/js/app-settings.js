@@ -492,7 +492,7 @@ async function refreshSourceHealth() {
   }).join('');
   try {
     var res = await fetch('/api/standards/check-sources');
-    var data = await res.json();
+    var data = await readApiResponse(res);
     sourceStatusCache = data.results || {};
     sourceHealthCheckedAt = Date.now();
   } catch {
@@ -517,7 +517,7 @@ async function checkSingleSource(src) {
   if (el) el.innerHTML = '<span class="spinner" style="width:12px;height:12px"></span>';
   try {
     var res = await fetch('/api/standards/check-sources?sources=' + src);
-    var data = await res.json();
+    var data = await readApiResponse(res);
     Object.assign(sourceStatusCache, data.results || {});
   } catch { sourceStatusCache[src] = { status: 'error', ms: 0, error: '请求失败' }; }
   sourceHealthCheckedAt = Date.now();

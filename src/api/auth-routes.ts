@@ -7,7 +7,9 @@ import type { Request, Response, NextFunction } from 'express';
 import type { AuthUser } from './auth-middleware';
 import { getGuestAuthUser } from './auth-middleware';
 import { getSetting, getRealUserCount, GUEST_USERNAME } from '../services/db';
-import { parseCookie } from '../shared/errors';
+import { normalizeError, parseCookie } from '../shared/errors';
+import { respond, respondError } from '../shared/response';
+import { toCamelCase } from '../shared/case';
 
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 function cookieOpts(token: string): string {
@@ -39,7 +41,7 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
     if (!user && !loginRequired) {
       user = getGuestAuthUser(db);
     }
-    res.json({ needsSetup: userCount === 0, user, registrationEnabled, loginRequired });
+    respond(res, { needsSetup: userCount === 0, user: toCamelCase(user), registrationEnabled, loginRequired });
   });
 
   // POST /api/auth/register
@@ -48,11 +50,11 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
       const schema = z.object({
         username: z.string().trim().min(2).max(32),
         password: z.string().min(6).max(128),
-        display_name: z.string().trim().max(64).optional(),
+        displayName: z.string().trim().max(64).optional(),
       });
-      const { username, password, display_name } = schema.parse(req.body);
+      const { username, password, displayName } = schema.parse(req.body);
       if (username.toLowerCase() === GUEST_USERNAME) {
-        res.status(400).json({ code: 'BAD_REQUEST', message: 'Guest username is reserved' });
+        respondError(res, 400, 'BAD_REQUEST', 'Guest username is reserved');
         return;
       }
 
@@ -61,14 +63,14 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
       if (userCount > 0) {
         const regEnabled = getSetting(db, 'registration_enabled', '1') === '1';
         if (!regEnabled) {
-          res.status(403).json({ code: 'FORBIDDEN', message: '注册已关闭，请联系管理员' });
+          respondError(res, 403, 'FORBIDDEN', '注册已关闭，请联系管理员');
           return;
         }
       }
 
       const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
       if (existing) {
-        res.status(409).json({ code: 'CONFLICT', message: '用户名已存在' });
+        respondError(res, 409, 'CONFLICT', '用户名已存在');
         return;
       }
 
@@ -78,7 +80,7 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
 
       const result = db.prepare(
         'INSERT INTO users (username, password, display_name, role) VALUES (?, ?, ?, ?)'
-      ).run(username, hash, display_name || '', role);
+      ).run(username, hash, displayName || '', role);
 
       // Auto-login after registration
       const token = crypto.randomBytes(32).toString('hex');
@@ -86,15 +88,11 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
       db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, result.lastInsertRowid, expiresAt);
 
       res.setHeader('Set-Cookie', cookieOpts(token));
-      res.status(201).json({
-        user: { id: result.lastInsertRowid, username, display_name: display_name || '', role, allowed_tabs: null },
-      });
+      respond(res, {
+        user: { id: result.lastInsertRowid, username, displayName: displayName || '', role, allowedTabs: null },
+      }, 201);
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ code: 'BAD_REQUEST', message: '参数无效', details: error.flatten() });
-        return;
-      }
-      next(error);
+      next(normalizeError(error));
     }
   });
 
@@ -107,7 +105,7 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
       });
       const { username, password } = schema.parse(req.body);
       if (username.toLowerCase() === GUEST_USERNAME) {
-        res.status(401).json({ code: 'UNAUTHORIZED', message: '用户名或密码错误' });
+        respondError(res, 401, 'UNAUTHORIZED', '用户名或密码错误');
         return;
       }
 
@@ -116,13 +114,13 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
       } | undefined;
 
       if (!row || !row.is_active) {
-        res.status(401).json({ code: 'UNAUTHORIZED', message: '用户名或密码错误' });
+        respondError(res, 401, 'UNAUTHORIZED', '用户名或密码错误');
         return;
       }
 
       const valid = await bcrypt.compare(password, row.password);
       if (!valid) {
-        res.status(401).json({ code: 'UNAUTHORIZED', message: '用户名或密码错误' });
+        respondError(res, 401, 'UNAUTHORIZED', '用户名或密码错误');
         return;
       }
 
@@ -131,13 +129,17 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
       db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, row.id, expiresAt);
 
       res.setHeader('Set-Cookie', cookieOpts(token));
-      res.json({ user: { id: row.id, username: row.username, display_name: row.display_name, role: row.role, allowed_tabs: row.allowed_tabs ? JSON.parse(row.allowed_tabs) : null } });
+      respond(res, {
+        user: {
+          id: row.id,
+          username: row.username,
+          displayName: row.display_name,
+          role: row.role,
+          allowedTabs: row.allowed_tabs ? JSON.parse(row.allowed_tabs) : null,
+        },
+      });
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ code: 'BAD_REQUEST', message: '参数无效' });
-        return;
-      }
-      next(error);
+      next(normalizeError(error));
     }
   });
 
@@ -148,49 +150,45 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
       db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
     }
     res.setHeader('Set-Cookie', 'bzxz_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
-    res.json({ ok: true });
+    respond(res, { ok: true });
   });
 
   // GET /api/auth/me
   router.get('/me', requireAuth, (req, res) => {
-    res.json({ user: req.user });
+    respond(res, { user: toCamelCase(req.user) });
   });
 
   // PUT /api/auth/password
   router.put('/password', requireAuth, async (req, res, next) => {
     try {
       const schema = z.object({
-        old_password: z.string().min(1),
-        new_password: z.string().min(6).max(128),
+        oldPassword: z.string().min(1),
+        newPassword: z.string().min(6).max(128),
       });
-      const { old_password, new_password } = schema.parse(req.body);
+      const { oldPassword, newPassword } = schema.parse(req.body);
       if (req.user!.username === GUEST_USERNAME) {
-        res.status(403).json({ code: 'FORBIDDEN', message: 'Guest user cannot change password' });
+        respondError(res, 403, 'FORBIDDEN', 'Guest user cannot change password');
         return;
       }
 
       const row = db.prepare('SELECT password FROM users WHERE id = ?').get(req.user!.id) as { password: string } | undefined;
       if (!row) {
-        res.status(404).json({ code: 'NOT_FOUND', message: '用户不存在' });
+        respondError(res, 404, 'NOT_FOUND', '用户不存在');
         return;
       }
 
-      const valid = await bcrypt.compare(old_password, row.password);
+      const valid = await bcrypt.compare(oldPassword, row.password);
       if (!valid) {
-        res.status(401).json({ code: 'UNAUTHORIZED', message: '原密码错误' });
+        respondError(res, 401, 'UNAUTHORIZED', '原密码错误');
         return;
       }
 
-      const hash = await bcrypt.hash(new_password, SALT_ROUNDS);
+      const hash = await bcrypt.hash(newPassword, SALT_ROUNDS);
       db.prepare('UPDATE users SET password = ?, updated_at = ? WHERE id = ?').run(hash, new Date().toISOString(), req.user!.id);
 
-      res.json({ ok: true });
+      respond(res, { ok: true });
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ code: 'BAD_REQUEST', message: '参数无效' });
-        return;
-      }
-      next(error);
+      next(normalizeError(error));
     }
   });
 

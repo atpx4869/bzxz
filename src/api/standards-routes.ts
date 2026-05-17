@@ -14,6 +14,8 @@ import { trackEvent } from '../services/usage-tracker';
 import { BadRequestError, NotFoundError, normalizeError } from '../shared/errors';
 import { parseStandardId, VALID_SOURCES } from '../shared/id';
 import type { SourceName } from '../domain/standard';
+import { respond } from '../shared/response';
+import { toCamelCase } from '../shared/case';
 
 const SOURCES = [...VALID_SOURCES] as SourceName[];
 const sourceEnum = z.enum(SOURCES as [string, ...string[]]);
@@ -84,7 +86,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         results[src] = { status: 'error', ms: Date.now() - start, error: e.name === 'AbortError' ? '超时' : (e.message || '连接失败') };
       }
     }));
-    res.json({ results });
+    respond(res, { results });
   });
 
   // Search cache: key = "source:query", value = { items, expires }
@@ -111,7 +113,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         searchCache.delete(cacheKey);
         searchCache.set(cacheKey, cached); // bump to most-recent position
         trackEvent(db, req.user!.id, 'search', selectedSource, undefined, { query: q, resultCount: cached.items.length, cached: true });
-        res.json({ items: cached.items, total: cached.items.length, sourceSummary: { requested: 1, succeeded: 1, failed: 0, source: selectedSource } });
+        respond(res, { items: cached.items, total: cached.items.length, sourceSummary: { requested: 1, succeeded: 1, failed: 0, source: selectedSource } });
         return;
       }
       if (cached) searchCache.delete(cacheKey); // expired
@@ -126,7 +128,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       searchCache.set(cacheKey, { items: results, expires: Date.now() + CACHE_TTL_MS });
       trackEvent(db, req.user!.id, 'search', selectedSource, undefined, { query: q, resultCount: results.length });
 
-      res.json({
+      respond(res, {
         items: results,
         total: results.length,
         sourceSummary: {
@@ -144,8 +146,8 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
   /** Poll endpoint: returns cached GBW text availability for given source IDs */
   router.get('/api/standards/text-availability', requireAuth, (req, res) => {
     const ids = ((req.query.ids as string) || '').split(',').filter(Boolean);
-    if (!ids.length) { res.json({}); return; }
-    res.json(sourceRegistry.getGbwTextAvailability(ids));
+    if (!ids.length) { respond(res, {}); return; }
+    respond(res, sourceRegistry.getGbwTextAvailability(ids));
   });
 
   router.post('/api/standards/resolve', requireAuth, async (req, res, next) => {
@@ -162,7 +164,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       trackEvent(db, req.user!.id, 'batch_resolve', selectedSources.join(','), undefined, {
         lineCount: lines.length, resolvedCount: result.resolved.length, unmatchedCount: result.unmatched.length,
       });
-      res.json(result);
+      respond(res, toCamelCase(result));
     } catch (error) {
       next(normalizeError(error));
     }
@@ -234,7 +236,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         }
       }));
 
-      res.json({ standardNumber, results });
+      respond(res, { standardNumber, results });
     } catch (error) {
       next(normalizeError(error));
     }
@@ -246,7 +248,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       const parsed = parseStandardId(id);
       const service = new StandardService(sourceRegistry.get(parsed.source));
       const detail = await service.getStandardDetail(id);
-      res.json(detail);
+      respond(res, toCamelCase(detail));
     } catch (error) {
       next(normalizeError(error));
     }
@@ -258,7 +260,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       const parsed = parseStandardId(id);
       const service = new StandardService(sourceRegistry.get(parsed.source));
       const preview = await service.detectPreview(id);
-      res.json(preview);
+      respond(res, toCamelCase(preview));
     } catch (error) {
       next(normalizeError(error));
     }
@@ -272,7 +274,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       const exportTaskService = new ExportTaskService(adapter, exportTaskStore);
       const task = exportTaskService.createTask(id);
       trackEvent(db, req.user!.id, 'download', parsed.source, id);
-      res.status(202).json(task);
+      respond(res, toCamelCase(task), 202);
     } catch (error) {
       next(normalizeError(error));
     }
@@ -288,7 +290,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       }
 
       const session = await adapter.createDownloadSession(id);
-      res.status(201).json(session);
+      respond(res, toCamelCase(session), 201);
     } catch (error) {
       next(normalizeError(error));
     }
@@ -305,7 +307,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
 
       const result = await adapter.autoDownload(id, 5);
       trackEvent(db, req.user!.id, 'download', parsed.source, id);
-      res.json(result);
+      respond(res, toCamelCase(result));
     } catch (error) {
       next(normalizeError(error));
     }
@@ -331,7 +333,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
             const result = await adapter.autoDownload(standardId, 3);
             if (result.status === 'downloaded') {
               trackEvent(db, req.user!.id, 'download', src, standardId);
-              res.json({ ...result, source: src });
+              respond(res, toCamelCase({ ...result, source: src }));
               return;
             }
             errors[src] = result.status;
@@ -339,7 +341,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
             // Async adapter (bz, by) — use export and wait
             const exportResult = await adapter.exportStandard(standardId);
             trackEvent(db, req.user!.id, 'download', src, standardId);
-            res.json({ source: src, status: 'downloaded', fileName: exportResult.fileName, fileSize: exportResult.fileSize });
+            respond(res, { source: src, status: 'downloaded', fileName: exportResult.fileName, fileSize: exportResult.fileSize });
             return;
           } else {
             errors[src] = '不支持下载';
@@ -349,7 +351,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         }
       }
 
-      res.status(404).json({ status: 'failed', errors, message: '所有源均下载失败' });
+      throw new NotFoundError('所有源均下载失败', { perSource: errors });
     } catch (error) {
       next(normalizeError(error));
     }
@@ -368,7 +370,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       }
 
       const result = await adapter.submitDownloadCaptcha(req.params.sessionId as string, code);
-      res.json(result);
+      respond(res, toCamelCase(result));
     } catch (error) {
       next(normalizeError(error));
     }
@@ -387,7 +389,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       }
 
       const session = await adapter.getDownloadSession(req.params.sessionId as string);
-      res.json(session);
+      respond(res, toCamelCase(session));
     } catch (error) {
       next(normalizeError(error));
     }
@@ -543,7 +545,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         fileName: outFileName, totalLines: lines.length, resolved: resolved.length, unmatched: unmatched.length,
       });
 
-      res.json({
+      respond(res, {
         fileName: outFileName,
         downloadUrl: `/api/downloads/${encodeURIComponent(outFileName)}`,
         summary: {
@@ -563,13 +565,15 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       if (!task) {
         throw new NotFoundError(`Export task not found: ${req.params.taskId as string}`);
       }
-      res.json(task);
+      respond(res, toCamelCase(task));
     } catch (error) {
       next(normalizeError(error));
     }
   });
 
-  // SSE endpoint for real-time task progress
+  // SSE endpoint for real-time task progress.
+  // Each `data:` line is a JSON-encoded ApiResult (same envelope as JSON endpoints) so
+  // the client can use one consistent unwrap path regardless of transport.
   router.get('/api/tasks/:taskId/stream', requireAuth, (req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -581,7 +585,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
     const interval = setInterval(() => {
       const task = exportTaskStore.get(taskId);
       if (task) {
-        res.write(`data: ${JSON.stringify(task)}\n\n`);
+        res.write(`data: ${JSON.stringify({ data: toCamelCase(task), error: null })}\n\n`);
         if (task.status === 'success' || task.status === 'failed') {
           clearInterval(interval);
           res.end();
@@ -593,7 +597,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
     const timeout = setTimeout(() => {
       clearInterval(interval);
       if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify({ id: taskId, status: 'failed', error: 'Task not found or expired' })}\n\n`);
+        res.write(`data: ${JSON.stringify({ data: null, error: { code: 'NOT_FOUND', message: 'Task not found or expired' } })}\n\n`);
         res.end();
       }
     }, 10000);

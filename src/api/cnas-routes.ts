@@ -1,20 +1,21 @@
-import express, { type NextFunction, type Request, type Response } from 'express';
+import express from 'express';
 import { z } from 'zod';
 import type Database from 'better-sqlite3';
 import { QualificationService } from '../services/qualification-service';
 import { normalizeError } from '../shared/errors';
+import { respond } from '../shared/response';
+import { toCamelCase, toSnakeCase } from '../shared/case';
 
 export function createQualificationRoutes(db: Database.Database, requireAuth: express.RequestHandler) {
   const router = express.Router();
   const svc = new QualificationService(db);
 
   // ─── Batch query for search result badges ───
-  router.post('/api/standards/qualifications', requireAuth, (req, res, next) => {
+  router.post('/api/qualifications/batch-query', requireAuth, (req, res, next) => {
     try {
       const schema = z.object({ stdCodes: z.array(z.string().trim()).min(1).max(200) });
       const { stdCodes } = schema.parse(req.body);
-      const result = svc.queryByStdCodes(stdCodes);
-      res.json(result);
+      respond(res, toCamelCase(svc.queryByStdCodes(stdCodes)));
     } catch (e) { next(normalizeError(e)); }
   });
 
@@ -28,7 +29,7 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
       });
       const { q, source, limit } = schema.parse(req.query);
       const items = svc.searchQualifications(q, source, limit);
-      res.json({ items, total: items.length });
+      respond(res, { items: toCamelCase(items), total: items.length });
     } catch (e) { next(normalizeError(e)); }
   });
 
@@ -40,103 +41,103 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
       });
       const { queries, limitPerQuery } = schema.parse(req.body);
       const unique = [...new Set(queries)];
-      const result = svc.queryVisualKeywords(unique, limitPerQuery);
-      res.json(result);
+      respond(res, toCamelCase(svc.queryVisualKeywords(unique, limitPerQuery)));
     } catch (e) { next(normalizeError(e)); }
   });
 
-  // ─── CNAS Labs ───
-  router.get('/api/cnas/labs', requireAuth, (_req, res) => {
-    res.json(svc.listCnasLabs());
+  // ─── CNAS Labs (under /qualifications/labs/cnas) ───
+  router.get('/api/qualifications/labs/cnas', requireAuth, (_req, res) => {
+    respond(res, { items: toCamelCase(svc.listCnasLabs()) });
   });
 
-  router.post('/api/cnas/labs', requireAuth, (req, res, next) => {
+  router.post('/api/qualifications/labs/cnas', requireAuth, (req, res, next) => {
     try {
       const schema = z.object({
-        lab_no: z.string().trim().min(1).max(50),
-        lab_name: z.string().trim().max(200).optional(),
-        base_info_id: z.string().trim().max(100).optional(),
-        cert_update_ts: z.string().trim().max(50).optional(),
+        labNo: z.string().trim().min(1).max(50),
+        labName: z.string().trim().max(200).optional(),
+        baseInfoId: z.string().trim().max(100).optional(),
+        certUpdateTs: z.string().trim().max(50).optional(),
         validate: z.string().trim().max(50).optional(),
-        url_params: z.record(z.string(), z.string()).optional(),
+        urlParams: z.record(z.string(), z.string()).optional(),
       });
       const data = schema.parse(req.body);
-      const lab = svc.addCnasLab(data);
-      res.status(201).json(lab);
+      const lab = svc.addCnasLab(toSnakeCase(data));
+      respond(res, toCamelCase(lab), 201);
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.delete('/api/cnas/labs/:labNo', requireAuth, (req, res, next) => {
+  router.delete('/api/qualifications/labs/cnas/:labNo', requireAuth, (req, res, next) => {
     try {
       svc.deleteCnasLab(req.params.labNo as string);
-      res.json({ ok: true });
+      respond(res, { ok: true });
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.put('/api/cnas/labs/:labNo', requireAuth, (req, res, next) => {
+  router.put('/api/qualifications/labs/cnas/:labNo', requireAuth, (req, res, next) => {
     try {
-      const schema = z.object({ lab_name: z.string().trim().max(200) });
-      const { lab_name } = schema.parse(req.body);
-      db.prepare('UPDATE cnas_labs SET lab_name = ? WHERE lab_no = ?').run(lab_name, req.params.labNo);
-      res.json({ ok: true });
+      const schema = z.object({ labName: z.string().trim().max(200) });
+      const { labName } = schema.parse(req.body);
+      db.prepare('UPDATE cnas_labs SET lab_name = ? WHERE lab_no = ?').run(labName, req.params.labNo);
+      respond(res, { ok: true });
     } catch (e) { next(normalizeError(e)); }
   });
 
-  // ─── CMA Labs ───
-  router.get('/api/cma/search-labs', requireAuth, async (req, res, next) => {
+  // ─── CMA Labs (under /qualifications/labs/cma) ───
+  router.get('/api/qualifications/labs/cma/search', requireAuth, async (req, res, next) => {
     try {
       const schema = z.object({ q: z.string().trim().min(1).max(200) });
       const { q } = schema.parse(req.query);
       const items = await svc.searchCmaLabs(q);
-      res.json({ items, total: items.length });
+      respond(res, { items: toCamelCase(items), total: items.length });
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.get('/api/cma/labs', requireAuth, (_req, res) => {
-    res.json(svc.listCmaLabs());
+  router.get('/api/qualifications/labs/cma', requireAuth, (_req, res) => {
+    respond(res, { items: toCamelCase(svc.listCmaLabs()) });
   });
 
-  router.post('/api/cma/labs', requireAuth, async (req, res, next) => {
+  router.post('/api/qualifications/labs/cma', requireAuth, async (req, res, next) => {
     try {
       const schema = z.object({
-        public_detail_id: z.string().trim().min(1).max(120),
+        publicDetailId: z.string().trim().min(1).max(120),
       });
       const data = schema.parse(req.body);
-      const lab = await svc.addCmaLab(data);
-      res.status(201).json(lab);
+      const lab = await svc.addCmaLab(toSnakeCase(data));
+      respond(res, toCamelCase(lab), 201);
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.delete('/api/cma/labs/:certNumber', requireAuth, (req, res, next) => {
+  router.delete('/api/qualifications/labs/cma/:certNumber', requireAuth, (req, res, next) => {
     try {
       svc.deleteCmaLab(req.params.certNumber as string);
-      res.json({ ok: true });
+      respond(res, { ok: true });
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.put('/api/cma/labs/:certNumber', requireAuth, (req, res, next) => {
+  router.put('/api/qualifications/labs/cma/:certNumber', requireAuth, (req, res, next) => {
     try {
-      const schema = z.object({ lab_name: z.string().trim().max(200) });
-      const { lab_name } = schema.parse(req.body);
-      db.prepare('UPDATE cma_labs SET lab_name = ? WHERE cert_number = ?').run(lab_name, req.params.certNumber);
-      res.json({ ok: true });
+      const schema = z.object({ labName: z.string().trim().max(200) });
+      const { labName } = schema.parse(req.body);
+      db.prepare('UPDATE cma_labs SET lab_name = ? WHERE cert_number = ?').run(labName, req.params.certNumber);
+      respond(res, { ok: true });
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.post('/api/qualification-links', requireAuth, (req, res, next) => {
+  // ─── Qualification links (under /qualifications/links) ───
+  router.post('/api/qualifications/links', requireAuth, (req, res, next) => {
     try {
       const schema = z.object({
-        display_name: z.string().trim().min(1).max(200),
-        cnas_lab_no: z.string().trim().max(80).optional(),
-        cma_cert_number: z.string().trim().max(80).optional(),
+        displayName: z.string().trim().min(1).max(200),
+        cnasLabNo: z.string().trim().max(80).optional(),
+        cmaCertNumber: z.string().trim().max(80).optional(),
       });
       const data = schema.parse(req.body);
-      svc.linkQualificationLabs(data);
-      res.json({ ok: true });
+      svc.linkQualificationLabs(toSnakeCase(data));
+      respond(res, { ok: true });
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.delete('/api/qualification-links/:source/:id', requireAuth, (req, res, next) => {
+  router.delete('/api/qualifications/links/:source/:id', requireAuth, (req, res, next) => {
     try {
       const schema = z.object({
         source: z.enum(['CNAS', 'CMA']),
@@ -144,53 +145,51 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
       });
       const { source, id } = schema.parse(req.params);
       svc.unlinkQualificationLab(source, id);
-      res.json({ ok: true });
+      respond(res, { ok: true });
     } catch (e) { next(normalizeError(e)); }
   });
 
-  // ─── Sync ───
-  router.post('/api/cnas/sync', requireAuth, async (req, res, next) => {
+  // ─── Sync (under /qualifications/labs/{cnas|cma}/sync) ───
+  router.post('/api/qualifications/labs/cnas/sync', requireAuth, async (req, res, next) => {
     try {
-      const schema = z.object({ lab_no: z.string().trim().optional(), force: z.coerce.boolean().default(false) });
-      const { lab_no, force } = schema.parse(req.query);
+      const schema = z.object({ labNo: z.string().trim().optional(), force: z.coerce.boolean().default(false) });
+      const { labNo, force } = schema.parse(req.query);
 
-      if (lab_no) {
-        const result = await svc.syncCnasLab(lab_no, force);
-        res.json(result);
+      if (labNo) {
+        respond(res, toCamelCase(await svc.syncCnasLab(labNo, force)));
       } else {
-        res.json(await svc.syncAllCnasLabs(force));
+        respond(res, toCamelCase(await svc.syncAllCnasLabs(force)));
       }
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.post('/api/cma/sync', requireAuth, async (req, res, next) => {
+  router.post('/api/qualifications/labs/cma/sync', requireAuth, async (req, res, next) => {
     try {
-      const schema = z.object({ cert_number: z.string().trim().optional(), force: z.coerce.boolean().default(false) });
-      const { cert_number, force } = schema.parse(req.query);
+      const schema = z.object({ certNumber: z.string().trim().optional(), force: z.coerce.boolean().default(false) });
+      const { certNumber, force } = schema.parse(req.query);
 
-      if (cert_number) {
-        const result = await svc.syncCmaLab(cert_number, force);
-        res.json(result);
+      if (certNumber) {
+        respond(res, toCamelCase(await svc.syncCmaLab(certNumber, force)));
       } else {
-        res.json(await svc.syncAllCmaLabs(force));
+        respond(res, toCamelCase(await svc.syncAllCmaLabs(force)));
       }
     } catch (e) { next(normalizeError(e)); }
   });
 
   // ─── Sync Logs ───
-  router.get('/api/cnas/sync-logs', requireAuth, (req, res) => {
+  router.get('/api/qualifications/labs/cnas/sync-logs', requireAuth, (req, res) => {
     const limit = Math.max(1, Math.min(parseInt(req.query.limit as string) || 20, 100));
-    res.json(svc.getCnasSyncLogs(limit));
+    respond(res, { items: toCamelCase(svc.getCnasSyncLogs(limit)) });
   });
 
-  router.get('/api/cma/sync-logs', requireAuth, (req, res) => {
+  router.get('/api/qualifications/labs/cma/sync-logs', requireAuth, (req, res) => {
     const limit = Math.max(1, Math.min(parseInt(req.query.limit as string) || 20, 100));
-    res.json(svc.getCmaSyncLogs(limit));
+    respond(res, { items: toCamelCase(svc.getCmaSyncLogs(limit)) });
   });
 
   // ─── Settings ───
   router.get('/api/qualifications/settings', requireAuth, (_req, res) => {
-    res.json(svc.getSettings());
+    respond(res, svc.getSettings());
   });
 
   router.put('/api/qualifications/settings', requireAuth, (req, res, next) => {
@@ -200,7 +199,7 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
       for (const [k, v] of Object.entries(data)) {
         svc.updateSetting(k, v);
       }
-      res.json(svc.getSettings());
+      respond(res, svc.getSettings());
     } catch (e) { next(normalizeError(e)); }
   });
 
@@ -210,7 +209,7 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
     const cmaCount = (db.prepare('SELECT COUNT(*) as c FROM cma_qualifications').get() as any).c;
     const cnasLabs = (db.prepare('SELECT COUNT(*) as c FROM cnas_labs').get() as any).c;
     const cmaLabs = (db.prepare('SELECT COUNT(*) as c FROM cma_labs').get() as any).c;
-    res.json({ cnasQualifications: cnasCount, cmaQualifications: cmaCount, cnasLabs, cmaLabs });
+    respond(res, { cnasQualifications: cnasCount, cmaQualifications: cmaCount, cnasLabs, cmaLabs });
   });
 
   return router;

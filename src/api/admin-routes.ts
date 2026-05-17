@@ -3,6 +3,9 @@ import { z } from 'zod';
 import bcrypt from 'bcrypt';
 import type Database from 'better-sqlite3';
 import { getSetting, setSetting, GUEST_USERNAME } from '../services/db';
+import { normalizeError } from '../shared/errors';
+import { respond, respondError } from '../shared/response';
+import { toCamelCase } from '../shared/case';
 
 const SALT_ROUNDS = 10;
 
@@ -14,42 +17,45 @@ function parseAllowedTabs(raw: string | null): string[] | null {
   try { return JSON.parse(raw); } catch { return null; }
 }
 
+function readAdminSettings(db: Database.Database) {
+  const defaultTabsRaw = getSetting(db, 'default_allowed_tabs', '');
+  return {
+    registrationEnabled: getSetting(db, 'registration_enabled', '1') === '1',
+    loginRequired: getSetting(db, 'login_required', '0') === '1',
+    defaultAllowedTabs: defaultTabsRaw ? parseAllowedTabs(defaultTabsRaw) : null,
+  };
+}
+
 export function createAdminRoutes(db: Database.Database) {
   const router = Router();
 
   // GET /api/admin/settings
   router.get('/settings', (_req, res) => {
-    const defaultTabsRaw = getSetting(db, 'default_allowed_tabs', '');
-    res.json({
-      registration_enabled: getSetting(db, 'registration_enabled', '1') === '1',
-      login_required: getSetting(db, 'login_required', '0') === '1',
-      default_allowed_tabs: defaultTabsRaw ? parseAllowedTabs(defaultTabsRaw) : null,
-    });
+    respond(res, readAdminSettings(db));
   });
 
   // PUT /api/admin/settings
-  router.put('/settings', (req, res) => {
-    const schema = z.object({
-      registration_enabled: z.boolean().optional(),
-      login_required: z.boolean().optional(),
-      default_allowed_tabs: z.array(z.enum(['search', 'batch', 'complete', 'history', 'qual', 'stats', 'settings'])).nullable().optional(),
-    });
-    const updates = schema.parse(req.body);
-    if (updates.registration_enabled !== undefined) {
-      setSetting(db, 'registration_enabled', updates.registration_enabled ? '1' : '0');
+  router.put('/settings', (req, res, next) => {
+    try {
+      const schema = z.object({
+        registrationEnabled: z.boolean().optional(),
+        loginRequired: z.boolean().optional(),
+        defaultAllowedTabs: z.array(z.enum(['search', 'batch', 'complete', 'history', 'qual', 'stats', 'settings'])).nullable().optional(),
+      });
+      const updates = schema.parse(req.body);
+      if (updates.registrationEnabled !== undefined) {
+        setSetting(db, 'registration_enabled', updates.registrationEnabled ? '1' : '0');
+      }
+      if (updates.loginRequired !== undefined) {
+        setSetting(db, 'login_required', updates.loginRequired ? '1' : '0');
+      }
+      if (updates.defaultAllowedTabs !== undefined) {
+        setSetting(db, 'default_allowed_tabs', updates.defaultAllowedTabs ? JSON.stringify(updates.defaultAllowedTabs) : '');
+      }
+      respond(res, readAdminSettings(db));
+    } catch (error) {
+      next(normalizeError(error));
     }
-    if (updates.login_required !== undefined) {
-      setSetting(db, 'login_required', updates.login_required ? '1' : '0');
-    }
-    if (updates.default_allowed_tabs !== undefined) {
-      setSetting(db, 'default_allowed_tabs', updates.default_allowed_tabs ? JSON.stringify(updates.default_allowed_tabs) : '');
-    }
-    const defaultTabsRaw = getSetting(db, 'default_allowed_tabs', '');
-    res.json({
-      registration_enabled: getSetting(db, 'registration_enabled', '1') === '1',
-      login_required: getSetting(db, 'login_required', '0') === '1',
-      default_allowed_tabs: defaultTabsRaw ? parseAllowedTabs(defaultTabsRaw) : null,
-    });
   });
 
   // GET /api/admin/users
@@ -62,8 +68,8 @@ export function createAdminRoutes(db: Database.Database) {
        LEFT JOIN (SELECT user_id, COUNT(*) as cnt FROM usage_events WHERE event_type = 'download' GROUP BY user_id) d ON d.user_id = u.id
        ORDER BY u.id`
     ).all() as any[];
-    res.json({
-      users: users.map(u => ({ ...u, allowed_tabs: parseAllowedTabs(u.allowed_tabs) })),
+    respond(res, {
+      users: toCamelCase(users.map(u => ({ ...u, allowed_tabs: parseAllowedTabs(u.allowed_tabs) }))),
     });
   });
 
@@ -71,13 +77,13 @@ export function createAdminRoutes(db: Database.Database) {
   router.get('/users/:id/events', (req, res) => {
     const userId = parseInt(req.params.id as string, 10);
     if (isNaN(userId)) {
-      res.status(400).json({ code: 'BAD_REQUEST', message: '无效用户 ID' });
+      respondError(res, 400, 'BAD_REQUEST', '无效用户 ID');
       return;
     }
 
     const user = db.prepare('SELECT id, username, display_name FROM users WHERE id = ?').get(userId) as { id: number; username: string; display_name: string } | undefined;
     if (!user) {
-      res.status(404).json({ code: 'NOT_FOUND', message: '用户不存在' });
+      respondError(res, 404, 'NOT_FOUND', '用户不存在');
       return;
     }
 
@@ -95,11 +101,11 @@ export function createAdminRoutes(db: Database.Database) {
       `SELECT id, event_type, source, standard_id, metadata, created_at FROM usage_events WHERE user_id = ? ORDER BY created_at DESC LIMIT ?`
     ).all(userId, limit) as { id: number; event_type: string; source: string | null; standard_id: string | null; metadata: string | null; created_at: string }[];
 
-    res.json({
-      user,
-      summary,
-      bySource,
-      recent: recent.map(r => ({ ...r, metadata: r.metadata ? JSON.parse(r.metadata) : null })),
+    respond(res, {
+      user: toCamelCase(user),
+      summary: toCamelCase(summary),
+      bySource: toCamelCase(bySource),
+      recent: toCamelCase(recent.map(r => ({ ...r, metadata: r.metadata ? JSON.parse(r.metadata) : null }))),
     });
   });
 
@@ -109,37 +115,33 @@ export function createAdminRoutes(db: Database.Database) {
       const schema = z.object({
         username: z.string().trim().min(2).max(32),
         password: z.string().min(6).max(128),
-        display_name: z.string().trim().max(64).optional(),
+        displayName: z.string().trim().max(64).optional(),
         role: z.enum(['user', 'admin']).optional(),
-        allowed_tabs: z.array(z.enum(['search', 'batch', 'complete', 'history', 'qual', 'stats', 'settings'])).nullable().optional(),
+        allowedTabs: z.array(z.enum(['search', 'batch', 'complete', 'history', 'qual', 'stats', 'settings'])).nullable().optional(),
       });
-      const { username, password, display_name, role, allowed_tabs } = schema.parse(req.body);
+      const { username, password, displayName, role, allowedTabs } = schema.parse(req.body);
       if (username.toLowerCase() === GUEST_USERNAME) {
-        res.status(400).json({ code: 'BAD_REQUEST', message: 'Guest username is reserved' });
+        respondError(res, 400, 'BAD_REQUEST', 'Guest username is reserved');
         return;
       }
 
       const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
       if (existing) {
-        res.status(409).json({ code: 'CONFLICT', message: '用户名已存在' });
+        respondError(res, 409, 'CONFLICT', '用户名已存在');
         return;
       }
 
       const hash = await bcrypt.hash(password, SALT_ROUNDS);
-      const tabsJson = allowed_tabs ? JSON.stringify(allowed_tabs) : null;
+      const tabsJson = allowedTabs ? JSON.stringify(allowedTabs) : null;
       const result = db.prepare(
         'INSERT INTO users (username, password, display_name, role, allowed_tabs) VALUES (?, ?, ?, ?, ?)'
-      ).run(username, hash, display_name || '', role || 'user', tabsJson);
+      ).run(username, hash, displayName || '', role || 'user', tabsJson);
 
-      res.status(201).json({
-        user: { id: result.lastInsertRowid, username, display_name: display_name || '', role: role || 'user', allowed_tabs: allowed_tabs ?? null },
-      });
+      respond(res, {
+        user: { id: result.lastInsertRowid, username, displayName: displayName || '', role: role || 'user', allowedTabs: allowedTabs ?? null },
+      }, 201);
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ code: 'BAD_REQUEST', message: '参数无效', details: error.flatten() });
-        return;
-      }
-      next(error);
+      next(normalizeError(error));
     }
   });
 
@@ -148,46 +150,46 @@ export function createAdminRoutes(db: Database.Database) {
     try {
       const userId = parseInt(req.params.id, 10);
       if (isNaN(userId)) {
-        res.status(400).json({ code: 'BAD_REQUEST', message: '无效用户 ID' });
+        respondError(res, 400, 'BAD_REQUEST', '无效用户 ID');
         return;
       }
 
       const schema = z.object({
-        display_name: z.string().trim().max(64).optional(),
+        displayName: z.string().trim().max(64).optional(),
         role: z.enum(['user', 'admin']).optional(),
-        is_active: z.boolean().optional(),
+        isActive: z.boolean().optional(),
         password: z.string().min(6).max(128).optional(),
-        allowed_tabs: z.array(z.enum(['search', 'batch', 'complete', 'history', 'qual', 'stats', 'settings'])).nullable().optional(),
+        allowedTabs: z.array(z.enum(['search', 'batch', 'complete', 'history', 'qual', 'stats', 'settings'])).nullable().optional(),
       });
       const updates = schema.parse(req.body);
 
       const user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(userId) as { id: number; username: string } | undefined;
       if (!user) {
-        res.status(404).json({ code: 'NOT_FOUND', message: '用户不存在' });
+        respondError(res, 404, 'NOT_FOUND', '用户不存在');
         return;
       }
-      if (user.username === GUEST_USERNAME && (updates.role !== undefined || updates.is_active !== undefined || updates.password !== undefined)) {
-        res.status(400).json({ code: 'BAD_REQUEST', message: 'Guest user must remain a normal active user' });
+      if (user.username === GUEST_USERNAME && (updates.role !== undefined || updates.isActive !== undefined || updates.password !== undefined)) {
+        respondError(res, 400, 'BAD_REQUEST', 'Guest user must remain a normal active user');
         return;
       }
 
       const sets: string[] = [];
       const values: unknown[] = [];
 
-      if (updates.display_name !== undefined) { sets.push('display_name = ?'); values.push(updates.display_name); }
+      if (updates.displayName !== undefined) { sets.push('display_name = ?'); values.push(updates.displayName); }
       if (updates.role !== undefined) { sets.push('role = ?'); values.push(updates.role); }
-      if (updates.is_active !== undefined) { sets.push('is_active = ?'); values.push(updates.is_active ? 1 : 0); }
+      if (updates.isActive !== undefined) { sets.push('is_active = ?'); values.push(updates.isActive ? 1 : 0); }
       if (updates.password !== undefined) {
         const hash = await bcrypt.hash(updates.password, SALT_ROUNDS);
         sets.push('password = ?'); values.push(hash);
       }
-      if (updates.allowed_tabs !== undefined) {
+      if (updates.allowedTabs !== undefined) {
         sets.push('allowed_tabs = ?');
-        values.push(updates.allowed_tabs ? JSON.stringify(updates.allowed_tabs) : null);
+        values.push(updates.allowedTabs ? JSON.stringify(updates.allowedTabs) : null);
       }
 
       if (sets.length === 0) {
-        res.status(400).json({ code: 'BAD_REQUEST', message: '没有要更新的字段' });
+        respondError(res, 400, 'BAD_REQUEST', '没有要更新的字段');
         return;
       }
 
@@ -198,7 +200,7 @@ export function createAdminRoutes(db: Database.Database) {
       db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...values);
 
       // If deactivating user, delete all their sessions
-      if (updates.is_active === false) {
+      if (updates.isActive === false) {
         db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
       }
 
@@ -206,13 +208,9 @@ export function createAdminRoutes(db: Database.Database) {
         'SELECT id, username, display_name, role, is_active, allowed_tabs, created_at, updated_at FROM users WHERE id = ?'
       ).get(userId) as any;
 
-      res.json({ user: { ...updated, allowed_tabs: parseAllowedTabs(updated.allowed_tabs) } });
+      respond(res, { user: toCamelCase({ ...updated, allowed_tabs: parseAllowedTabs(updated.allowed_tabs) }) });
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ code: 'BAD_REQUEST', message: '参数无效', details: error.flatten() });
-        return;
-      }
-      next(error);
+      next(normalizeError(error));
     }
   });
 
@@ -220,28 +218,28 @@ export function createAdminRoutes(db: Database.Database) {
   router.delete('/users/:id', (req, res) => {
     const userId = parseInt(req.params.id, 10);
     if (isNaN(userId)) {
-      res.status(400).json({ code: 'BAD_REQUEST', message: '无效用户 ID' });
+      respondError(res, 400, 'BAD_REQUEST', '无效用户 ID');
       return;
     }
 
     const user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(userId) as { id: number; username: string } | undefined;
     if (!user) {
-      res.status(404).json({ code: 'NOT_FOUND', message: '用户不存在' });
+      respondError(res, 404, 'NOT_FOUND', '用户不存在');
       return;
     }
     if (user.username === GUEST_USERNAME) {
-      res.status(400).json({ code: 'BAD_REQUEST', message: 'Guest user cannot be deleted' });
+      respondError(res, 400, 'BAD_REQUEST', 'Guest user cannot be deleted');
       return;
     }
 
     // Prevent deleting self
     if (userId === (req as any).user?.id) {
-      res.status(400).json({ code: 'BAD_REQUEST', message: '不能删除自己' });
+      respondError(res, 400, 'BAD_REQUEST', '不能删除自己');
       return;
     }
 
     db.prepare('DELETE FROM users WHERE id = ?').run(userId);
-    res.json({ ok: true });
+    respond(res, { ok: true });
   });
 
   return router;

@@ -29,7 +29,7 @@ async function apiFetch(url, options = {}) {
 async function checkAuthStatus() {
   try {
     const res = await fetch('/api/auth/status');
-    const data = await res.json();
+    const data = await readApiResponse(res);
     if (data.user) {
       currentUser = data.user;
       document.getElementById('authOverlay').classList.add('hidden');
@@ -42,7 +42,7 @@ async function checkAuthStatus() {
       document.getElementById('authOverlay').classList.remove('hidden');
     } else if (!data.loginRequired) {
       // Login not required — use guest
-      currentUser = { id: 0, username: '_guest', display_name: '访客', role: 'user', allowed_tabs: null };
+      currentUser = { id: 0, username: '_guest', displayName: '访客', role: 'user', allowedTabs: null };
       document.getElementById('authOverlay').classList.add('hidden');
       onAuthReady();
     } else {
@@ -54,8 +54,8 @@ async function checkAuthStatus() {
 }
 
 function onAuthReady() {
-  document.getElementById('udHeader').innerHTML = `${currentUser.display_name || currentUser.username} <span>${currentUser.role}</span>`;
-  document.getElementById('sidebarUserName').textContent = currentUser.display_name || currentUser.username;
+  document.getElementById('udHeader').innerHTML = `${currentUser.displayName || currentUser.username} <span>${currentUser.role}</span>`;
+  document.getElementById('sidebarUserName').textContent = currentUser.displayName || currentUser.username;
   document.getElementById('sidebarUserRole').textContent = currentUser.role;
   document.getElementById('udManageUsers').style.display = 'none';
   document.getElementById('udChangePwd').style.display = currentUser.username === '_guest' ? 'none' : '';
@@ -83,7 +83,7 @@ function onAuthReady() {
 var TAB_LABELS = {search:'标准检索',batch:'批量下载',complete:'标准补全',history:'下载历史',qual:'资质查询',stats:'使用统计',users:'用户管理',settings:'系统设置'};
 
 function applyTabPermissions() {
-  var allowed = currentUser.allowed_tabs; // null = all allowed
+  var allowed = currentUser.allowedTabs; // null = all allowed
   document.querySelectorAll('.sidebar-item[data-tab]').forEach(function(item) {
     var tab = item.dataset.tab;
     if (tab === 'users') return; // admin-only handled separately
@@ -125,7 +125,7 @@ document.getElementById('authForm').addEventListener('submit', async (e) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     });
-    const data = await res.json();
+    const data = await readApiResponse(res);
     if (!res.ok) { errEl.textContent = data.message || '操作失败'; return; }
     currentUser = data.user;
     document.getElementById('authOverlay').classList.add('hidden');
@@ -162,8 +162,8 @@ function showChangePwd() {
   apiFetch('/api/auth/password', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ old_password: oldPwd, new_password: newPwd }),
-  }).then(r => r.json()).then(d => {
+    body: JSON.stringify({ oldPassword: oldPwd, newPassword: newPwd }),
+  }).then(r => readApiResponse(r)).then(d => {
     if (d.ok) alert('密码已修改');
     else alert(d.message || '修改失败');
   });
@@ -179,9 +179,9 @@ async function loadStats() {
 
   try {
     const [summaryRes, tsRes, srcRes] = await Promise.all([
-      apiFetch(`/api/stats/summary?${params}`).then(r => r.json()),
-      apiFetch(`/api/stats/timeseries?${params}`).then(r => r.json()),
-      apiFetch(`/api/stats/by-source?${params}`).then(r => r.json()),
+      apiFetch(`/api/stats/summary?${params}`).then(r => readApiResponse(r)),
+      apiFetch(`/api/stats/timeseries?${params}`).then(r => readApiResponse(r)),
+      apiFetch(`/api/stats/by-source?${params}`).then(r => readApiResponse(r)),
     ]);
 
     // Summary cards
@@ -189,17 +189,17 @@ async function loadStats() {
     let html = `<div class="stat-card"><div class="stat-value">${summaryRes.total}</div><div class="stat-label">总操作数</div></div>`;
     html += `<div class="stat-card"><div class="stat-value">${summaryRes.uniqueUsers}</div><div class="stat-label">活跃用户</div></div>`;
     for (const item of summaryRes.byType) {
-      html += `<div class="stat-card"><div class="stat-value">${item.count}</div><div class="stat-label">${typeMap[item.event_type] || item.event_type}</div></div>`;
+      html += `<div class="stat-card"><div class="stat-value">${item.count}</div><div class="stat-label">${typeMap[item.eventType] || item.eventType}</div></div>`;
     }
     document.getElementById('statsSummary').innerHTML = html;
 
     // Trend chart
-    const dates = [...new Set(tsRes.data.map(r => r.date))].sort();
-    const types = [...new Set(tsRes.data.map(r => r.event_type))];
+    const dates = [...new Set(tsRes.items.map(r => r.date))].sort();
+    const types = [...new Set(tsRes.items.map(r => r.eventType))];
     const colors = { search: '#3b82f6', download: '#10b981', batch_resolve: '#f59e0b', complete: '#8b5cf6' };
     const datasets = types.map(t => ({
       label: typeMap[t] || t,
-      data: dates.map(d => { const row = tsRes.data.find(r => r.date === d && r.event_type === t); return row ? row.count : 0; }),
+      data: dates.map(d => { const row = tsRes.items.find(r => r.date === d && r.eventType === t); return row ? row.count : 0; }),
       borderColor: colors[t] || '#666',
       backgroundColor: (colors[t] || '#666') + '33',
       tension: 0.3, fill: true,
@@ -212,8 +212,8 @@ async function loadStats() {
     });
 
     // Source pie chart
-    const srcLabels = srcRes.data.map(r => r.source);
-    const srcCounts = srcRes.data.map(r => r.count);
+    const srcLabels = srcRes.items.map(r => r.source);
+    const srcCounts = srcRes.items.map(r => r.count);
     const srcColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
     if (sourceChart) sourceChart.destroy();
     sourceChart = new Chart(document.getElementById('chartSource'), {
@@ -230,31 +230,31 @@ var selectedUserIds = new Set();
 async function loadUsers() {
   try {
     const [usersRes, settingsRes] = await Promise.all([
-      apiFetch('/api/admin/users').then(r => r.json()),
-      apiFetch('/api/admin/settings').then(r => r.json()),
+      apiFetch('/api/admin/users').then(r => readApiResponse(r)),
+      apiFetch('/api/admin/settings').then(r => readApiResponse(r)),
     ]);
-    document.getElementById('regEnabledToggle').checked = settingsRes.registration_enabled;
-    document.getElementById('loginRequiredToggle').checked = settingsRes.login_required;
+    document.getElementById('regEnabledToggle').checked = settingsRes.registrationEnabled;
+    document.getElementById('loginRequiredToggle').checked = settingsRes.loginRequired;
     const data = usersRes;
     let html = '';
     for (const u of data.users) {
       const roleBadge = u.role === 'admin' ? '<span class="badge badge-admin">管理员</span>' : '<span class="badge badge-user">用户</span>';
-      const statusBadge = u.is_active ? '<span class="badge badge-active">启用</span>' : '<span class="badge badge-inactive">禁用</span>';
-      const toggleLabel = u.is_active ? '禁用' : '启用';
+      const statusBadge = u.isActive ? '<span class="badge badge-active">启用</span>' : '<span class="badge badge-inactive">禁用</span>';
+      const toggleLabel = u.isActive ? '禁用' : '启用';
       const roleLabel = u.role === 'admin' ? '降为用户' : '升为管理员';
       const checked = selectedUserIds.has(u.id) ? 'checked' : '';
       html += `<tr>
         <td><input type="checkbox" data-uid="${u.id}" ${checked} onchange="toggleUserSelect(${u.id},this.checked)"></td>
         <td>${u.username}</td>
-        <td>${u.display_name || '—'}</td>
+        <td>${u.displayName || '—'}</td>
         <td>${roleBadge}</td>
         <td>${statusBadge}</td>
-        <td>${u.search_count}</td>
-        <td>${u.download_count}</td>
+        <td>${u.searchCount}</td>
+        <td>${u.downloadCount}</td>
         <td class="users-actions">
           <button onclick="showUserDetail(${u.id},'${u.username}')">明细</button>
-          <button onclick="showUserPerms(${u.id},'${u.username}',${encodeURIComponent(JSON.stringify(u.allowed_tabs))})">权限</button>
-          <button onclick="toggleUserActive(${u.id},${u.is_active ? 0 : 1})">${toggleLabel}</button>
+          <button onclick="showUserPerms(${u.id},'${u.username}',${encodeURIComponent(JSON.stringify(u.allowedTabs))})">权限</button>
+          <button onclick="toggleUserActive(${u.id},${u.isActive ? 0 : 1})">${toggleLabel}</button>
           <button onclick="changeUserRole(${u.id},'${u.role === 'admin' ? 'user' : 'admin'}')">${roleLabel}</button>
           <button style="color:var(--danger)" onclick="deleteUser(${u.id},'${u.username}')">删除</button>
         </td>
@@ -294,7 +294,7 @@ async function batchSetActive(active) {
   await Promise.all(ids.map(id =>
     apiFetch('/api/admin/users/' + id, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_active: !!active }),
+      body: JSON.stringify({ isActive: !!active }),
     })
   ));
   selectedUserIds.clear();
@@ -316,8 +316,8 @@ function showDefaultPerms() {
   var modal = document.getElementById('modalBody');
   var overlay = document.getElementById('modalOverlay');
   // Load current default from settings
-  apiFetch('/api/admin/settings').then(r => r.json()).then(function(s) {
-    var defaults = s.default_allowed_tabs; // null = all allowed
+  apiFetch('/api/admin/settings').then(r => readApiResponse(r)).then(function(s) {
+    var defaults = s.defaultAllowedTabs; // null = all allowed
     var html = '<h3 style="margin-bottom:12px;font-size:16px">新用户默认权限</h3>';
     html += '<p style="font-size:12px;color:var(--text-3);margin-bottom:12px">新建用户时自动应用的权限，用户创建后可单独调整</p>';
     html += '<div id="defaultPermCheckboxes">';
@@ -346,7 +346,7 @@ async function saveDefaultPerms() {
   await apiFetch('/api/admin/settings', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ default_allowed_tabs: tabs }),
+    body: JSON.stringify({ defaultAllowedTabs: tabs }),
   });
   document.getElementById('modalOverlay').classList.remove('open');
   showToast('默认权限已保存');
@@ -356,7 +356,7 @@ async function toggleUserActive(id, active) {
   await apiFetch(`/api/admin/users/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ is_active: !!active }),
+    body: JSON.stringify({ isActive: !!active }),
   });
   loadUsers();
 }
@@ -373,7 +373,7 @@ async function changeUserRole(id, role) {
 async function deleteUser(id, username) {
   if (!confirm('确定删除用户「' + username + '」？此操作不可恢复')) return;
   const res = await apiFetch('/api/admin/users/' + id, { method: 'DELETE' });
-  const d = await res.json();
+  const d = await readApiResponse(res);
   if (d.ok) { showToast('用户已删除'); loadUsers(); }
   else showToast(d.message || '删除失败', 'fail');
 }
@@ -382,9 +382,9 @@ function toggleRegistration(enabled) {
   apiFetch('/api/admin/settings', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ registration_enabled: enabled }),
-  }).then(r => r.json()).then(d => {
-    document.getElementById('regEnabledToggle').checked = d.registration_enabled;
+    body: JSON.stringify({ registrationEnabled: enabled }),
+  }).then(r => readApiResponse(r)).then(d => {
+    document.getElementById('regEnabledToggle').checked = d.registrationEnabled;
   });
 }
 
@@ -392,9 +392,9 @@ function toggleLoginRequired(enabled) {
   apiFetch('/api/admin/settings', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ login_required: enabled }),
-  }).then(r => r.json()).then(d => {
-    document.getElementById('loginRequiredToggle').checked = d.login_required;
+    body: JSON.stringify({ loginRequired: enabled }),
+  }).then(r => readApiResponse(r)).then(d => {
+    document.getElementById('loginRequiredToggle').checked = d.loginRequired;
   });
 }
 
@@ -404,16 +404,16 @@ async function showCreateUser() {
   const password = prompt('密码（至少6位）');
   if (!password || password.length < 6) { alert('密码至少6位'); return; }
   // Fetch default permissions
-  let allowed_tabs = null;
+  let allowedTabs = null;
   try {
-    const s = await apiFetch('/api/admin/settings').then(r => r.json());
-    allowed_tabs = s.default_allowed_tabs; // null = all
+    const s = await apiFetch('/api/admin/settings').then(r => readApiResponse(r));
+    allowedTabs = s.defaultAllowedTabs; // null = all
   } catch { /* keep null */ }
   apiFetch('/api/admin/users', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password, allowed_tabs }),
-  }).then(r => r.json()).then(d => {
+    body: JSON.stringify({ username, password, allowedTabs }),
+  }).then(r => readApiResponse(r)).then(d => {
     if (d.user) { showToast('用户已创建'); loadUsers(); }
     else showToast(d.message || '创建失败', 'fail');
   });
@@ -460,7 +460,7 @@ async function saveUserPerms(userId) {
   await apiFetch('/api/admin/users/' + userId, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ allowed_tabs: tabs }),
+    body: JSON.stringify({ allowedTabs: tabs }),
   });
   document.getElementById('modalOverlay').classList.remove('open');
   loadUsers();
@@ -473,7 +473,7 @@ async function showUserDetail(userId, username) {
   overlay.classList.add('open');
   try {
     const res = await apiFetch(`/api/admin/users/${userId}/events`);
-    const d = await res.json();
+    const d = await readApiResponse(res);
     if (!res.ok) throw new Error(d.message || '加载失败');
 
     const typeLabels = { search: '搜索', download: '下载', batch_resolve: '批量解析', complete: '补全' };
@@ -483,8 +483,8 @@ async function showUserDetail(userId, username) {
     const total = d.summary.reduce((s, r) => s + r.count, 0);
     summaryHtml += `<div style="padding:8px 14px;border-radius:8px;background:oklch(25% 0.01 250 / 0.5);text-align:center"><div style="font-size:20px;font-weight:600;color:var(--text)">${total}</div><div style="font-size:11px;color:var(--text-3)">总计</div></div>`;
     for (const s of d.summary) {
-      const color = typeColors[s.event_type] || 'var(--text-2)';
-      summaryHtml += `<div style="padding:8px 14px;border-radius:8px;background:oklch(25% 0.01 250 / 0.5);text-align:center"><div style="font-size:20px;font-weight:600;color:${color}">${s.count}</div><div style="font-size:11px;color:var(--text-3)">${typeLabels[s.event_type] || s.event_type}</div></div>`;
+      const color = typeColors[s.eventType] || 'var(--text-2)';
+      summaryHtml += `<div style="padding:8px 14px;border-radius:8px;background:oklch(25% 0.01 250 / 0.5);text-align:center"><div style="font-size:20px;font-weight:600;color:${color}">${s.count}</div><div style="font-size:11px;color:var(--text-3)">${typeLabels[s.eventType] || s.eventType}</div></div>`;
     }
     summaryHtml += '</div>';
 
@@ -499,14 +499,14 @@ async function showUserDetail(userId, username) {
     if (d.recent.length > 0) {
       listHtml = '<div style="max-height:320px;overflow-y:auto;margin-top:8px"><table class="users-table"><thead><tr><th>时间</th><th>类型</th><th>来源</th><th>标准号</th></tr></thead><tbody>';
       for (const e of d.recent) {
-        const time = e.created_at ? utcToBeijing(e.created_at) : '—';
-        const typeLabel = typeLabels[e.event_type] || e.event_type;
-        const color = typeColors[e.event_type] || 'var(--text-2)';
+        const time = e.createdAt ? utcToBeijing(e.createdAt) : '—';
+        const typeLabel = typeLabels[e.eventType] || e.eventType;
+        const color = typeColors[e.eventType] || 'var(--text-2)';
         listHtml += `<tr>
           <td style="font-size:12px;white-space:nowrap">${time}</td>
           <td><span style="color:${color};font-size:12px">${typeLabel}</span></td>
           <td>${e.source ? srcLabel(e.source) : '—'}</td>
-          <td style="font-size:12px">${e.standard_id ? escapeHtml(e.standard_id) : '—'}</td>
+          <td style="font-size:12px">${e.standardId ? escapeHtml(e.standardId) : '—'}</td>
         </tr>`;
       }
       listHtml += '</tbody></table></div>';
@@ -514,7 +514,7 @@ async function showUserDetail(userId, username) {
       listHtml = '<p style="color:var(--text-3);font-size:13px;margin-top:8px">暂无使用记录</p>';
     }
 
-    modal.innerHTML = `<h3>用户: ${escapeHtml(d.user.display_name || d.user.username)}</h3>
+    modal.innerHTML = `<h3>用户: ${escapeHtml(d.user.displayName || d.user.username)}</h3>
       ${summaryHtml}${sourceHtml}${listHtml}
       <button class="btn btn-ghost btn-sm" style="margin-top:12px" data-action="modal-close">关闭</button>`;
   } catch (e) {

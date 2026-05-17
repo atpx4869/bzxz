@@ -70,10 +70,7 @@ async function checkModalSources(source, btn) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ standardNumber, sources }),
     });
-    const raw = await res.text();
-    let data = {};
-    try { data = raw ? JSON.parse(raw) : {}; }
-    catch { data = { message: raw || `HTTP${res.status}` }; }
+    const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message || `HTTP${res.status}`);
     mergeSourceCheckResults(standardNumber, data.results || {});
     refreshModalSourcePanel();
@@ -229,7 +226,7 @@ async function showDetail(id) {
   try {
     const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 10000);
     const res = await fetch(`${API}/api/standards/${encodeURIComponent(id)}`, { signal: ctrl.signal });
-    clearTimeout(timer); const d = await res.json();
+    clearTimeout(timer); const d = await readApiResponse(res);
     currentDetailContext = { id, detail: d };
     document.getElementById('modalBody').innerHTML = renderDetailModal(id, d);
     document.getElementById('modalOverlay').classList.add('open');
@@ -486,7 +483,7 @@ async function refreshFileLibrary() {
   if (!list) return;
   try {
     const res = await fetch('/api/downloads');
-    const data = await res.json();
+    const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message || '加载失败');
     fileLibraryItems = data.items || [];
     renderFileLibrary();
@@ -530,7 +527,7 @@ async function deleteLibraryFile(fileName) {
   if (!confirm(`删除文件 ${fileName}？`)) return;
   try {
     const res = await fetch(`/api/downloads/${encodeURIComponent(fileName)}`, { method: 'DELETE' });
-    const data = await res.json();
+    const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message || '删除失败');
     showToast('文件已删除');
     refreshFileLibrary();

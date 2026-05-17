@@ -106,12 +106,7 @@ function getSourceIdForDownload(result, source, fallbackId) {
   return '';
 }
 
-async function readApiResponse(res) {
-  const raw = await res.text();
-  if (!raw) return {};
-  try { return JSON.parse(raw); }
-  catch { return { message: raw }; }
-}
+// readApiResponse is now defined in app-core.js (loaded before this file).
 
 function downloadErrorMessage(label, res, data) {
   const meta = data?.meta || {};
@@ -264,7 +259,9 @@ async function downloadBz(id, onProgress) {
     const es = new EventSource(`${API}/api/tasks/${data.id}/stream`);
     const timeout = setTimeout(() => { es.close(); reject(new Error('BZ轮询超时')); }, 120000);
     es.onmessage = (e) => {
-      const td = JSON.parse(e.data);
+      const ev = parseSseEvent(e.data);
+      if (!ev.ok) { clearTimeout(timeout); es.close(); reject(new Error(`BZ ${ev.error.message || '失败'}`)); return; }
+      const td = ev.value;
       if (td.currentPage && td.totalPages && onProgress) onProgress(`BZ 下载 ${td.currentPage}/${td.totalPages} 页`);
       if (td.status === 'success') { clearTimeout(timeout); es.close(); const elapsed = ((Date.now() - t0) / 1000).toFixed(1); const sizeStr = td.fileSize ? ` ${formatSize(td.fileSize)}` : ''; resolve({ source: 'bz', fileName: td.fileName || '', fileSize: td.fileSize, meta: `${elapsed}s${sizeStr}` }); }
       if (td.status === 'failed') { clearTimeout(timeout); es.close(); reject(new Error(`BZ ${td.errorMessage || '失败'}`)); }
@@ -282,7 +279,9 @@ async function downloadBy(id, onProgress) {
     const es = new EventSource(`${API}/api/tasks/${data.id}/stream`);
     const timeout = setTimeout(() => { es.close(); reject(new Error('BY轮询超时')); }, 60000);
     es.onmessage = (e) => {
-      const td = JSON.parse(e.data);
+      const ev = parseSseEvent(e.data);
+      if (!ev.ok) { clearTimeout(timeout); es.close(); reject(new Error(`BY ${ev.error.message || '失败'}`)); return; }
+      const td = ev.value;
       if (td.status === 'running' && onProgress) onProgress('BY 下载中...');
       if (td.status === 'success') { clearTimeout(timeout); es.close(); const elapsed = ((Date.now() - t0) / 1000).toFixed(1); const sizeStr = td.fileSize ? ` ${formatSize(td.fileSize)}` : ''; resolve({ source: 'by', fileName: td.fileName || '', fileSize: td.fileSize, meta: `${elapsed}s${sizeStr}` }); }
       if (td.status === 'failed') { clearTimeout(timeout); es.close(); reject(new Error(`BY ${td.errorMessage || '失败'}`)); }
@@ -385,7 +384,7 @@ async function doBatchResolve() {
   try {
     const sources = downloadPriority.filter(s => downloadSources.includes(s));
     const res = await fetch(`${API}/api/standards/resolve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lines, sources }) });
-    const data = await res.json();
+    const data = await readApiResponse(res);
     batchResolved = data.resolved || []; batchUnmatched = data.unmatched || [];
     document.getElementById('batchSummary').innerHTML = `解析完成 · 匹配 ${batchResolved.length} / 未匹配 ${batchUnmatched.length} / 总计 ${lines.length}`;
     renderBatchResults();
@@ -495,7 +494,7 @@ async function doCascadeDownload() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sourceIds, sources }),
         });
-        const data = await resp.json();
+        const data = await readApiResponse(resp);
         if (resp.ok && data.status === 'downloaded') {
           const sizeStr = data.fileSize ? ` ${formatSize(data.fileSize)}` : '';
           updateLog(logId, `${item.standardNumber} ✅ ${srcLabel(data.source)} ${data.fileName || ''}${sizeStr}`, 'success');
@@ -504,7 +503,8 @@ async function doCascadeDownload() {
           if (data.fileName) { triggerDownload(data.fileName); recordDownload(data.source, data.fileName, item.standardNumber); }
           completeDownloadTask(taskId, 'success', { source: data.source, fileName: data.fileName, fileSize: data.fileSize, progress: `${srcLabel(data.source)} 下载完成` });
         } else {
-          const errMsg = data.message || (data.errors ? Object.values(data.errors).join('; ') : '下载失败');
+          const perSource = data.details?.perSource || data.errors;
+          const errMsg = data.message || (perSource ? Object.values(perSource).join('; ') : '下载失败');
           updateLog(logId, `${item.standardNumber} ❌ ${errMsg}`, 'fail');
           setRowDownloadState(item.standardId, 'fail');
           allFailedItems.push(item);

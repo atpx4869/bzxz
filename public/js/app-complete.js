@@ -56,7 +56,7 @@ async function doComplete() {
     form.append('includeDownloadLink', String(document.getElementById('completeIncludeLink').checked));
     form.append('includeTextFlag', String(document.getElementById('completeIncludeText').checked));
     const res = await fetch(`${API}/api/standards/complete`, { method: 'POST', body: form });
-    const data = await res.json();
+    const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
     setCompleteFlow('success');
     setCompleteStatus(`

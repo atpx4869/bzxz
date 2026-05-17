@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type Database from 'better-sqlite3';
 import type { Request, Response, NextFunction } from 'express';
+import { respond, respondError } from '../shared/response';
+import { toCamelCase } from '../shared/case';
 
 export function createStatsRoutes(db: Database.Database, requireAuth: (req: Request, res: Response, next: NextFunction) => void) {
   const router = Router();
@@ -10,8 +12,8 @@ export function createStatsRoutes(db: Database.Database, requireAuth: (req: Requ
   const querySchema = z.object({
     from: z.string().optional(),
     to: z.string().optional(),
-    user_id: z.string().optional(),
-    event_type: z.string().optional(),
+    userId: z.string().optional(),
+    eventType: z.string().optional(),
     source: z.string().optional(),
   });
 
@@ -21,15 +23,15 @@ export function createStatsRoutes(db: Database.Database, requireAuth: (req: Requ
 
     if (params.from) { conditions.push('e.created_at >= ?'); values.push(params.from); }
     if (params.to) { conditions.push('e.created_at <= ?'); values.push(params.to); }
-    if (params.event_type) { conditions.push('e.event_type = ?'); values.push(params.event_type); }
+    if (params.eventType) { conditions.push('e.event_type = ?'); values.push(params.eventType); }
     if (params.source) { conditions.push('e.source = ?'); values.push(params.source); }
 
     // Non-admin can only see own data
     if (!isAdmin) {
       conditions.push('e.user_id = ?');
       values.push(userId);
-    } else if (params.user_id) {
-      const uid = parseInt(params.user_id, 10);
+    } else if (params.userId) {
+      const uid = parseInt(params.userId, 10);
       if (Number.isNaN(uid)) return { where: 'WHERE 0', values: [] };
       conditions.push('e.user_id = ?');
       values.push(uid);
@@ -48,7 +50,7 @@ export function createStatsRoutes(db: Database.Database, requireAuth: (req: Requ
     const total = byType.reduce((s, r) => s + r.count, 0);
     const uniqueUsers = (db.prepare(`SELECT COUNT(DISTINCT user_id) as cnt FROM usage_events e ${where}`).get(...values) as { cnt: number }).cnt;
 
-    res.json({ total, byType, uniqueUsers });
+    respond(res, { total, byType: toCamelCase(byType), uniqueUsers });
   });
 
   // GET /api/stats/timeseries
@@ -64,7 +66,7 @@ export function createStatsRoutes(db: Database.Database, requireAuth: (req: Requ
       ORDER BY date
     `).all(...values) as { date: string; event_type: string; count: number }[];
 
-    res.json({ data: rows });
+    respond(res, { items: toCamelCase(rows) });
   });
 
   // GET /api/stats/by-source
@@ -80,13 +82,13 @@ export function createStatsRoutes(db: Database.Database, requireAuth: (req: Requ
       ORDER BY count DESC
     `).all(...values) as { source: string; count: number }[];
 
-    res.json({ data: rows });
+    respond(res, { items: rows });
   });
 
   // GET /api/stats/by-user — admin only
   router.get('/by-user', (req, res) => {
     if (req.user!.role !== 'admin') {
-      res.status(403).json({ code: 'FORBIDDEN', message: '需要管理员权限' });
+      respondError(res, 403, 'FORBIDDEN', '需要管理员权限');
       return;
     }
 
@@ -102,7 +104,7 @@ export function createStatsRoutes(db: Database.Database, requireAuth: (req: Requ
       ORDER BY count DESC
     `).all(...values) as { username: string; display_name: string; count: number }[];
 
-    res.json({ data: rows });
+    respond(res, { items: toCamelCase(rows) });
   });
 
   // GET /api/stats/recent
@@ -124,11 +126,11 @@ export function createStatsRoutes(db: Database.Database, requireAuth: (req: Requ
       metadata: string | null; created_at: string; username: string; display_name: string;
     }[];
 
-    res.json({
-      data: rows.map(r => ({
+    respond(res, {
+      items: toCamelCase(rows.map(r => ({
         ...r,
         metadata: r.metadata ? JSON.parse(r.metadata) : null,
-      })),
+      }))),
     });
   });
 

@@ -41,7 +41,7 @@ function pollGbwTextAvailability() {
     if (_gbwTextPollAbort) return;
     try {
       const resp = await fetch(`/api/standards/text-availability?ids=${gbwIds.join(',')}`);
-      const data = await resp.json();
+      const data = await readApiResponse(resp);
       let updated = false;
       for (const r of results) {
         const gbwId = r._sourceIds?.gbw || (r._source === 'gbw' ? r.sourceId : null);
@@ -110,7 +110,7 @@ async function doSearch() {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 6000);
     return fetch(`${API}/api/standards/search?q=${encodeURIComponent(q)}&source=${src}`, { signal: ctrl.signal })
-      .then(r => r.json()).then(data => ({ ok: true, src, items: (data.items || []).map(i => ({ ...i, _source: src })) }))
+      .then(r => readApiResponse(r)).then(data => ({ ok: true, src, items: (data.items || []).map(i => ({ ...i, _source: src })) }))
       .catch(e => ({ ok: false, src, error: e.name === 'AbortError' ? '超时' : e.message }))
       .finally(() => clearTimeout(timer));
   });
