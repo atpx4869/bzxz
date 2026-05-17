@@ -1,5 +1,90 @@
 # Changelog
 
+## [1.12.0] - 2026-05-17
+
+### Fixed
+- 启动脚本端口硬编码：3000 被占时静默崩溃。改为自动 fallback 到随机端口；start.bat / start.vbs 轮询 `data/.server-port` 文件读真实端口再开浏览器
+- 桌面端窗口默认宽度 1280px 时下载按钮被挤出可视区。Electron 默认尺寸提到 1360×860，topbar 三栏布局加 flex-shrink:0 / min-width:0 防压缩；source-health-strip 在 ≤1100px 直接隐藏
+
+---
+
+## [1.11.0] - 2026-05-17
+
+### Added
+- 上游 HTTP 延迟统计：诊断面板新增"上游延迟统计"区，每个 host 显示 avg/max/last/失败计数，>2s 警告色 >5s 危险色
+- undici Agent 加 pipelining:4，单 TCP 连接复用多请求，减少 GBW 验证码相关突发的 TCP/TLS 握手成本
+
+### Fixed
+- BY 内网 isAvailable 检测在外网环境每次搜索都 3 秒纯浪费 + 日志噪音。加 60 秒负缓存
+
+---
+
+## [1.10.0] - 2026-05-17
+
+### Added
+- 启动时环境自检：BW/BZ/BY 三源连通性 + OCR worker 预热，并发跑、异步不阻塞 server 启动
+- 顶部红色警示条：自检发现异常时点击展开诊断面板，定位"为什么慢"
+- 诊断面板：设置页加"🩺 诊断"按钮，显示 OCR 引擎、worker PID、Python 命令、PATH 环境变量、最近 100 条服务端日志
+
+### Fixed
+- trySpawnPython 同步 immediateError 检测无效（spawn error 是异步事件），导致 python3 / py 候选永远不会被尝试。改为 await 'spawn'/'error' 竞速
+- OCR worker 启动失败时永久标记 unavailable，不再每次 OCR 重新 spawn 浪费启动超时
+- OCR worker 启动超时 20s → 5s，没装 python 的机器第一次下载不再卡 20 秒
+
+---
+
+## [1.9.0] - 2026-05-17
+
+### Added
+- Python OCR 守护进程（常驻）：一次启动后所有验证码复用同进程，ddddocr 平均 OCR 耗时从 1-3 秒（每次 import）降到 ~50-200ms
+- tesseract.js 也用单例常驻 worker + 串行链，没装 python 的用户单次 OCR 从 1-2s 降到 200-500ms
+- 前端 default download concurrency 3 → 5，可选范围扩到 1-8
+
+### Changed
+- OCR `execFileSync` → 异步 `execFile`：多 worker 不再被同步阻塞事件循环
+
+### Fixed
+- GBW autoDownload 每次重试都重新 getStandardDetail（2 次 HTTP 请求）。加 10 分钟 LRU 缓存
+- GBW autoDownload 重试只取新 captcha 图，不再重建整个 session（cookie 复用，省 showGb 请求）
+- by-adapter ensureLogin 不去重：多 worker 并发会重复登录 N 次。加 in-flight Promise 共享
+- GBW 多 pooledFetch 显式 retries:1 / 2，避免盲目重试 3 倍时间；verifyCode 一码一用绝不重试
+- autoDownload maxRetries 5 → 3
+
+---
+
+## [1.8.0] - 2026-05-17
+
+### Removed
+- 整源删除 BZVIP：删 `src/sources/bz-vip/`、register-bot / capture-order-* scripts、`data/accounts.json` 不再打入 release，前端 source-tag / 筛选 / 优先级等 30+ 处一并清理
+
+### Added
+- API 统一 Result 壳 `{ data, error }`：所有 JSON 端点 + SSE 事件统一格式
+- service 出口 `toCamelCase()` 转换：DB 行 snake_case 统一转 API camelCase
+- 路由前缀重组：CNAS/CMA labs 全归 `/api/qualifications/labs/{cnas,cma}/*`，旧路径 alias 中间件兜底
+- 中央错误处理：respond/respondError + AppError 子类，移除"业务失败塞进 HTTP 200"反模式
+- 前端统一 `readApiResponse()` / `parseSseEvent()` 解 Result 壳
+- 文档 `docs/ARCHITECTURE.md`：响应壳/命名/路由前缀/三层配置/源能力差异等约定
+
+### Fixed
+- 下载端点 `/api/downloads/:filename` 缺 requireAuth：LAN 部署下任何人都能拉走导出文件
+- by 源默认硬编码密码 + 多处 `rejectUnauthorized: false` 跟随 bzvip 删除自然消失
+- db.ts schema 迁移 14 行 `try { ALTER } catch {}` 改为 `PRAGMA table_info` 列存在性检测
+- standards search cache 加 200 条 LRU 上限
+- cnas-routes 批量同步走 `qual_sync_concurrency` 设置（之前形同虚设）
+- electron 自动更新加最小校验：下载主机白名单 + asset.size 严格比对
+- 兜底模糊查询全表 `.all()` 改 SQL LIKE + LIMIT 500
+- 前端 8 个 `app-*.js` 加 `window._tabCleanup` 注册表，switchTab 切换时清理 GBW 文本轮询、资质同步轮询
+- Chart.js 4.5.1 本地化到 `public/vendor/`，离线/内网环境不再依赖 CDN
+
+### Changed
+- by-adapter 与 bz/gbw 实现风格统一：复用 searchCache、pooledFetch、增加诊断日志
+- showConfirm() 模态化替换 5 处原生 confirm()，按钮禁用态加灰底
+- 搜索结果分批渲染：首批 100 条 + "显示更多"，避免 1000+ 卡顿
+- 快捷键加 input/textarea 上下文保护，在文本框内不触发 Ctrl+D 等
+- 批量下载失败 modal 展示具体错误原因（之前只有标准号）
+
+---
+
 ## [1.7.0] - 2026-05-15
 
 ### Added

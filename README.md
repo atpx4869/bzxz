@@ -323,6 +323,16 @@ npm run build
 npx tsc -p tsconfig.electron.json --noEmit
 ```
 
+## 更新日志
+
+完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
+
+- **1.12.0** — 启动脚本端口被占自动 fallback，桌面端默认窗口加宽避免下载按钮被挤掉
+- **1.11.0** — 诊断面板加"上游延迟统计"，undici pipelining 缓解 GBW 慢握手；BY 内网 isAvailable 加 60s 负缓存
+- **1.10.0** — 启动时环境自检（BW/BZ/BY 连通 + OCR worker 预热），异常顶部红条提示
+- **1.9.0** — Python OCR 常驻守护进程（OCR 从 1-3s 降到 ~50-200ms）；tesseract 也改单例常驻；下载并发默认 3→5
+- **1.8.0** — 整源删除 BZVIP；API 统一 `{ data, error }` 壳 + camelCase；路由前缀重组（旧路径 alias 兼容）；下载端点鉴权；db schema 迁移改用 PRAGMA 列检测
+
 ## License
 
 ISC
