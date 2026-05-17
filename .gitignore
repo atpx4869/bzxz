@@ -4,6 +4,7 @@ data/accounts.json
 data/bzxz.db
 data/bzxz.db-wal
 data/bzxz.db-shm
+data/.server-port
 node_modules/
 *.log
 eng.traineddata
