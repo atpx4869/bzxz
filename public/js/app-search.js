@@ -47,6 +47,8 @@ function pollGbwTextAvailability() {
         const gbwId = r._sourceIds?.gbw || (r._source === 'gbw' ? r.sourceId : null);
         if (gbwId && data[gbwId] !== undefined) {
           const newVal = data[gbwId];
+          // Mark gbw as checked so the tri-state badge can transition out of 'checking'
+          if (!r._gbwTextChecked) { r._gbwTextChecked = true; updated = true; }
           if (r._source === 'gbw') {
             if (r.previewAvailable !== newVal) { r.previewAvailable = newVal; updated = true; }
           }
@@ -71,6 +73,13 @@ function pollGbwTextAvailability() {
         emptyPolls++;
         if (emptyPolls >= 20) {
           _gbwTextPollTimer = null;
+          // Mark all gbw rows as checked so the checking spinner stops
+          let anyMark = false;
+          for (const r of results) {
+            const gbwId = r._sourceIds?.gbw || (r._source === 'gbw' ? r.sourceId : null);
+            if (gbwId && !r._gbwTextChecked) { r._gbwTextChecked = true; anyMark = true; }
+          }
+          if (anyMark) renderResults();
           const textCount = results.filter(r => r.previewAvailable).length;
           showSearchStatus(textCount > 0 ? `文本检测完成 (${textCount}/${results.length}条有文本)` : '文本检测超时', false);
           setTimeout(hideSearchStatus, 3000);
@@ -88,6 +97,23 @@ function pollGbwTextAvailability() {
   _gbwTextPollTimer = setTimeout(poll, 2000);
 }
 
+// ── Per-source progress strip ──
+function renderSourceProgressStrip(states) {
+  const strip = document.getElementById('sourceProgressStrip');
+  if (!strip) return;
+  if (!states || Object.keys(states).length === 0) { strip.style.display = 'none'; strip.innerHTML = ''; return; }
+  const order = ['bz', 'gbw', 'by'];
+  const html = order.filter(s => states[s]).map(s => {
+    const st = states[s];
+    const cls = st.status; // 'loading' | 'ok' | 'fail'
+    const icon = cls === 'loading' ? '<span class="src-prog-spin"></span>' : (cls === 'ok' ? '✓' : '✗');
+    const num = cls === 'loading' ? '检索中' : (cls === 'ok' ? `${st.count} 条` : (st.error || '失败'));
+    return `<span class="src-prog-chip src-prog-${cls} src-prog-${s}"><span class="src-prog-label">${escapeHtml(srcLabel(s))}</span><span class="src-prog-icon">${icon}</span><span class="src-prog-value">${escapeHtml(num)}</span></span>`;
+  }).join('');
+  strip.innerHTML = html;
+  strip.style.display = html ? 'flex' : 'none';
+}
+
 // ── Search ──
 async function doSearch() {
   if (searchAborted === 'cancelling') return; // already cancelling
@@ -98,6 +124,10 @@ async function doSearch() {
   document.getElementById('searchBtn').disabled = false;
   results = []; selectedIds.clear(); updateToolbar(); searchAborted = false; qualData = {};
   showSearchStatus('正在搜索...', true);
+  // Initialize per-source progress chips
+  const _sourceProgress = {};
+  for (const s of selectedSources) _sourceProgress[s] = { status: 'loading', count: 0 };
+  renderSourceProgressStrip(_sourceProgress);
   // Show skeleton
   document.getElementById('results').innerHTML = Array.from({ length: 4 }, () =>
     `<div class="skeleton-card"><div class="skeleton-badge skeleton-line"></div><div class="skeleton-body"><div class="skeleton-line w80"></div><div class="skeleton-line w60"></div><div class="skeleton-line w40"></div></div></div>`
@@ -120,8 +150,15 @@ async function doSearch() {
   for (const p of promises) {
     const outcome = await p; receivedCount++;
     if (searchAborted) break;
-    if (outcome.ok) { receivedResults.push(...outcome.items); addLog(`搜索 ${outcome.src}(${q}) 完成 (+${outcome.items.length} 条)`, 'success'); }
-    else { addLog(`搜索 ${outcome.src}(${q}) 失败: ${outcome.error}`, 'fail'); }
+    if (outcome.ok) {
+      receivedResults.push(...outcome.items);
+      addLog(`搜索 ${outcome.src}(${q}) 完成 (+${outcome.items.length} 条)`, 'success');
+      _sourceProgress[outcome.src] = { status: 'ok', count: outcome.items.length };
+    } else {
+      addLog(`搜索 ${outcome.src}(${q}) 失败: ${outcome.error}`, 'fail');
+      _sourceProgress[outcome.src] = { status: 'fail', count: 0, error: outcome.error };
+    }
+    renderSourceProgressStrip(_sourceProgress);
     showSearchStatus(`搜索中 ${receivedCount}/${sources.length} 源...`, true);
     results = dedupeResults(receivedResults); results.sort(sortByStatus);
     document.getElementById('summary').innerHTML = `<span class="count-anim">找到 ${results.length} 条结果 (${receivedCount}/${sources.length} 源)</span>`;
@@ -340,14 +377,30 @@ const RESULTS_NEXT_BATCH = 200;
 let _resultsRenderedCount = 0;
 let _resultsLastFilteredCache = null;
 
+function resolveTextState(r) {
+  // 废止 standards never have preview text — final state, no checking
+  if (r.status && r.status.includes('废止')) return 'no_text';
+  // Already confirmed has text (from any source) → final
+  if (r.previewAvailable) return 'text';
+  // gbw uses optimistic false until poll resolves — show checking spinner
+  const sources = r.sources || (r._source ? [r._source] : []);
+  if (sources.includes('gbw') && !r._gbwTextChecked) return 'checking';
+  return 'no_text';
+}
+
 function buildResultCardHtml(r, i) {
   const srcBadges = (r.sources || [r._source]).map(s => `<span class="source-badge source-${escapeHtml(String(s))}">${escapeHtml(srcLabel(String(s)))}</span>`).join(' ');
-  const sCls = statusClass(r.status); const hasText = r.previewAvailable;
+  const sCls = statusClass(r.status);
+  const textState = resolveTextState(r);
+  const hasText = textState === 'text';
+  const isChecking = textState === 'checking';
   const saved = isStandardSaved(r);
   const statusBadge = r.status ? `<span class="status-indicator ${sCls}"><span class="dot"></span>${escapeHtml(r.status)}</span>` : '';
-  const textBadge = !hasText ? '<span class="no-text-badge">无文本</span>' : '<span class="has-text-badge">有文本</span>';
+  const textBadge = isChecking
+    ? '<span class="text-badge-checking"><span class="text-badge-dot"></span>检测中</span>'
+    : (hasText ? '<span class="has-text-badge">有文本</span>' : '<span class="no-text-badge">无文本</span>');
   return `
-    <div class="result-card card-enter${hasText ? '' : ' no-text'}${saved ? ' saved' : ''}" data-sid="${escapeHtml(r.id)}">
+    <div class="result-card card-enter${hasText ? '' : (isChecking ? ' checking-text' : ' no-text')}${saved ? ' saved' : ''}" data-sid="${escapeHtml(r.id)}">
       <div class="check-col"><input type="checkbox" data-idx="${i}" ${selectedIds.has(r.id) ? 'checked' : ''}></div>
       <div class="card-id">
         <div class="card-number">${escapeHtml(r.standardNumber)}</div>
@@ -376,6 +429,15 @@ function buildResultCardHtml(r, i) {
     </div>`;
 }
 
+// Status group collapse state — persisted
+const _collapsedGroupsKey = 'bzxz_collapsed_status_groups';
+let _collapsedGroups = new Set(safeJsonParse(localStorage.getItem(_collapsedGroupsKey), ['废止']));
+function _persistCollapsedGroups() {
+  try { localStorage.setItem(_collapsedGroupsKey, JSON.stringify([..._collapsedGroups])); } catch {}
+}
+
+const STATUS_GROUP_ORDER = ['现行', '即将实施', '其它', '废止'];
+
 function renderResults() {
   const filtered = getFilteredResults();
   const idxMap = new Map(results.map((r, i) => [r.id, i]));
@@ -392,11 +454,58 @@ function renderResults() {
       <span>日期</span>
       <span>操作</span>
     </div>` : '';
-  const firstBatchHtml = filtered.slice(0, _resultsRenderedCount).map(r => buildResultCardHtml(r, idxMap.get(r.id))).join('');
+
+  // Group by status category when at least 2 categories present and we have >5 results.
+  const visibleBatch = filtered.slice(0, _resultsRenderedCount);
+  const catCounts = {};
+  for (const r of filtered) { const c = statusCategory(r.status); catCounts[c] = (catCounts[c] || 0) + 1; }
+  const usedCats = Object.keys(catCounts);
+  const useGrouping = usedCats.length >= 2 && filtered.length > 5;
+
+  let bodyHtml = '';
+  if (useGrouping) {
+    // Group first-batch rows by status category, then render in canonical order
+    const groups = {};
+    for (const r of visibleBatch) {
+      const c = statusCategory(r.status);
+      (groups[c] = groups[c] || []).push(r);
+    }
+    for (const cat of STATUS_GROUP_ORDER) {
+      const rows = groups[cat];
+      const total = catCounts[cat] || 0;
+      if (!total) continue;
+      const collapsed = _collapsedGroups.has(cat);
+      const rendered = rows ? rows.length : 0;
+      const groupCls = `status-group status-group-${cat === '现行' ? 'current' : cat === '即将实施' ? 'upcoming' : cat === '废止' ? 'expired' : 'other'}${collapsed ? ' collapsed' : ''}`;
+      bodyHtml += `<div class="${groupCls}" data-group-cat="${escapeHtml(cat)}">
+        <div class="status-group-header" data-group-toggle="${escapeHtml(cat)}">
+          <span class="status-group-caret">▾</span>
+          <span class="status-group-name">${escapeHtml(cat)}</span>
+          <span class="status-group-count">${rendered}${rendered < total ? ` / ${total}` : ''}</span>
+        </div>
+        <div class="status-group-body">${
+          rows ? rows.map(r => buildResultCardHtml(r, idxMap.get(r.id))).join('') : ''
+        }</div>
+      </div>`;
+    }
+  } else {
+    bodyHtml = visibleBatch.map(r => buildResultCardHtml(r, idxMap.get(r.id))).join('');
+  }
+
   const moreHtml = filtered.length > _resultsRenderedCount
     ? `<div id="resultsMore" class="results-more"><button class="btn btn-ghost btn-sm" id="resultsLoadMoreBtn">显示更多（还剩 ${filtered.length - _resultsRenderedCount} 条）</button></div>`
     : '';
-  document.getElementById('results').innerHTML = header + firstBatchHtml + moreHtml;
+  document.getElementById('results').innerHTML = header + bodyHtml + moreHtml;
+  // Wire status group toggles
+  document.querySelectorAll('[data-group-toggle]').forEach(h => {
+    h.addEventListener('click', () => {
+      const cat = h.dataset.groupToggle;
+      const group = h.closest('.status-group');
+      if (_collapsedGroups.has(cat)) { _collapsedGroups.delete(cat); group.classList.remove('collapsed'); }
+      else { _collapsedGroups.add(cat); group.classList.add('collapsed'); }
+      _persistCollapsedGroups();
+    });
+  });
   document.querySelectorAll('input[data-idx]').forEach(cb => {
     cb.addEventListener('change', () => {
       const idx = parseInt(cb.dataset.idx);
@@ -415,9 +524,32 @@ function appendNextResultsBatch() {
   if (!filtered) return;
   const idxMap = new Map(results.map((r, i) => [r.id, i]));
   const end = Math.min(_resultsRenderedCount + RESULTS_NEXT_BATCH, filtered.length);
-  const html = filtered.slice(_resultsRenderedCount, end).map(r => buildResultCardHtml(r, idxMap.get(r.id))).join('');
+  const slice = filtered.slice(_resultsRenderedCount, end);
   const moreEl = document.getElementById('resultsMore');
-  if (moreEl) moreEl.insertAdjacentHTML('beforebegin', html);
+  const grouped = !!document.querySelector('.status-group');
+  if (grouped) {
+    // Distribute new rows into their status-group bodies (already exist from initial render)
+    for (const r of slice) {
+      const cat = statusCategory(r.status);
+      const body = document.querySelector(`.status-group[data-group-cat="${CSS.escape(cat)}"] .status-group-body`);
+      const html = buildResultCardHtml(r, idxMap.get(r.id));
+      if (body) body.insertAdjacentHTML('beforeend', html);
+      else if (moreEl) moreEl.insertAdjacentHTML('beforebegin', html); // fallback
+    }
+    // Refresh group counts
+    const catCounts = {};
+    for (const r of filtered.slice(0, end)) { const c = statusCategory(r.status); catCounts[c] = (catCounts[c] || 0) + 1; }
+    document.querySelectorAll('.status-group').forEach(g => {
+      const cat = g.dataset.groupCat;
+      const total = filtered.reduce((acc, r) => acc + (statusCategory(r.status) === cat ? 1 : 0), 0);
+      const rendered = catCounts[cat] || 0;
+      const cnt = g.querySelector('.status-group-count');
+      if (cnt) cnt.textContent = rendered < total ? `${rendered} / ${total}` : `${rendered}`;
+    });
+  } else {
+    const html = slice.map(r => buildResultCardHtml(r, idxMap.get(r.id))).join('');
+    if (moreEl) moreEl.insertAdjacentHTML('beforebegin', html);
+  }
   // Re-bind checkboxes for newly inserted rows
   document.querySelectorAll('input[data-idx]:not([data-bound])').forEach(cb => {
     cb.setAttribute('data-bound', '1');
@@ -473,6 +605,129 @@ document.getElementById('results').addEventListener('click', e => {
   if (btn.dataset.action === 'detail') showDetail(id);
   else if (btn.dataset.action === 'download') downloadOne(id, btn);
   else if (btn.dataset.action === 'save') toggleSavedStandard(id);
+});
+
+// ── Right-click context menu ──
+let _ctxMenuEl = null;
+function hideCtxMenu() { if (_ctxMenuEl) { _ctxMenuEl.remove(); _ctxMenuEl = null; } }
+document.addEventListener('click', hideCtxMenu);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') hideCtxMenu(); });
+document.addEventListener('scroll', hideCtxMenu, true);
+
+function copyToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(() => showToast('已复制', 'success')).catch(() => showToast('复制失败', 'fail'));
+  } else {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
+    ta.select(); try { document.execCommand('copy'); showToast('已复制', 'success'); } catch { showToast('复制失败', 'fail'); }
+    ta.remove();
+  }
+}
+
+// ── j/k vim-style row navigation ──
+let _activeRowId = null;
+function _setActiveRow(card) {
+  document.querySelectorAll('.result-card.row-active').forEach(el => el.classList.remove('row-active'));
+  if (!card) { _activeRowId = null; return; }
+  card.classList.add('row-active');
+  _activeRowId = card.dataset.sid;
+  // Scroll into view if needed
+  const rect = card.getBoundingClientRect();
+  if (rect.top < 80 || rect.bottom > window.innerHeight - 40) {
+    card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+}
+function _getVisibleCards() {
+  return Array.from(document.querySelectorAll('.result-card')).filter(c => {
+    const grp = c.closest('.status-group');
+    return !grp || !grp.classList.contains('collapsed');
+  });
+}
+function _moveActiveRow(delta) {
+  const cards = _getVisibleCards();
+  if (!cards.length) return;
+  let idx = cards.findIndex(c => c.dataset.sid === _activeRowId);
+  if (idx < 0) idx = delta > 0 ? -1 : cards.length;
+  idx = Math.max(0, Math.min(cards.length - 1, idx + delta));
+  _setActiveRow(cards[idx]);
+}
+document.addEventListener('keydown', e => {
+  // Skip when typing in input/textarea/contenteditable
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) return;
+  // Skip when modal/overlay open
+  if (document.querySelector('.modal.open, .shortcuts-overlay.open')) return;
+  // Skip if not on search page
+  const searchPage = document.getElementById('page-search');
+  if (!searchPage || searchPage.style.display === 'none') return;
+  // Skip combos with modifiers (let them through)
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+  if (e.key === 'j') { e.preventDefault(); _moveActiveRow(1); return; }
+  if (e.key === 'k') { e.preventDefault(); _moveActiveRow(-1); return; }
+  if (e.key === 'g') { e.preventDefault(); const cards = _getVisibleCards(); if (cards.length) _setActiveRow(cards[0]); return; }
+  if (e.key === 'G') { e.preventDefault(); const cards = _getVisibleCards(); if (cards.length) _setActiveRow(cards[cards.length - 1]); return; }
+  if (!_activeRowId) return;
+  const card = document.querySelector(`.result-card[data-sid="${CSS.escape(_activeRowId)}"]`);
+  if (!card) return;
+  if (e.key === 'x' || e.key === ' ') {
+    e.preventDefault();
+    const cb = card.querySelector('input[type="checkbox"]');
+    if (cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change', { bubbles: true })); }
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    showDetail(_activeRowId);
+  } else if (e.key === 'd') {
+    e.preventDefault();
+    const btn = card.querySelector('[data-action="download"]');
+    if (btn && !btn.disabled) downloadOne(_activeRowId, btn); else showToast('该标准无可用文本', 'fail');
+  } else if (e.key === 's') {
+    e.preventDefault();
+    toggleSavedStandard(_activeRowId);
+  }
+});
+
+document.getElementById('results').addEventListener('contextmenu', e => {
+  const card = e.target.closest('.result-card');
+  if (!card) return;
+  e.preventDefault();
+  hideCtxMenu();
+  const id = card.dataset.sid;
+  const r = findResultByAnyId ? findResultByAnyId(id) : results.find(x => x.id === id);
+  if (!r) return;
+  const items = [
+    { label: '复制标准号', icon: '#', action: () => copyToClipboard(r.standardNumber || '') },
+    { label: '复制名称', icon: 'T', action: () => copyToClipboard(r.title || '') },
+    { label: '复制标准号 + 名称', icon: '≣', action: () => copyToClipboard(`${r.standardNumber || ''}  ${r.title || ''}`.trim()) },
+    { divider: true },
+    { label: '查看详情', icon: '👁', action: () => showDetail(id) },
+    { label: r.previewAvailable ? '下载该标准' : '下载该标准（无文本）', icon: '↓', action: () => { const btn = card.querySelector('[data-action="download"]'); if (btn && !btn.disabled) downloadOne(id, btn); else showToast('该标准无可用文本', 'fail'); } },
+    { label: isStandardSaved(r) ? '取消收藏' : '加入收藏', icon: '★', action: () => toggleSavedStandard(id) },
+    { divider: true },
+    { label: '复制为 JSON', icon: '{}', action: () => copyToClipboard(JSON.stringify(r, null, 2)) },
+  ];
+  const menu = document.createElement('div');
+  menu.className = 'ctx-menu';
+  menu.innerHTML = items.map((it, idx) => it.divider
+    ? '<div class="ctx-menu-divider"></div>'
+    : `<div class="ctx-menu-item" data-idx="${idx}"><span class="ctx-menu-icon">${it.icon || ''}</span><span class="ctx-menu-label">${escapeHtml(it.label)}</span></div>`
+  ).join('');
+  // Position with viewport clamp
+  const VW = window.innerWidth, VH = window.innerHeight;
+  const MW = 220, MH = items.length * 30 + 20;
+  const x = Math.min(e.clientX, VW - MW - 8);
+  const y = Math.min(e.clientY, VH - MH - 8);
+  menu.style.cssText = `position:fixed;left:${x}px;top:${y}px;z-index:10000;`;
+  document.body.appendChild(menu);
+  _ctxMenuEl = menu;
+  menu.addEventListener('click', ev => {
+    const item = ev.target.closest('.ctx-menu-item');
+    if (!item) return;
+    const idx = parseInt(item.dataset.idx);
+    const cmd = items[idx];
+    if (cmd && cmd.action) cmd.action();
+    hideCtxMenu();
+  });
 });
 
 function setRowDownloadState(id, state) {
