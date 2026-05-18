@@ -64,9 +64,7 @@ function pollGbwTextAvailability() {
       const allChecked = hasAnyData && gbwIds.every(id => data[id] !== undefined);
       if (allChecked) {
         _gbwTextPollTimer = null;
-        const textCount = results.filter(r => r.previewAvailable).length;
-        showSearchStatus(`文本检测完成 (${textCount}/${results.length}条有文本)`, false);
-        setTimeout(hideSearchStatus, 3000);
+        // 静默结束：每张卡片的「检测中」徽章已自然过渡到「有文本/无文本」
         return;
       }
       if (!hasAnyData) {
@@ -80,9 +78,7 @@ function pollGbwTextAvailability() {
             if (gbwId && !r._gbwTextChecked) { r._gbwTextChecked = true; anyMark = true; }
           }
           if (anyMark) renderResults();
-          const textCount = results.filter(r => r.previewAvailable).length;
-          showSearchStatus(textCount > 0 ? `文本检测完成 (${textCount}/${results.length}条有文本)` : '文本检测超时', false);
-          setTimeout(hideSearchStatus, 3000);
+          // 静默结束：未拿到结果的卡片已被标记为 _gbwTextChecked，徽章会落到「无文本」
           return;
         }
       } else {
@@ -196,13 +192,9 @@ async function doSearch() {
   }
   document.getElementById('searchBtn').innerHTML = '搜索'; document.getElementById('searchBtn').disabled = false;
   if (results.length > 0 && !searchAborted) {
-    const hasGbw = results.some(r => r._source === 'gbw' || (r.sources && r.sources.includes('gbw')));
-    if (hasGbw && results.some(r => r._source === 'gbw' && !r.previewAvailable)) {
-      showSearchStatus('正在检测文本...', true);
-    } else {
-      showSearchStatus(`搜索完成 (${results.length}条)`, false);
-      setTimeout(hideSearchStatus, 2000);
-    }
+    // 文本检测进度由每张卡片右侧的「检测中」徽章承担，底部 toast 不再常驻
+    showSearchStatus(`搜索完成 (${results.length}条)`, false);
+    setTimeout(hideSearchStatus, 1800);
   } else {
     hideSearchStatus();
   }
