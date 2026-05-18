@@ -65,19 +65,21 @@ export function isLoopbackRequest(req: Request): boolean {
 
 export function createAuthMiddleware(db: Database.Database) {
   const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-  let requestCount = 0;
   const cleanExpiredSessions = db.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')");
+
+  // Run expired-session cleanup on a timer instead of piggy-backing on the
+  // request that happens to be #100 — that path had to do a synchronous DELETE
+  // while the user waited. unref() so the interval doesn't keep Node alive.
+  const sessionSweep = setInterval(() => {
+    try { cleanExpiredSessions.run(); } catch { /* db may be closing */ }
+  }, 5 * 60 * 1000);
+  sessionSweep.unref?.();
 
   function isLoginRequired(): boolean {
     return getSetting(db, 'login_required', '0') === '1';
   }
 
   function requireAuth(req: Request, res: Response, next: NextFunction): void {
-    // Periodic cleanup: every 100 requests
-    if (++requestCount % 100 === 0) {
-      cleanExpiredSessions.run();
-    }
-
     // If login is not required, check for session first, fall back to guest
     // ONLY for loopback requests. LAN peers must always authenticate even
     // when "open desktop" mode is enabled, otherwise anyone on the network

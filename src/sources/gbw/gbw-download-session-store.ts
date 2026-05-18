@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { DownloadSessionInfo } from '../../domain/standard';
 
 export interface GbwDownloadSessionRecord extends DownloadSessionInfo {
@@ -8,21 +9,26 @@ export interface GbwDownloadSessionRecord extends DownloadSessionInfo {
 }
 
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const SWEEP_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
 export class GbwDownloadSessionStore {
   private readonly sessions = new Map<string, GbwDownloadSessionRecord>();
+  private _sweepTimer: ReturnType<typeof setInterval> | null = null;
 
   create(record: Omit<GbwDownloadSessionRecord, 'id' | 'createdAt' | 'updatedAt'>): GbwDownloadSessionRecord {
     const now = new Date().toISOString();
     const created: GbwDownloadSessionRecord = {
       ...record,
-      id: `gbw_dl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      // Unpredictable opaque id — matches export-task-store, keeps adjacent
+      // users from guessing each other's in-flight session ids.
+      id: `gbw_dl_${crypto.randomUUID()}`,
       createdAt: now,
       updatedAt: now,
     };
 
     this.sessions.set(created.id, created);
     this.evictExpired();
+    this.ensureSweep();
     return created;
   }
 
@@ -53,5 +59,17 @@ export class GbwDownloadSessionStore {
         this.sessions.delete(id);
       }
     }
+    if (this.sessions.size === 0 && this._sweepTimer) {
+      clearInterval(this._sweepTimer);
+      this._sweepTimer = null;
+    }
+  }
+
+  // Run eviction on a timer too — otherwise a user who stops creating sessions
+  // leaves the captcha image / cookies on the heap until the next create call.
+  private ensureSweep(): void {
+    if (this._sweepTimer) return;
+    this._sweepTimer = setInterval(() => this.evictExpired(), SWEEP_INTERVAL_MS);
+    this._sweepTimer.unref?.();
   }
 }

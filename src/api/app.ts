@@ -166,7 +166,8 @@ export function createApp() {
   app.use('/api/auth', createAuthRoutes(db, requireAuth));
   app.use('/api/admin', requireAdmin, createAdminRoutes(db));
   app.use('/api/stats', createStatsRoutes(db, requireAuth));
-  app.use(createQualificationRoutes(db, requireAuth));
+  const qualRouter = createQualificationRoutes(db, requireAuth);
+  app.use(qualRouter);
 
   app.get('/api/health', (_req, res) => {
     respond(res, { ok: true, sources: sourceRegistry.list() });
@@ -186,8 +187,10 @@ export function createApp() {
       },
     });
   });
-  app.get('/api/diagnostics/logs', requireAuth, (req, res) => {
-    const limit = Math.max(1, Math.min(parseInt((req.query.limit as string) || '200', 10) || 200, 500));
+  // Admin-only — recent server logs can include upstream URLs / cookies /
+  // hcno values that ordinary users have no need to see.
+  app.get('/api/diagnostics/logs', requireAdmin, (req, res) => {
+    const limit = Math.max(1, Math.min(Number.parseInt(String(req.query.limit ?? ''), 10) || 200, 500));
     respond(res, { items: getRecentLogs(limit) });
   });
   app.get('/api/diagnostics/environment', requireAuth, (_req, res) => {
@@ -228,5 +231,13 @@ export function createApp() {
     respondError(res, 500, 'INTERNAL_SERVER_ERROR', 'Unexpected server error');
   });
 
-  return app;
+  // Resources owned by this app instance that must be released on shutdown,
+  // notably the playwright Chromium spawned by the CNAS scraper and the
+  // sqlite handle.
+  async function shutdown(): Promise<void> {
+    await qualRouter.qualificationService.close().catch(() => {});
+    try { db.close(); } catch { /* may already be closed under test reset */ }
+  }
+
+  return Object.assign(app, { shutdown });
 }

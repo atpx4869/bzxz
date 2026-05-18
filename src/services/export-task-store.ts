@@ -81,5 +81,8 @@ export class ExportTaskStore {
         this._cleanupTimer = null;
       }
     }, 600_000); // every 10 min
+    // Don't keep the event loop alive solely for this housekeeping interval —
+    // the process should be free to exit when nothing else is pending.
+    this._cleanupTimer.unref?.();
   }
 }

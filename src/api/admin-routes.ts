@@ -17,6 +17,10 @@ function parseAllowedTabs(raw: string | null): string[] | null {
   try { return JSON.parse(raw); } catch { return null; }
 }
 
+function safeParseJson(raw: string): unknown {
+  try { return JSON.parse(raw); } catch { return raw; }
+}
+
 function readAdminSettings(db: Database.Database) {
   const defaultTabsRaw = getSetting(db, 'default_allowed_tabs', '');
   return {
@@ -105,7 +109,12 @@ export function createAdminRoutes(db: Database.Database) {
       user: toCamelCase(user),
       summary: toCamelCase(summary),
       bySource: toCamelCase(bySource),
-      recent: toCamelCase(recent.map(r => ({ ...r, metadata: r.metadata ? JSON.parse(r.metadata) : null }))),
+      recent: toCamelCase(recent.map(r => ({
+        ...r,
+        // A single malformed metadata row shouldn't 500 the whole endpoint —
+        // fall back to the raw string so the admin can still see the event.
+        metadata: r.metadata ? safeParseJson(r.metadata) : null,
+      }))),
     });
   });
 

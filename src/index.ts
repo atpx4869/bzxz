@@ -62,10 +62,24 @@ async function main() {
     console.warn('[bzxz] failed to write port file:', e instanceof Error ? e.message : String(e));
   }
 
-  // Cleanup on shutdown so a stale file doesn't mislead next launch.
-  const cleanup = async () => { try { await unlink(PORT_FILE); } catch { /* ignore */ } };
-  process.once('SIGINT', cleanup);
-  process.once('SIGTERM', cleanup);
+  // Graceful shutdown: stop accepting new connections, release the playwright
+  // Chromium and sqlite handle, then clean up the port file. Without closing
+  // the scraper a stray Chromium process leaks; without closing sqlite the
+  // WAL can be left in an inconsistent state on hard restart.
+  let shuttingDown = false;
+  const cleanup = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`[bzxz] received ${signal}, shutting down`);
+    try { server.close(); } catch { /* ignore */ }
+    try { await app.shutdown(); } catch (e) {
+      console.warn('[bzxz] app shutdown error:', e instanceof Error ? e.message : String(e));
+    }
+    try { await unlink(PORT_FILE); } catch { /* ignore */ }
+    process.exit(0);
+  };
+  process.once('SIGINT', () => { void cleanup('SIGINT'); });
+  process.once('SIGTERM', () => { void cleanup('SIGTERM'); });
   process.once('exit', () => { try { require('node:fs').unlinkSync(PORT_FILE); } catch { /* ignore */ } });
 }
 

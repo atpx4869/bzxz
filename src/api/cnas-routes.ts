@@ -6,9 +6,11 @@ import { normalizeError } from '../shared/errors';
 import { respond } from '../shared/response';
 import { toCamelCase, toSnakeCase } from '../shared/case';
 
-export function createQualificationRoutes(db: Database.Database, requireAuth: express.RequestHandler) {
-  const router = express.Router();
+export function createQualificationRoutes(db: Database.Database, requireAuth: express.RequestHandler):
+  express.Router & { qualificationService: QualificationService } {
+  const router = express.Router() as express.Router & { qualificationService: QualificationService };
   const svc = new QualificationService(db);
+  router.qualificationService = svc;
 
   // ─── Batch query for search result badges ───
   router.post('/api/qualifications/batch-query', requireAuth, (req, res, next) => {
@@ -178,12 +180,12 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
 
   // ─── Sync Logs ───
   router.get('/api/qualifications/labs/cnas/sync-logs', requireAuth, (req, res) => {
-    const limit = Math.max(1, Math.min(parseInt(req.query.limit as string) || 20, 100));
+    const limit = Math.max(1, Math.min(Number.parseInt(String(req.query.limit ?? ''), 10) || 20, 100));
     respond(res, { items: toCamelCase(svc.getCnasSyncLogs(limit)) });
   });
 
   router.get('/api/qualifications/labs/cma/sync-logs', requireAuth, (req, res) => {
-    const limit = Math.max(1, Math.min(parseInt(req.query.limit as string) || 20, 100));
+    const limit = Math.max(1, Math.min(Number.parseInt(String(req.query.limit ?? ''), 10) || 20, 100));
     respond(res, { items: toCamelCase(svc.getCmaSyncLogs(limit)) });
   });
 

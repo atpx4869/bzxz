@@ -96,6 +96,11 @@ export class QualificationService {
     this.db = db ?? getDb();
   }
 
+  /** Release the playwright Chromium spawned by CnasScraper on shutdown. */
+  async close(): Promise<void> {
+    await this.cnasScraper.close().catch(() => { /* best-effort */ });
+  }
+
   // ─── Query ───
 
   /** Batch query qualifications by standard codes (for search result badges) */
@@ -638,8 +643,11 @@ export class QualificationService {
             this.logCnasSync(labNo, 'checked_skip', startTime, 'success', 0);
             return { action: 'checked_skip', records: 0 };
           }
-        } catch {
-          // If check fails, proceed with full sync
+        } catch (err) {
+          // Update-check failure shouldn't abort the sync — fall through to
+          // full re-fetch — but log it so HTML changes / blocks are visible.
+          console.warn(`[cnas] checkForUpdate failed for ${labNo}, doing full sync:`,
+            err instanceof Error ? err.message : String(err));
         }
       }
 
@@ -662,14 +670,20 @@ export class QualificationService {
         try {
           const fetched = await this.cnasScraper.fetchLabName(labInfo);
           if (fetched) labName = fetched;
-        } catch { /* keep existing name */ }
+        } catch (err) {
+          console.warn(`[cnas] fetchLabName failed for ${labNo}, keeping existing:`,
+            err instanceof Error ? err.message : String(err));
+        }
       }
 
       // Fetch org info (other names, address, validity, cert tasks)
       let orgInfo: { otherNames: string; address: string; validityPeriod: string; certTasks: Array<{ taskNo: string; reviewType: string; signDate: string; scopeStatus: string }> } = { otherNames: '', address: '', validityPeriod: '', certTasks: [] };
       try {
         orgInfo = await this.cnasScraper.fetchOrgInfo(labInfo);
-      } catch { /* keep defaults */ }
+      } catch (err) {
+        console.warn(`[cnas] fetchOrgInfo failed for ${labNo}, using defaults:`,
+          err instanceof Error ? err.message : String(err));
+      }
 
       // Replace data atomically
       const txn = this.db.transaction(() => {
