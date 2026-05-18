@@ -590,6 +590,27 @@ body.sidebar-collapsed .log-panel { left: var(--sidebar-collapsed-w); }
 .skeleton-body { flex: 1; }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
+/* Layout-mirroring skeleton (matches .result-card 7-col grid) */
+.skeleton-card.sk-row { display: grid; grid-template-columns: 28px minmax(150px, 190px) minmax(220px, 1fr) minmax(128px, 160px) minmax(88px, 128px) minmax(118px, 142px) 172px; align-items: center; gap: 14px; padding: 14px 16px; opacity: 0; animation: skRowIn 0.35s var(--ease-out) forwards; }
+.skeleton-card.sk-row .sk-check { width: 16px; height: 16px; border-radius: 4px; }
+.skeleton-card.sk-row .sk-num { height: 14px; width: 80%; }
+.skeleton-card.sk-row .sk-title { height: 13px; width: 88%; margin-bottom: 6px; }
+.skeleton-card.sk-row .sk-sub { height: 11px; width: 56%; }
+.skeleton-card.sk-row .sk-state { display: flex; flex-direction: column; gap: 6px; }
+.skeleton-card.sk-row .sk-status { height: 20px; width: 76px; border-radius: 100px; }
+.skeleton-card.sk-row .sk-text { height: 18px; width: 60px; border-radius: 100px; }
+.skeleton-card.sk-row .sk-src { height: 16px; width: 48px; border-radius: 4px; }
+.skeleton-card.sk-row .sk-date { display: grid; gap: 4px; }
+.skeleton-card.sk-row .sk-d1, .skeleton-card.sk-row .sk-d2 { height: 10px; width: 100%; }
+.skeleton-card.sk-row .sk-d2 { width: 78%; }
+.skeleton-card.sk-row .sk-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.skeleton-card.sk-row .sk-btn { width: 44px; height: 26px; border-radius: var(--radius-sm); }
+@keyframes skRowIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (max-width: 1100px) {
+  .skeleton-card.sk-row { grid-template-columns: 24px minmax(0, 1fr); gap: 10px 12px; }
+  .skeleton-card.sk-row .sk-body, .skeleton-card.sk-row .sk-state, .skeleton-card.sk-row .sk-source, .skeleton-card.sk-row .sk-date, .skeleton-card.sk-row .sk-actions { grid-column: 2; }
+}
+
 /* Shortcuts overlay */
 .shortcuts-overlay { display: none; position: fixed; inset: 0; z-index: 600; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); align-items: center; justify-content: center; }
 .shortcuts-overlay.open { display: flex; }

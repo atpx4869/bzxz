@@ -128,9 +128,24 @@ async function doSearch() {
   const _sourceProgress = {};
   for (const s of selectedSources) _sourceProgress[s] = { status: 'loading', count: 0 };
   renderSourceProgressStrip(_sourceProgress);
-  // Show skeleton
-  document.getElementById('results').innerHTML = Array.from({ length: 4 }, () =>
-    `<div class="skeleton-card"><div class="skeleton-badge skeleton-line"></div><div class="skeleton-body"><div class="skeleton-line w80"></div><div class="skeleton-line w60"></div><div class="skeleton-line w40"></div></div></div>`
+  // Show skeleton — count proportional to selected sources, capped 6
+  const _skeletonCount = Math.min(6, Math.max(4, selectedSources.size * 2));
+  document.getElementById('results').innerHTML = Array.from({ length: _skeletonCount }, (_, i) =>
+    `<div class="skeleton-card sk-row" style="animation-delay:${(i * 80).toFixed(0)}ms">
+      <div class="sk-check skeleton-line"></div>
+      <div class="sk-id"><div class="skeleton-line sk-num"></div></div>
+      <div class="sk-body">
+        <div class="skeleton-line sk-title"></div>
+        <div class="skeleton-line sk-sub"></div>
+      </div>
+      <div class="sk-state">
+        <div class="skeleton-line sk-status"></div>
+        <div class="skeleton-line sk-text"></div>
+      </div>
+      <div class="sk-source"><div class="skeleton-line sk-src"></div></div>
+      <div class="sk-date"><div class="skeleton-line sk-d1"></div><div class="skeleton-line sk-d2"></div></div>
+      <div class="sk-actions"><div class="skeleton-line sk-btn"></div><div class="skeleton-line sk-btn"></div><div class="skeleton-line sk-btn"></div></div>
+    </div>`
   ).join('');
   document.getElementById('toolbar').style.display = 'none';
   saveSearchHistory(q);
