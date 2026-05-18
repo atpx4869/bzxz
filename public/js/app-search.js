@@ -84,13 +84,14 @@ function pollGbwTextAvailability() {
       } else {
         emptyPolls = 0;
       }
-      // New data arrived → poll again in 1s; no change → wait 3s
-      _gbwTextPollTimer = setTimeout(poll, updated ? 1000 : 3000);
+      // New data arrived → poll again quickly; no change → back off
+      _gbwTextPollTimer = setTimeout(poll, updated ? 500 : 2000);
     } catch {
-      _gbwTextPollTimer = setTimeout(poll, 3000);
+      _gbwTextPollTimer = setTimeout(poll, 2000);
     }
   };
-  _gbwTextPollTimer = setTimeout(poll, 2000);
+  // 首次 poll 几乎立即发起，让缓存命中场景"瞬时"返回；之前 2s 的等待是历史保守值
+  _gbwTextPollTimer = setTimeout(poll, 300);
 }
 
 // ── Per-source progress strip ──
