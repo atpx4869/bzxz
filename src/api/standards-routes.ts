@@ -272,7 +272,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       const parsed = parseStandardId(id);
       const adapter = sourceRegistry.get(parsed.source);
       const exportTaskService = new ExportTaskService(adapter, exportTaskStore);
-      const task = exportTaskService.createTask(id);
+      const task = exportTaskService.createTask(id, req.user!.id);
       trackEvent(db, req.user!.id, 'download', parsed.source, id);
       respond(res, toCamelCase(task), 202);
     } catch (error) {
@@ -289,7 +289,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         throw new BadRequestError(`Source ${parsed.source} does not support download sessions`);
       }
 
-      const session = await adapter.createDownloadSession(id);
+      const session = await adapter.createDownloadSession(id, req.user!.id);
       respond(res, toCamelCase(session), 201);
     } catch (error) {
       next(normalizeError(error));
@@ -305,7 +305,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         throw new BadRequestError(`Source ${parsed.source} does not support auto-download`);
       }
 
-      const result = await adapter.autoDownload(id, 3);
+      const result = await adapter.autoDownload(id, req.user!.id, 3);
       trackEvent(db, req.user!.id, 'download', parsed.source, id);
       respond(res, toCamelCase(result));
     } catch (error) {
@@ -330,7 +330,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         const adapter = sourceRegistry.get(src as SourceName);
         try {
           if (adapter.autoDownload) {
-            const result = await adapter.autoDownload(standardId, 3);
+            const result = await adapter.autoDownload(standardId, req.user!.id, 3);
             if (result.status === 'downloaded') {
               trackEvent(db, req.user!.id, 'download', src, standardId);
               respond(res, toCamelCase({ ...result, source: src }));
@@ -369,7 +369,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         throw new BadRequestError(`Source ${source} does not support captcha verification`);
       }
 
-      const result = await adapter.submitDownloadCaptcha(req.params.sessionId as string, code);
+      const result = await adapter.submitDownloadCaptcha(req.params.sessionId as string, code, req.user!.id);
       respond(res, toCamelCase(result));
     } catch (error) {
       next(normalizeError(error));
@@ -388,7 +388,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         throw new BadRequestError('Source gbw does not support download session lookup');
       }
 
-      const session = await adapter.getDownloadSession(req.params.sessionId as string);
+      const session = await adapter.getDownloadSession(req.params.sessionId as string, req.user!.id);
       respond(res, toCamelCase(session));
     } catch (error) {
       next(normalizeError(error));
@@ -422,13 +422,27 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         includeTextFlag: req.body.includeTextFlag === 'true',
       });
       const { sources } = parsedBody;
+      const MAX_COL_INDEX = 16383; // XLSX column limit (XFD = 16384, 0-indexed)
       const colToIndex = (value: string | undefined, fallback: number) => {
         const s = (value || '').trim().toUpperCase();
         if (!s) return fallback;
-        if (/^\d+$/.test(s)) return Math.max(0, Number(s) - 1);
+        if (/^\d+$/.test(s)) {
+          const n = Number(s);
+          if (!Number.isFinite(n) || n < 1 || n > MAX_COL_INDEX + 1) {
+            throw new BadRequestError(`列号超出范围: ${value}`);
+          }
+          return n - 1;
+        }
+        if (!/^[A-Z]{1,3}$/.test(s)) {
+          throw new BadRequestError(`无效的列名: ${value}`);
+        }
         let index = 0;
         for (const ch of s) index = index * 26 + (ch.charCodeAt(0) - 64);
-        return Math.max(0, index - 1);
+        const result = index - 1;
+        if (result < 0 || result > MAX_COL_INDEX) {
+          throw new BadRequestError(`列号超出范围: ${value}`);
+        }
+        return result;
       };
       const inputCol = colToIndex(parsedBody.inputColumn, 0);
       const outputCol = colToIndex(parsedBody.outputColumn, 1);
@@ -562,7 +576,9 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
   router.get('/api/tasks/:taskId', requireAuth, async (req, res, next) => {
     try {
       const task = exportTaskStore.get(req.params.taskId as string);
-      if (!task) {
+      // Return NOT_FOUND on cross-user access so the existence of someone
+      // else's task isn't leaked through a distinct 403 response.
+      if (!task || task.userId !== req.user!.id) {
         throw new NotFoundError(`Export task not found: ${req.params.taskId as string}`);
       }
       respond(res, toCamelCase(task));
@@ -575,16 +591,24 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
   // Each `data:` line is a JSON-encoded ApiResult (same envelope as JSON endpoints) so
   // the client can use one consistent unwrap path regardless of transport.
   router.get('/api/tasks/:taskId/stream', requireAuth, (req, res) => {
+    const taskId = req.params.taskId as string;
+    // Verify ownership before opening the SSE stream so foreign callers receive
+    // a plain 404 rather than a long-lived event stream they could harvest from.
+    const initial = exportTaskStore.get(taskId);
+    if (!initial || initial.userId !== req.user!.id) {
+      res.status(404).json({ data: null, error: { code: 'NOT_FOUND', message: 'Task not found' } });
+      return;
+    }
+
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
     });
 
-    const taskId = req.params.taskId as string;
     const interval = setInterval(() => {
       const task = exportTaskStore.get(taskId);
-      if (task) {
+      if (task && task.userId === req.user!.id) {
         res.write(`data: ${JSON.stringify({ data: toCamelCase(task), error: null })}\n\n`);
         if (task.status === 'success' || task.status === 'failed') {
           clearInterval(interval);

@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { ExportResult, ExportTask } from '../domain/standard';
 
 const TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -6,10 +7,13 @@ export class ExportTaskStore {
   private readonly tasks = new Map<string, ExportTask>();
   private _cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
-  create(standardId: string): ExportTask {
+  create(standardId: string, userId: number): ExportTask {
     const now = new Date().toISOString();
     const task: ExportTask = {
-      id: `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      // Unpredictable opaque id — combined with per-user ownership checks this
+      // prevents adjacent users from snooping each other's export progress.
+      id: `task_${crypto.randomUUID()}`,
+      userId,
       standardId,
       status: 'queued',
       createdAt: now,

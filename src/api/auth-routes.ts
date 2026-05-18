@@ -5,21 +5,64 @@ import bcrypt from 'bcrypt';
 import type Database from 'better-sqlite3';
 import type { Request, Response, NextFunction } from 'express';
 import type { AuthUser } from './auth-middleware';
-import { getGuestAuthUser } from './auth-middleware';
+import { getGuestAuthUser, isLoopbackRequest } from './auth-middleware';
 import { getSetting, getRealUserCount, GUEST_USERNAME } from '../services/db';
 import { normalizeError, parseCookie } from '../shared/errors';
 import { respond, respondError } from '../shared/response';
 import { toCamelCase } from '../shared/case';
+import { createRateLimiter, clientIp } from '../shared/rate-limit';
 
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+// SameSite=Strict blocks the cookie from being sent on cross-site navigations
+// (mitigating CSRF on state-changing endpoints). `Secure` would prevent the
+// cookie from being sent over plain HTTP, which is the normal LAN deployment
+// mode for this app — gate it behind an env opt-in for HTTPS deployments.
+const COOKIE_SECURE = process.env.BZXZ_COOKIE_SECURE === '1';
 function cookieOpts(token: string): string {
   const expires = new Date(Date.now() + SESSION_MAX_AGE_MS).toUTCString();
-  return `bzxz_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000; Expires=${expires}`;
+  const flags = ['HttpOnly', 'SameSite=Strict', 'Path=/', `Max-Age=${SESSION_MAX_AGE_MS / 1000}`, `Expires=${expires}`];
+  if (COOKIE_SECURE) flags.push('Secure');
+  return `bzxz_session=${token}; ${flags.join('; ')}`;
+}
+function clearCookieHeader(): string {
+  const flags = ['HttpOnly', 'SameSite=Strict', 'Path=/', 'Max-Age=0'];
+  if (COOKIE_SECURE) flags.push('Secure');
+  return `bzxz_session=; ${flags.join('; ')}`;
 }
 const SALT_ROUNDS = 10;
 
 export function createAuthRoutes(db: Database.Database, requireAuth: (req: Request, res: Response, next: NextFunction) => void) {
   const router = Router();
+
+  // Brute-force defense: 10 attempts per IP per 5 minutes for credential
+  // endpoints; an extra per-username window narrows targeted password spraying.
+  const ipLoginLimiter = createRateLimiter({
+    windowMs: 5 * 60 * 1000,
+    max: 10,
+    keyFn: (req) => `login-ip:${clientIp(req)}`,
+    message: '登录尝试过于频繁，请 5 分钟后再试',
+  });
+  const userLoginLimiter = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 8,
+    keyFn: (req) => {
+      const u = typeof req.body?.username === 'string' ? req.body.username.trim().toLowerCase() : '';
+      return u ? `login-user:${u}` : '';
+    },
+    message: '该账号登录尝试过于频繁，请 15 分钟后再试',
+  });
+  const registerLimiter = createRateLimiter({
+    windowMs: 60 * 60 * 1000,
+    max: 5,
+    keyFn: (req) => `register-ip:${clientIp(req)}`,
+    message: '注册操作过于频繁，请 1 小时后再试',
+  });
+  const passwordChangeLimiter = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 6,
+    keyFn: (req) => `pwd:${req.user?.id ?? clientIp(req)}`,
+    message: '密码修改过于频繁，请稍后再试',
+  });
 
   // GET /api/auth/status — check setup + current user
   router.get('/status', (req, res) => {
@@ -38,17 +81,22 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
 
     const registrationEnabled = getSetting(db, 'registration_enabled', '1') === '1';
     const loginRequired = getSetting(db, 'login_required', '0') === '1';
-    if (!user && !loginRequired) {
+    // Guest fallback is restricted to the loopback interface — see auth-middleware
+    // for the rationale. We report `loginRequired: true` to LAN clients in this
+    // mode so the frontend prompts for a login instead of silently impersonating
+    // the guest user.
+    const effectiveLoginRequired = loginRequired || !isLoopbackRequest(req);
+    if (!user && !effectiveLoginRequired) {
       user = getGuestAuthUser(db);
     }
-    respond(res, { needsSetup: userCount === 0, user: toCamelCase(user), registrationEnabled, loginRequired });
+    respond(res, { needsSetup: userCount === 0, user: toCamelCase(user), registrationEnabled, loginRequired: effectiveLoginRequired });
   });
 
   // POST /api/auth/register
-  router.post('/register', async (req, res, next) => {
+  router.post('/register', registerLimiter, async (req, res, next) => {
     try {
       const schema = z.object({
-        username: z.string().trim().min(2).max(32),
+        username: z.string().trim().min(2).max(32).regex(/^[a-zA-Z0-9_.\-]+$/, '用户名仅支持字母、数字、下划线、点和连字符'),
         password: z.string().min(6).max(128),
         displayName: z.string().trim().max(64).optional(),
       });
@@ -97,7 +145,7 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
   });
 
   // POST /api/auth/login
-  router.post('/login', async (req, res, next) => {
+  router.post('/login', ipLoginLimiter, userLoginLimiter, async (req, res, next) => {
     try {
       const schema = z.object({
         username: z.string().trim().min(1),
@@ -149,7 +197,7 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
     if (token) {
       db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
     }
-    res.setHeader('Set-Cookie', 'bzxz_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
+    res.setHeader('Set-Cookie', clearCookieHeader());
     respond(res, { ok: true });
   });
 
@@ -159,7 +207,7 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
   });
 
   // PUT /api/auth/password
-  router.put('/password', requireAuth, async (req, res, next) => {
+  router.put('/password', requireAuth, passwordChangeLimiter, async (req, res, next) => {
     try {
       const schema = z.object({
         oldPassword: z.string().min(1),

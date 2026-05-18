@@ -1,6 +1,7 @@
 import type { DownloadSessionInfo } from '../../domain/standard';
 
 export interface GbwDownloadSessionRecord extends DownloadSessionInfo {
+  userId: number;
   cookies: string[];
   showUrl: string;
   hcno: string;

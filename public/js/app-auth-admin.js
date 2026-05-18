@@ -228,6 +228,11 @@ async function loadStats() {
 // ── Users management ──
 var selectedUserIds = new Set();
 
+// Cache of current users keyed by id — actions read username/role/etc. from
+// here instead of trusting attributes that would otherwise need to be re-
+// escaped through string templates (XSS risk vector).
+var usersById = new Map();
+
 async function loadUsers() {
   try {
     const [usersRes, settingsRes] = await Promise.all([
@@ -236,28 +241,28 @@ async function loadUsers() {
     ]);
     document.getElementById('regEnabledToggle').checked = settingsRes.registrationEnabled;
     document.getElementById('loginRequiredToggle').checked = settingsRes.loginRequired;
-    const data = usersRes;
+    usersById = new Map(usersRes.users.map(u => [u.id, u]));
     let html = '';
-    for (const u of data.users) {
+    for (const u of usersRes.users) {
       const roleBadge = u.role === 'admin' ? '<span class="badge badge-admin">管理员</span>' : '<span class="badge badge-user">用户</span>';
       const statusBadge = u.isActive ? '<span class="badge badge-active">启用</span>' : '<span class="badge badge-inactive">禁用</span>';
       const toggleLabel = u.isActive ? '禁用' : '启用';
       const roleLabel = u.role === 'admin' ? '降为用户' : '升为管理员';
       const checked = selectedUserIds.has(u.id) ? 'checked' : '';
       html += `<tr>
-        <td><input type="checkbox" data-uid="${u.id}" ${checked} onchange="toggleUserSelect(${u.id},this.checked)"></td>
-        <td>${u.username}</td>
-        <td>${u.displayName || '—'}</td>
+        <td><input type="checkbox" class="user-select" data-uid="${u.id}" ${checked}></td>
+        <td>${escapeHtml(u.username)}</td>
+        <td>${escapeHtml(u.displayName || '—')}</td>
         <td>${roleBadge}</td>
         <td>${statusBadge}</td>
-        <td>${u.searchCount}</td>
-        <td>${u.downloadCount}</td>
+        <td>${Number(u.searchCount) || 0}</td>
+        <td>${Number(u.downloadCount) || 0}</td>
         <td class="users-actions">
-          <button onclick="showUserDetail(${u.id},'${u.username}')">明细</button>
-          <button onclick="showUserPerms(${u.id},'${u.username}',${encodeURIComponent(JSON.stringify(u.allowedTabs))})">权限</button>
-          <button onclick="toggleUserActive(${u.id},${u.isActive ? 0 : 1})">${toggleLabel}</button>
-          <button onclick="changeUserRole(${u.id},'${u.role === 'admin' ? 'user' : 'admin'}')">${roleLabel}</button>
-          <button style="color:var(--danger)" onclick="deleteUser(${u.id},'${u.username}')">删除</button>
+          <button data-user-action="detail" data-uid="${u.id}">明细</button>
+          <button data-user-action="perms" data-uid="${u.id}">权限</button>
+          <button data-user-action="toggle-active" data-uid="${u.id}">${toggleLabel}</button>
+          <button data-user-action="toggle-role" data-uid="${u.id}">${roleLabel}</button>
+          <button style="color:var(--danger)" data-user-action="delete" data-uid="${u.id}">删除</button>
         </td>
       </tr>`;
     }
@@ -265,6 +270,35 @@ async function loadUsers() {
     updateBatchBar();
   } catch (e) { console.error('Users load error:', e); }
 }
+
+// Single delegated listener on the users table body. Replaces inline onclick
+// handlers that previously embedded raw username strings into JS source — a
+// stored-XSS sink if a username contained a single quote or backslash.
+document.addEventListener('DOMContentLoaded', () => {
+  const body = document.getElementById('usersBody');
+  if (!body) return;
+  body.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('button[data-user-action]');
+    if (!btn) return;
+    const id = parseInt(btn.dataset.uid, 10);
+    if (!Number.isFinite(id)) return;
+    const user = usersById.get(id);
+    if (!user) return;
+    const action = btn.dataset.userAction;
+    if (action === 'detail') showUserDetail(id);
+    else if (action === 'perms') showUserPerms(id);
+    else if (action === 'toggle-active') toggleUserActive(id, user.isActive ? 0 : 1);
+    else if (action === 'toggle-role') changeUserRole(id, user.role === 'admin' ? 'user' : 'admin');
+    else if (action === 'delete') deleteUser(id);
+  });
+  body.addEventListener('change', (ev) => {
+    const cb = ev.target.closest('input.user-select[data-uid]');
+    if (!cb) return;
+    const id = parseInt(cb.dataset.uid, 10);
+    if (!Number.isFinite(id)) return;
+    toggleUserSelect(id, cb.checked);
+  });
+});
 
 function toggleUserSelect(id, checked) {
   if (checked) selectedUserIds.add(id); else selectedUserIds.delete(id);
@@ -371,8 +405,10 @@ async function changeUserRole(id, role) {
   loadUsers();
 }
 
-async function deleteUser(id, username) {
-  if (!await showConfirm({ title: '删除用户', body: '确定删除用户「' + username + '」？此操作不可恢复。', danger: true, confirmText: '删除' })) return;
+async function deleteUser(id) {
+  const user = usersById.get(id);
+  if (!user) return;
+  if (!await showConfirm({ title: '删除用户', body: '确定删除用户「' + user.username + '」？此操作不可恢复。', danger: true, confirmText: '删除' })) return;
   const res = await apiFetch('/api/admin/users/' + id, { method: 'DELETE' });
   const d = await readApiResponse(res);
   if (d.ok) { showToast('用户已删除'); loadUsers(); }
@@ -430,11 +466,13 @@ var TAB_ITEMS = [
   { key: 'settings', label: '系统设置', desc: '下载模式和参数' },
 ];
 
-function showUserPerms(userId, username, encodedTabs) {
-  var allowed = JSON.parse(decodeURIComponent(encodedTabs)); // null = all allowed
+function showUserPerms(userId) {
+  var user = usersById.get(userId);
+  if (!user) return;
+  var allowed = user.allowedTabs; // null = all allowed
   var modal = document.getElementById('modalBody');
   var overlay = document.getElementById('modalOverlay');
-  var html = '<h3 style="margin-bottom:12px;font-size:16px">功能权限 — ' + username + '</h3>';
+  var html = '<h3 style="margin-bottom:12px;font-size:16px">功能权限 — ' + escapeHtml(user.username) + '</h3>';
   html += '<p style="font-size:12px;color:var(--text-3);margin-bottom:12px">勾选用户可使用的功能，未勾选的功能在侧边栏中不显示</p>';
   html += '<div id="permCheckboxes">';
   TAB_ITEMS.forEach(function(t) {
@@ -467,7 +505,7 @@ async function saveUserPerms(userId) {
   loadUsers();
 }
 
-async function showUserDetail(userId, username) {
+async function showUserDetail(userId) {
   const modal = document.getElementById('modalBody');
   const overlay = document.getElementById('modalOverlay');
   modal.innerHTML = '<p style="color:var(--text-3)">加载中...</p>';

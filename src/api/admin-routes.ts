@@ -113,7 +113,7 @@ export function createAdminRoutes(db: Database.Database) {
   router.post('/users', async (req, res, next) => {
     try {
       const schema = z.object({
-        username: z.string().trim().min(2).max(32),
+        username: z.string().trim().min(2).max(32).regex(/^[a-zA-Z0-9_.\-]+$/, '用户名仅支持字母、数字、下划线、点和连字符'),
         password: z.string().min(6).max(128),
         displayName: z.string().trim().max(64).optional(),
         role: z.enum(['user', 'admin']).optional(),

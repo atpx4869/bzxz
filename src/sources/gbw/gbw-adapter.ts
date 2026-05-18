@@ -268,7 +268,7 @@ export class GbwAdapter implements SourceAdapter {
     throw new BadRequestError('gbw export requires a captcha-assisted download session first');
   }
 
-  async createDownloadSession(id: string): Promise<DownloadSessionInfo> {
+  async createDownloadSession(id: string, userId: number): Promise<DownloadSessionInfo> {
     const detail = await this.getStandardDetail(id);
     const hcno = asString(detail.moreInfo?.hcno);
 
@@ -310,6 +310,7 @@ export class GbwAdapter implements SourceAdapter {
 
     const captchaBytes = Buffer.from(await captchaResponse.arrayBuffer());
     const created = this.downloadSessionStore.create({
+      userId,
       standardId: id,
       source: 'gbw',
       status: 'captcha_required',
@@ -327,9 +328,9 @@ export class GbwAdapter implements SourceAdapter {
     return stripDownloadSessionSecrets(created);
   }
 
-  async submitDownloadCaptcha(sessionId: string, code: string): Promise<DownloadSessionInfo> {
+  async submitDownloadCaptcha(sessionId: string, code: string, userId: number): Promise<DownloadSessionInfo> {
     const session = this.downloadSessionStore.get(sessionId);
-    if (!session) {
+    if (!session || session.userId !== userId) {
       throw new NotFoundError(`gbw download session not found: ${sessionId}`);
     }
 
@@ -403,16 +404,16 @@ export class GbwAdapter implements SourceAdapter {
     return stripDownloadSessionSecrets(updated);
   }
 
-  async getDownloadSession(sessionId: string): Promise<DownloadSessionInfo> {
+  async getDownloadSession(sessionId: string, userId: number): Promise<DownloadSessionInfo> {
     const session = this.downloadSessionStore.get(sessionId);
-    if (!session) {
+    if (!session || session.userId !== userId) {
       throw new NotFoundError(`gbw download session not found: ${sessionId}`);
     }
 
     return stripDownloadSessionSecrets(session);
   }
 
-  async autoDownload(id: string, maxRetries: number = 3): Promise<DownloadSessionInfo> {
+  async autoDownload(id: string, userId: number, maxRetries: number = 3): Promise<DownloadSessionInfo> {
     const attempts: OcrAttemptLog[] = [];
     // First round creates the session (fetches cookie + captcha image). Subsequent
     // rounds reuse the cookie and only fetch a new captcha image, saving one HTTP
@@ -421,11 +422,11 @@ export class GbwAdapter implements SourceAdapter {
 
     for (let round = 1; round <= maxRetries; round++) {
       if (!session) {
-        session = await this.createDownloadSession(id);
+        session = await this.createDownloadSession(id, userId);
       } else {
         const refreshed = await this.refreshSessionCaptcha(session.id);
         if (refreshed) session = refreshed;
-        else session = await this.createDownloadSession(id); // session expired — restart
+        else session = await this.createDownloadSession(id, userId); // session expired — restart
       }
 
       if (!session.captchaImageBase64) {
@@ -440,7 +441,7 @@ export class GbwAdapter implements SourceAdapter {
         continue;
       }
 
-      const result = await this.submitDownloadCaptcha(session.id, code);
+      const result = await this.submitDownloadCaptcha(session.id, code, userId);
       const record = this.downloadSessionStore.get(session.id);
       const verifyResponse = asString(record?.meta?.verifyResponse) ?? '';
 

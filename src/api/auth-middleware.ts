@@ -53,6 +53,16 @@ export function getGuestAuthUser(db: Database.Database): AuthUser {
   return toAuthUser(row);
 }
 
+// IPv4 / IPv6 loopback only — guest fallback should never be granted to LAN
+// peers when login_required=0 is set (the "open desktop" mode).
+export function isLoopbackRequest(req: Request): boolean {
+  const remote = req.socket.remoteAddress || req.ip || '';
+  if (!remote) return false;
+  if (remote === '127.0.0.1' || remote === '::1') return true;
+  if (remote === '::ffff:127.0.0.1' || remote.startsWith('::ffff:127.')) return true;
+  return false;
+}
+
 export function createAuthMiddleware(db: Database.Database) {
   const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
   let requestCount = 0;
@@ -69,6 +79,9 @@ export function createAuthMiddleware(db: Database.Database) {
     }
 
     // If login is not required, check for session first, fall back to guest
+    // ONLY for loopback requests. LAN peers must always authenticate even
+    // when "open desktop" mode is enabled, otherwise anyone on the network
+    // would inherit guest's permissions implicitly.
     if (!isLoginRequired()) {
       const token = parseCookie(req.headers.cookie, 'bzxz_session');
       if (token) {
@@ -90,9 +103,12 @@ export function createAuthMiddleware(db: Database.Database) {
           return;
         }
       }
-      // No valid session: use the persisted guest account as a normal user.
-      req.user = getGuestAuthUser(db);
-      next();
+      if (isLoopbackRequest(req)) {
+        req.user = getGuestAuthUser(db);
+        next();
+        return;
+      }
+      respondError(res, 401, 'UNAUTHORIZED', '局域网访问需要登录');
       return;
     }
 

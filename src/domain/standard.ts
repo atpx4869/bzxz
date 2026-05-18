@@ -45,6 +45,7 @@ export interface ExportResult {
 
 export interface ExportTask {
   id: string;
+  userId: number;
   standardId: string;
   status: 'queued' | 'running' | 'success' | 'failed';
   filePath?: string;
@@ -79,8 +80,11 @@ export interface SourceAdapter {
   getStandardDetail(id: string): Promise<StandardDetail>;
   detectPreview(id: string): Promise<PreviewInfo>;
   exportStandard(id: string, onProgress?: (current: number, total: number) => void): Promise<ExportResult>;
-  createDownloadSession?(id: string): Promise<DownloadSessionInfo>;
-  submitDownloadCaptcha?(sessionId: string, code: string): Promise<DownloadSessionInfo>;
-  getDownloadSession?(sessionId: string): Promise<DownloadSessionInfo>;
-  autoDownload?(id: string, maxRetries?: number): Promise<DownloadSessionInfo>;
+  // Download-session APIs accept the requesting user id so the underlying
+  // store can enforce ownership — without it, any authenticated user could
+  // poll or submit captchas against another user's in-flight session.
+  createDownloadSession?(id: string, userId: number): Promise<DownloadSessionInfo>;
+  submitDownloadCaptcha?(sessionId: string, code: string, userId: number): Promise<DownloadSessionInfo>;
+  getDownloadSession?(sessionId: string, userId: number): Promise<DownloadSessionInfo>;
+  autoDownload?(id: string, userId: number, maxRetries?: number): Promise<DownloadSessionInfo>;
 }

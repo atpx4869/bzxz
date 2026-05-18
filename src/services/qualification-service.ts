@@ -199,10 +199,15 @@ export class QualificationService {
       const FUZZY_LIMIT = 500;
       const inputBases = unmatchedInputs.map(code => ({ input: code, base: extractBaseCode(code) }));
       // Group inputs by their alphabetic prefix (GB / GBT / YY / etc.) for prefix-LIKE queries
+      // prefix is sanitized to /^[A-Z]+$/ before being used in a LIKE clause —
+      // % and _ from user input would otherwise widen the scan to a full-table
+      // walk (DoS amplifier) or leak unrelated rows.
       const prefixes = new Set<string>();
       for (const { base } of inputBases) {
         const prefix = base.match(/^[A-Z]+/)?.[0];
-        if (prefix) prefixes.add(prefix);
+        if (prefix && /^[A-Z]+$/.test(prefix) && prefix.length <= 8) {
+          prefixes.add(prefix);
+        }
       }
       if (prefixes.size > 0) {
         const likeClauses = Array.from(prefixes).map(() => 'q.std_code LIKE ?').join(' OR ');

@@ -9,8 +9,8 @@ export class ExportTaskService {
     private readonly store: ExportTaskStore,
   ) {}
 
-  createTask(standardId: string): ExportTask {
-    const task = this.store.create(standardId);
+  createTask(standardId: string, userId: number): ExportTask {
+    const task = this.store.create(standardId, userId);
 
     void this.runTask(task.id, standardId);
 

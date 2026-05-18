@@ -72,11 +72,23 @@ export function createApp() {
     }
   });
 
+  // Reject any filename that contains path separators, traversal sequences, or
+  // disallowed characters. Always run on the decoded basename so URL-encoded
+  // separators (`%2F`, `..%2F`) can't sneak through.
+  const FILENAME_ALLOWED = /^[a-zA-Z0-9一-鿿._\-\s()]+$/;
+  function safeExportName(raw: string): string | null {
+    let decoded: string;
+    try { decoded = decodeURIComponent(raw); } catch { return null; }
+    const base = path.basename(decoded);
+    if (!base || base === '.' || base === '..') return null;
+    if (!FILENAME_ALLOWED.test(base)) return null;
+    return base;
+  }
+
   // Serve exported files for browser download
   app.get('/api/downloads/:filename', requireAuth, (req, res) => {
-    const filename = String(req.params.filename);
-    // Strict filename whitelist — no path separators or traversal
-    if (!/^[a-zA-Z0-9一-鿿._\-\s()]+$/.test(filename)) {
+    const filename = safeExportName(String(req.params.filename));
+    if (!filename) {
       respondError(res, 400, 'BAD_REQUEST', 'Invalid filename');
       return;
     }
@@ -106,7 +118,7 @@ export function createApp() {
       }
       const names = await readdir(exportsDir);
       const items = await Promise.all(names
-        .filter(name => /^[a-zA-Z0-9一-鿿._\-\s()]+$/.test(name))
+        .filter(name => FILENAME_ALLOWED.test(name))
         .map(async name => {
           const filePath = path.resolve(exportsDir, name);
           if (!filePath.startsWith(exportsDir + path.sep)) return null;
@@ -132,8 +144,8 @@ export function createApp() {
 
   app.delete('/api/downloads/:filename', requireAuth, async (req, res, next) => {
     try {
-      const filename = String(req.params.filename);
-      if (!/^[a-zA-Z0-9一-鿿._\-\s()]+$/.test(filename)) {
+      const filename = safeExportName(String(req.params.filename));
+      if (!filename) {
         respondError(res, 400, 'BAD_REQUEST', 'Invalid filename');
         return;
       }
