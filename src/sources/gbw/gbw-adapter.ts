@@ -15,6 +15,12 @@ import { buildFileName, getExportsDir } from '../../shared/fs';
 import { createStandardId, parseStandardId } from '../../shared/id';
 import { pooledFetch } from '../../shared/http';
 import { searchCache } from '../../shared/cache';
+import {
+  getCachedHcno,
+  getCachedTextAvailability,
+  setCachedHcno,
+  setCachedTextAvailability,
+} from '../../shared/text-availability-cache';
 import { GbwDownloadSessionStore } from './gbw-download-session-store';
 import { ocrCaptcha } from '../shared/captcha-ocr';
 
@@ -119,33 +125,59 @@ export class GbwAdapter implements SourceAdapter {
 
   /** Background batch check: fetch detail pages to extract hcno, then check openstd */
   private async batchCheckTextAvailability(sourceIds: string[], statusMap?: Map<string, string>): Promise<void> {
-    // Pre-filter: 废止 standards generally have no text, skip them
+    // Pre-filter pass 1: 废止 standards generally have no text, skip them
+    // Pre-filter pass 2: persistent cache hit — hydrate in-memory map, skip HTTP
     const toCheck: string[] = [];
     for (const id of sourceIds) {
       const status = statusMap?.get(id);
       if (status && status.includes('废止')) {
         this.textCache.set(id, false);
-      } else {
-        toCheck.push(id);
+        continue;
       }
+      const cached = getCachedTextAvailability(id);
+      if (cached) {
+        this.textCache.set(id, cached.hasText);
+        continue;
+      }
+      toCheck.push(id);
     }
 
-    const concurrency = 3;
+    if (toCheck.length === 0) return;
+
+    // Two endpoints, two different hosts (std.samr / openstd.samr) — connection
+    // pools don't compete, so we can crank concurrency higher than the old 3.
+    const concurrency = 8;
     let i = 0;
     const worker = async () => {
       while (i < toCheck.length) {
         const idx = i++;
         const sourceId = toCheck[idx];
         try {
-          // No retries here — pooledFetch has built-in retries, disable for batch
-          const detailUrl = `${GBW_STD_BASE}/gb/search/gbDetailed?id=${sourceId}`;
-          const resp = await pooledFetch(detailUrl, { headers: { 'User-Agent': USER_AGENT }, timeoutMs: 12000, retries: 1 });
-          if (!resp.ok) { continue; }  // Don't cache — leave for retry on next search
-          const html = await resp.text();
-          const hcno = extractHcno(html);
-          if (!hcno) { this.textCache.set(sourceId, false); continue; }
+          // Resolve hcno: prefer the permanent on-disk cache (hcno never changes
+          // for a given sourceId — only hasText is TTL'd). On TTL-expired entries
+          // this lets us skip the gbDetailed HTTP call entirely.
+          let hcno: string | null | undefined = getCachedHcno(sourceId);
+          if (hcno === undefined) {
+            // No prior hcno on record — fetch detail page.
+            // pooledFetch has built-in retries; disable for batch to fail fast.
+            const detailUrl = `${GBW_STD_BASE}/gb/search/gbDetailed?id=${sourceId}`;
+            const resp = await pooledFetch(detailUrl, { headers: { 'User-Agent': USER_AGENT }, timeoutMs: 12000, retries: 1 });
+            if (!resp.ok) { continue; }  // Don't cache — leave for retry on next search
+            const html = await resp.text();
+            hcno = extractHcno(html) ?? null;
+            // Persist the hcno immediately, before the (potentially failing)
+            // openstd check, so we never need to re-resolve it.
+            setCachedHcno(sourceId, hcno);
+          }
+
+          if (!hcno) {
+            this.textCache.set(sourceId, false);
+            setCachedTextAvailability(sourceId, null, false);
+            continue;
+          }
           const hasText = await this.checkOpenstdHasText(hcno);
           this.textCache.set(sourceId, hasText);
+          setCachedTextAvailability(sourceId, hcno, hasText);
         } catch {
           // Don't cache failures — leave uncached so they can be retried on next search
         }
@@ -197,12 +229,26 @@ export class GbwAdapter implements SourceAdapter {
       throw new NotFoundError(`gbw detail not found for ${id}`);
     }
 
+    // Persist the hcno immediately so a later openstd failure doesn't make us
+    // re-parse this detail page just to recover hcno on the next search round.
+    if (hcno !== undefined) {
+      setCachedHcno(sourceId, hcno ?? null);
+    }
+
     // Use the cached availability flag if a prior batchCheckTextAvailability filled it;
-    // only fall back to a fresh openstd request when truly unknown.
+    // fall back to the persistent on-disk cache, and only hit openstd as last resort.
     let hasText = this.textCache.get(sourceId);
+    if (hasText === undefined) {
+      const persisted = getCachedTextAvailability(sourceId);
+      if (persisted) {
+        hasText = persisted.hasText;
+        this.textCache.set(sourceId, hasText);
+      }
+    }
     if (hasText === undefined && hcno) {
       hasText = await this.checkOpenstdHasText(hcno);
       this.textCache.set(sourceId, hasText);
+      setCachedTextAvailability(sourceId, hcno, hasText);
     }
 
     const result: StandardDetail = {

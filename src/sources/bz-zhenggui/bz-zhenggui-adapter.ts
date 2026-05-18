@@ -31,9 +31,18 @@ interface BzNewDetailResponse {
   data?: BzSearchRow;
 }
 
+interface BzReadPagesResponse {
+  code: number;
+  success?: boolean;
+  data?: number;
+  msg?: string;
+}
+
 const SEARCH_API = `${BZ_NEW_BASE}/api/gxist-standard/standardstd/list`;
+const READ_PAGES_API = `${BZ_NEW_BASE}/api/gxist-standard/standardstd/read-pages`;
 const MAX_PREVIEW_PAGES = 512;
 const PAGE_DISCOVERY_BATCH_SIZE = 8;
+const PAGE_DOWNLOAD_CONCURRENCY = 12;
 const PREVIEW_PAGE_CACHE_TTL = 5 * 60 * 1000;
 
 interface PreviewPage {
@@ -146,9 +155,13 @@ export class BzZhengguiAdapter implements SourceAdapter {
     const { PDFDocument } = await import('pdf-lib');
     const pdfDoc = await PDFDocument.create();
 
-    // Embed in order
-    for (const [idx, previewPage] of previewPages.entries()) {
-      const image = await pdfDoc.embedJpg(previewPage.bytes);
+    // Parse + embed JPEG metadata in parallel (pdf-lib stores the bytes;
+    // embedJpg is async because it scans SOI/SOF markers to read dimensions).
+    const images = await Promise.all(previewPages.map((p) => pdfDoc.embedJpg(p.bytes)));
+
+    // addPage/drawImage must run sequentially to preserve page order.
+    for (let idx = 0; idx < images.length; idx += 1) {
+      const image = images[idx];
       const page = pdfDoc.addPage([image.width, image.height]);
       page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
       onProgress?.(idx + 1, totalPages);
@@ -173,7 +186,30 @@ export class BzZhengguiAdapter implements SourceAdapter {
     // content-length for HEAD requests. Re-check one-page cache entries.
     if (cached !== null && cached > 1) return cached;
 
+    // Fast path: the SPA's own page-count API.
+    const fromApi = await this.fetchPageCountFromApi(standardNo);
+    if (fromApi !== null && fromApi > 0) {
+      setCachedPageCount(standardNo, fromApi);
+      return fromApi;
+    }
+
+    // Fallback: sentinel-based discovery via downloading.
     return (await this.downloadPreviewPages(standardNo)).length;
+  }
+
+  private async fetchPageCountFromApi(standardNo: string): Promise<number | null> {
+    try {
+      const url = `${READ_PAGES_API}?page=0&no=${encodeURIComponent(standardNo)}`;
+      const response = await pooledFetch(url, { timeoutMs: 10_000, retries: 1 });
+      if (!response.ok) return null;
+      const payload = (await response.json()) as BzReadPagesResponse;
+      if (payload.code !== 200) return null;
+      const total = typeof payload.data === 'number' ? payload.data : null;
+      if (total === null || !Number.isFinite(total) || total <= 0) return null;
+      return Math.min(total, MAX_PREVIEW_PAGES);
+    } catch {
+      return null;
+    }
   }
 
   private async downloadPreviewPages(standardNo: string): Promise<PreviewPage[]> {
@@ -182,6 +218,17 @@ export class BzZhengguiAdapter implements SourceAdapter {
       return cached.pages;
     }
 
+    // Fast path: ask the API for the exact total, then fetch all pages in parallel.
+    const total = await this.fetchPageCountFromApi(standardNo);
+    if (total !== null && total > 0) {
+      const pages = await this.fetchPagesParallel(standardNo, total);
+      pages.sort((a, b) => a.index - b.index);
+      this.previewPageCache.set(standardNo, { expiresAt: Date.now() + PREVIEW_PAGE_CACHE_TTL, pages });
+      setCachedPageCount(standardNo, pages.length);
+      return pages;
+    }
+
+    // Fallback: sentinel-hash boundary detection.
     const first = await this.fetchPreviewPage(standardNo, 0);
     const pages: PreviewPage[] = [first];
     const firstHash = first.hash;
@@ -211,6 +258,20 @@ export class BzZhengguiAdapter implements SourceAdapter {
     pages.sort((a, b) => a.index - b.index);
     this.previewPageCache.set(standardNo, { expiresAt: Date.now() + PREVIEW_PAGE_CACHE_TTL, pages });
     setCachedPageCount(standardNo, pages.length);
+    return pages;
+  }
+
+  private async fetchPagesParallel(standardNo: string, total: number): Promise<PreviewPage[]> {
+    const pages: PreviewPage[] = [];
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(PAGE_DOWNLOAD_CONCURRENCY, total) }, async () => {
+      while (true) {
+        const index = cursor++;
+        if (index >= total) return;
+        pages.push(await this.fetchPreviewPage(standardNo, index));
+      }
+    });
+    await Promise.all(workers);
     return pages;
   }
 

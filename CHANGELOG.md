@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.13.0] - 2026-05-18
+
+### Changed
+- BZ 源预览/下载提速：新增 `read-pages` API 调用（SPA 真实使用的总页数接口，返回 58 字节 JSON），首次下载从「1 串 + 4 轮 8 并发 + 1 轮哨兵」(~6 串行阶段) 压到「1 次 API + 12 并发 worker 池」(~2 串行阶段)；写回 page-cache 后下次连这一次 HTTP 都省。原 sentinel hash 边界检测保留为兜底
+- BZ 导出 PDF 嵌入：`embedJpg` 全部用 `Promise.all` 并发解析 JPEG 元数据，`addPage`/`drawImage` 仍按顺序保证页面顺序
+- GBW "正在检测本文" 提速：`batchCheckTextAvailability` 并发 3 → 8（两个端点不同 host，连接池互不挤）；预筛新增持久缓存命中跳过
+
+### Added
+- GBW text-availability 持久缓存 `data/.text-availability-cache.json`：`sourceId → {hcno, hasText}`，30 天 TTL，重启不丢；`getStandardDetail` 的 hasText 兜底链也吃这层
+- hcno 永久缓存（独立于 hasText TTL）：`getCachedHcno` 忽略 TTL 返回 hcno，TTL 过期复搜只剩 1 次 HTTP（跳过 gbDetailed step 1）；`setCachedHcno` 在 step 1 成功后立刻落盘，避免 step 2 失败时丢失发现成果
+
+---
+
 ## [1.12.0] - 2026-05-17
 
 ### Fixed
