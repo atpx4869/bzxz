@@ -12,6 +12,25 @@ const SALT_ROUNDS = 10;
 const ALL_TABS = ['search', 'batch', 'complete', 'history', 'qual', 'stats', 'settings'] as const;
 export { ALL_TABS };
 
+// New users default to the three core read/download features. Admins can grant
+// extra tabs per-user from the user management UI, or change the default from
+// the admin settings panel. Stored as JSON in `settings.default_allowed_tabs`.
+const DEFAULT_USER_ALLOWED_TABS: readonly string[] = ['search', 'batch', 'complete'];
+export { DEFAULT_USER_ALLOWED_TABS };
+
+/**
+ * Resolve the default `allowed_tabs` to apply when creating a new user.
+ * Returns null when the admin has explicitly chosen "all tabs"; an array
+ * (possibly empty) when restricted; or the hardcoded core-three default when
+ * the setting has never been touched.
+ */
+export function resolveDefaultAllowedTabs(db: Database.Database): string[] | null {
+  const raw = getSetting(db, 'default_allowed_tabs', '__unset__');
+  if (raw === '__unset__') return [...DEFAULT_USER_ALLOWED_TABS];
+  if (!raw) return null;
+  return parseAllowedTabs(raw);
+}
+
 function parseAllowedTabs(raw: string | null): string[] | null {
   if (!raw) return null; // null = all tabs allowed
   try { return JSON.parse(raw); } catch { return null; }
@@ -22,11 +41,10 @@ function safeParseJson(raw: string): unknown {
 }
 
 function readAdminSettings(db: Database.Database) {
-  const defaultTabsRaw = getSetting(db, 'default_allowed_tabs', '');
   return {
     registrationEnabled: getSetting(db, 'registration_enabled', '1') === '1',
     loginRequired: getSetting(db, 'login_required', '0') === '1',
-    defaultAllowedTabs: defaultTabsRaw ? parseAllowedTabs(defaultTabsRaw) : null,
+    defaultAllowedTabs: resolveDefaultAllowedTabs(db),
   };
 }
 

@@ -545,22 +545,21 @@ export class QualificationService {
       const { detail, capabilities } = await this.cmaScraper.scrapeFull(publicDetailId);
       const nextCertNumber = detail.certificateNumber || certNumber;
 
-      // Replace data atomically
-      const txn = this.db.transaction(() => {
-        this.db.prepare('DELETE FROM cma_qualifications WHERE cert_number = ?').run(certNumber);
-        if (nextCertNumber !== certNumber) {
-          this.db.prepare('DELETE FROM cma_qualifications WHERE cert_number = ?').run(nextCertNumber);
-        }
+      // Replace data, chunked to keep the Node event loop responsive
+      this.db.prepare('DELETE FROM cma_qualifications WHERE cert_number = ?').run(certNumber);
+      if (nextCertNumber !== certNumber) {
+        this.db.prepare('DELETE FROM cma_qualifications WHERE cert_number = ?').run(nextCertNumber);
+      }
 
-        const insert = this.db.prepare(`
-          INSERT INTO cma_qualifications (cert_number, std_code, std_name, qual_type, effective_date, expiry_date, category, sub_category, test_item, test_standard, limit_desc, note, place_name)
-          VALUES (?, ?, ?, 'CMA', ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-
-        for (const cap of capabilities) {
+      const insertCma = this.db.prepare(`
+        INSERT INTO cma_qualifications (cert_number, std_code, std_name, qual_type, effective_date, expiry_date, category, sub_category, test_item, test_standard, limit_desc, note, place_name)
+        VALUES (?, ?, ?, 'CMA', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      const insertCmaChunk = this.db.transaction((chunk: typeof capabilities) => {
+        for (const cap of chunk) {
           const stdCode = (cap.yjbzNumber ?? '').trim();
           if (!stdCode) continue;
-          insert.run(
+          insertCma.run(
             nextCertNumber,
             stdCode,
             cap.yjbzNameNumber ?? '',
@@ -575,34 +574,38 @@ export class QualificationService {
             cap.placeName ?? '',
           );
         }
-
-        this.db.prepare(`
-          UPDATE cma_labs SET
-            cert_number = ?, lab_name = ?, credit_code = ?, lic_sys_id = ?, public_detail_id = ?,
-            address = ?, area_name = ?, industry = ?, issue_date = ?, valid_from = ?, valid_to = ?,
-            cert_status = ?, cached_lic_date = ?,
-            record_count = ?, sync_status = 'success', sync_error = NULL,
-            last_sync_at = datetime('now'), last_check_at = datetime('now')
-          WHERE cert_number = ?
-        `).run(
-          nextCertNumber,
-          detail.sysName || detail.licUnitname || lab.lab_name,
-          detail.sysZzjgdm || lab.credit_code,
-          detail.publicDetailId,
-          detail.publicDetailId,
-          detail.addr,
-          detail.areaName,
-          detail.majorCategory,
-          detail.licDate,
-          detail.licValidTimeBegin,
-          detail.licValidTimeEnd,
-          detail.certStatus,
-          detail.licDate,
-          capabilities.length,
-          certNumber,
-        );
       });
-      txn();
+      const CMA_CHUNK = 200;
+      for (let i = 0; i < capabilities.length; i += CMA_CHUNK) {
+        insertCmaChunk(capabilities.slice(i, i + CMA_CHUNK));
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+
+      this.db.prepare(`
+        UPDATE cma_labs SET
+          cert_number = ?, lab_name = ?, credit_code = ?, lic_sys_id = ?, public_detail_id = ?,
+          address = ?, area_name = ?, industry = ?, issue_date = ?, valid_from = ?, valid_to = ?,
+          cert_status = ?, cached_lic_date = ?,
+          record_count = ?, sync_status = 'success', sync_error = NULL,
+          last_sync_at = datetime('now'), last_check_at = datetime('now')
+        WHERE cert_number = ?
+      `).run(
+        nextCertNumber,
+        detail.sysName || detail.licUnitname || lab.lab_name,
+        detail.sysZzjgdm || lab.credit_code,
+        detail.publicDetailId,
+        detail.publicDetailId,
+        detail.addr,
+        detail.areaName,
+        detail.majorCategory,
+        detail.licDate,
+        detail.licValidTimeBegin,
+        detail.licValidTimeEnd,
+        detail.certStatus,
+        detail.licDate,
+        capabilities.length,
+        certNumber,
+      );
 
       this.syncProgress.delete(progressKey);
       this.logCmaSync(nextCertNumber, force ? 'manual_forced' : 'cert_date_changed', startTime, 'success', capabilities.length);
@@ -685,24 +688,22 @@ export class QualificationService {
           err instanceof Error ? err.message : String(err));
       }
 
-      // Replace data atomically
-      const txn = this.db.transaction(() => {
-        this.db.prepare('DELETE FROM cnas_qualifications WHERE lab_no = ?').run(labNo);
+      // Replace data, chunked to keep the Node event loop responsive
+      this.db.prepare('DELETE FROM cnas_qualifications WHERE lab_no = ?').run(labNo);
 
-        const insert = this.db.prepare(`
-          INSERT INTO cnas_qualifications (lab_no, std_code, std_name, qual_type, effective_date, expiry_date, category, sub_category, test_object, test_param, test_param_en, test_standard, std_code_en, limit_desc, branch_address)
-          VALUES (?, ?, ?, 'CNAS', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-
-        for (const cap of capabilities) {
+      const insertCnas = this.db.prepare(`
+        INSERT INTO cnas_qualifications (lab_no, std_code, std_name, qual_type, effective_date, expiry_date, category, sub_category, test_object, test_param, test_param_en, test_standard, std_code_en, limit_desc, branch_address)
+        VALUES (?, ?, ?, 'CNAS', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      const insertCnasChunk = this.db.transaction((chunk: typeof capabilities) => {
+        for (const cap of chunk) {
           const stdCode = (cap.stdCode ?? cap.stdDescAndClause ?? '').trim();
           if (!stdCode) continue;
-          insert.run(
+          insertCnas.run(
             labNo,
             stdCode,
             cap.stdAllDesc ?? cap.stdDescAndClause ?? '',
-            '', // effective_date
-            '', // expiry_date
+            '', '',
             cap.bigTypeName ?? '',
             cap.typeName ?? '',
             cap.objCh ?? '',
@@ -711,24 +712,28 @@ export class QualificationService {
             cap.stdDescAndClause ?? '',
             cap.stdCodeEn ?? '',
             cap.limitCh ?? '',
-            '', // branch_address
+            '',
           );
         }
-
-        this.db.prepare(`
-          UPDATE cnas_labs SET
-            lab_name = ?, record_count = ?, sync_status = 'success', sync_error = NULL,
-            last_sync_at = datetime('now'), last_check_at = datetime('now'),
-            cached_cert_date = ?,
-            other_names = ?, org_address = ?, validity_period = ?, cert_tasks = ?
-          WHERE lab_no = ?
-        `).run(
-          labName, capabilities.length, capabilities[0]?.startDate ?? '',
-          orgInfo.otherNames, orgInfo.address, orgInfo.validityPeriod, JSON.stringify(orgInfo.certTasks),
-          labNo,
-        );
       });
-      txn();
+      const CNAS_CHUNK = 200;
+      for (let i = 0; i < capabilities.length; i += CNAS_CHUNK) {
+        insertCnasChunk(capabilities.slice(i, i + CNAS_CHUNK));
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+
+      this.db.prepare(`
+        UPDATE cnas_labs SET
+          lab_name = ?, record_count = ?, sync_status = 'success', sync_error = NULL,
+          last_sync_at = datetime('now'), last_check_at = datetime('now'),
+          cached_cert_date = ?,
+          other_names = ?, org_address = ?, validity_period = ?, cert_tasks = ?
+        WHERE lab_no = ?
+      `).run(
+        labName, capabilities.length, capabilities[0]?.startDate ?? '',
+        orgInfo.otherNames, orgInfo.address, orgInfo.validityPeriod, JSON.stringify(orgInfo.certTasks),
+        labNo,
+      );
 
       this.syncProgress.delete(progressKey);
       this.logCnasSync(labNo, force ? 'manual_forced' : 'synced', startTime, 'success', capabilities.length);

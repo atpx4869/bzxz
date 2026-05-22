@@ -58,7 +58,7 @@ export function createApp() {
   const baseDir = process.env.BZXZ_BASE_DIR || process.cwd();
   const staticDir = process.env.BZXZ_STATIC_DIR || baseDir;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '1mb' }));
   app.use(express.static(path.join(staticDir, 'public')));
 
   // Legacy route aliases: rewrite old paths to new canonical paths in-place so the actual

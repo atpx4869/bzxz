@@ -1,4 +1,8 @@
 dist/
+release/
+dist-portable/
+dist-nsis/
+source-backup/
 data/exports/
 data/accounts.json
 data/bzxz.db

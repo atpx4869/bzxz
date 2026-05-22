@@ -110,7 +110,17 @@ function loadSettings(): DesktopSettings {
   const defaults = getDefaultSettings();
   try {
     if (existsSync(SETTINGS_FILE)) {
-      return { ...defaults, ...JSON.parse(readFileSync(SETTINGS_FILE, 'utf-8')) };
+      const merged = { ...defaults, ...JSON.parse(readFileSync(SETTINGS_FILE, 'utf-8')) };
+      // Migrate legacy default that pointed at Downloads/bzxz -> Desktop/bzxz
+      try {
+        const dp = String(merged.downloadPath || '').replace(/[\\/]+$/, '');
+        const legacy = path.join(app.getPath('downloads'), 'bzxz').replace(/[\\/]+$/, '');
+        if (dp.toLowerCase() === legacy.toLowerCase()) {
+          merged.downloadPath = defaults.downloadPath;
+          try { writeFileSync(SETTINGS_FILE, JSON.stringify(merged)); } catch {}
+        }
+      } catch {}
+      return merged;
     }
   } catch {}
   return defaults;
@@ -370,6 +380,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
     },
   });
 

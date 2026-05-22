@@ -54,7 +54,7 @@ async function checkAuthStatus() {
 }
 
 function onAuthReady() {
-  document.getElementById('udHeader').innerHTML = `${currentUser.displayName || currentUser.username} <span>${currentUser.role}</span>`;
+  document.getElementById('udHeader').innerHTML = `${escapeHtml(currentUser.displayName || currentUser.username)} <span>${escapeHtml(currentUser.role)}</span>`;
   document.getElementById('sidebarUserName').textContent = currentUser.displayName || currentUser.username;
   document.getElementById('sidebarUserRole').textContent = currentUser.role;
   document.getElementById('udManageUsers').style.display = 'none';
@@ -207,7 +207,7 @@ function showChangePwd() {
   const oldPwd = prompt('请输入原密码');
   if (!oldPwd) return;
   const newPwd = prompt('请输入新密码（至少6位）');
-  if (!newPwd || newPwd.length < 6) { alert('密码至少6位'); return; }
+  if (!newPwd || newPwd.length < 6) { showToast('密码至少6位', 'fail'); return; }
   apiFetch('/api/auth/password', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -487,7 +487,7 @@ async function showCreateUser() {
   const username = prompt('用户名（至少2位）');
   if (!username || username.length < 2) return;
   const password = prompt('密码（至少6位）');
-  if (!password || password.length < 6) { alert('密码至少6位'); return; }
+  if (!password || password.length < 6) { showToast('密码至少6位', 'fail'); return; }
   // Fetch default permissions
   let allowedTabs = null;
   try {

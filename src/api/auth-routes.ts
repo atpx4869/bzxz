@@ -7,6 +7,7 @@ import type { Request, Response, NextFunction } from 'express';
 import type { AuthUser } from './auth-middleware';
 import { getGuestAuthUser, isLoopbackRequest } from './auth-middleware';
 import { getSetting, getRealUserCount, GUEST_USERNAME } from '../services/db';
+import { resolveDefaultAllowedTabs } from './admin-routes';
 import { normalizeError, parseCookie } from '../shared/errors';
 import { respond, respondError } from '../shared/response';
 import { toCamelCase } from '../shared/case';
@@ -126,9 +127,14 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
       const role = totalUsers === 0 ? 'admin' : 'user';
       const hash = await bcrypt.hash(password, SALT_ROUNDS);
 
+      // First user (bootstrap admin) gets full access; everyone else inherits
+      // the admin-configured default (core three tabs unless overridden).
+      const allowedTabs = role === 'admin' ? null : resolveDefaultAllowedTabs(db);
+      const allowedTabsJson = allowedTabs ? JSON.stringify(allowedTabs) : null;
+
       const result = db.prepare(
-        'INSERT INTO users (username, password, display_name, role) VALUES (?, ?, ?, ?)'
-      ).run(username, hash, displayName || '', role);
+        'INSERT INTO users (username, password, display_name, role, allowed_tabs) VALUES (?, ?, ?, ?, ?)'
+      ).run(username, hash, displayName || '', role, allowedTabsJson);
 
       // Auto-login after registration
       const token = crypto.randomBytes(32).toString('hex');
@@ -137,7 +143,7 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
 
       res.setHeader('Set-Cookie', cookieOpts(token));
       respond(res, {
-        user: { id: result.lastInsertRowid, username, displayName: displayName || '', role, allowedTabs: null },
+        user: { id: result.lastInsertRowid, username, displayName: displayName || '', role, allowedTabs },
       }, 201);
     } catch (error) {
       next(normalizeError(error));
