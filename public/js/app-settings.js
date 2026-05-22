@@ -594,6 +594,7 @@ function renderSettings() {
   const webAccessCard = renderWebAccessCard();
   const startupCard = renderStartupSettingCard();
   const portCard = renderPortSettingCard();
+  const announcementCard = renderAnnouncementAdminCard();
 
   document.getElementById('settingsBody').innerHTML = `
     <div class="settings-grid">
@@ -633,6 +634,7 @@ function renderSettings() {
       ${portCard}
       ${startupCard}
     </div>
+    ${announcementCard}
     <div class="setting-section">
       <div class="field-label">源优先级</div>
       <div class="setting-hint">拖拽调整顺序，顺序模式下排前面的源会先尝试。</div>
@@ -970,3 +972,124 @@ function getDragAfter(container, y) {
     return closest;
   }, { offset: -Infinity }).element;
 }
+
+
+// ===== Admin announcement management =====
+function renderAnnouncementAdminCard() {
+  if (!window.currentUser || window.currentUser.role !== 'admin') return '';
+  return `
+    <div class="setting-section" id="ann-admin-section">
+      <div class="field-label">公告管理 <button class="btn btn-sm btn-primary" onclick="showAnnAdminCreate()" style="margin-left:8px">新建公告</button></div>
+      <div class="setting-hint">创建后，所有用户在下次登录后首次进入时弹出一次；可随时编辑或停用。</div>
+      <div id="annAdminList" class="ann-admin-list">加载中...</div>
+    </div>`;
+}
+
+async function loadAnnAdminList() {
+  const box = document.getElementById('annAdminList');
+  if (!box) return;
+  try {
+    const data = await adminListAnnouncements();
+    const items = (data && (data.items || data)) || [];
+    if (!items.length) { box.innerHTML = '<div class="setting-hint">暂无公告</div>'; return; }
+    box.innerHTML = items.map(it => {
+      const t = escapeHtml ? escapeHtml(it.title || '') : (it.title || '');
+      const active = (it.isActive ?? it.is_active) ? '已启用' : '已停用';
+      const readCount = (it.readCount ?? it.read_count ?? 0);
+      const created = (it.createdAt || it.created_at || '').replace('T', ' ').slice(0, 16);
+      return `<div class="ann-admin-item">
+        <div>
+          <div style="font-weight:600">${t}</div>
+          <div class="ann-meta">${active} · 已读 ${readCount} · ${created}</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-ghost" onclick='showAnnAdminEdit(${it.id})'>编辑</button>
+          <button class="btn btn-sm btn-ghost" onclick='annAdminDelete(${it.id})'>删除</button>
+        </div>
+      </div>`;
+    }).join('');
+    window.__annAdminCache = items;
+  } catch (e) {
+    box.innerHTML = '<div class="setting-hint" style="color:#c00">加载失败: ' + (e.message||e) + '</div>';
+  }
+}
+
+function showAnnAdminCreate() {
+  showAnnAdminForm({ id: 0, title: '', contentMd: '', isActive: 1 });
+}
+function showAnnAdminEdit(id) {
+  const list = window.__annAdminCache || [];
+  const item = list.find(x => x.id === id);
+  if (!item) return;
+  showAnnAdminForm({
+    id: item.id,
+    title: item.title || '',
+    contentMd: item.contentMd || item.content_md || '',
+    isActive: (item.isActive ?? item.is_active) ? 1 : 0
+  });
+}
+
+function showAnnAdminForm(data) {
+  const box = document.getElementById('annAdminList');
+  if (!box) return;
+  const t = data.title || '';
+  const c = data.contentMd || '';
+  box.insertAdjacentHTML('afterend', `
+    <div class="ann-admin-form" id="annAdminForm">
+      <input type="text" id="annFormTitle" placeholder="标题" value="${(window.escapeHtml||((x)=>x))(t)}">
+      <textarea id="annFormContent" placeholder="Markdown 内容（支持 # 标题 / **粗体** / *斜体* / \`代码\` / [链接](url) / - 列表）">${(window.escapeHtml||((x)=>x))(c)}</textarea>
+      <label style="font-size:13px"><input type="checkbox" id="annFormActive" ${data.isActive ? 'checked' : ''}> 启用</label>
+      ${data.id ? '<label style="font-size:13px"><input type="checkbox" id="annFormReset"> 重置已读（保存后所有用户会再看到一次）</label>' : ''}
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-sm btn-ghost" onclick="closeAnnAdminForm()">取消</button>
+        <button class="btn btn-sm btn-primary" onclick="annAdminSave(${data.id})">保存</button>
+      </div>
+    </div>`);
+}
+
+function closeAnnAdminForm() {
+  const f = document.getElementById('annAdminForm');
+  if (f) f.remove();
+}
+
+async function annAdminSave(id) {
+  const title = (document.getElementById('annFormTitle')||{}).value || '';
+  const contentMd = (document.getElementById('annFormContent')||{}).value || '';
+  const isActive = (document.getElementById('annFormActive')||{}).checked ? 1 : 0;
+  if (!title.trim()) { alert('标题不能为空'); return; }
+  try {
+    if (id) {
+      const resetReads = (document.getElementById('annFormReset')||{}).checked || false;
+      await adminUpdateAnnouncement(id, { title, contentMd, isActive, resetReads });
+    } else {
+      await adminCreateAnnouncement({ title, contentMd, isActive });
+    }
+    closeAnnAdminForm();
+    loadAnnAdminList();
+  } catch (e) {
+    alert('保存失败: ' + (e.message||e));
+  }
+}
+
+async function annAdminDelete(id) {
+  if (!confirm('确认删除该公告？将连同已读记录一并删除。')) return;
+  try {
+    await adminDeleteAnnouncement(id);
+    loadAnnAdminList();
+  } catch (e) {
+    alert('删除失败: ' + (e.message||e));
+  }
+}
+
+// Hook: refresh list when settings tab is shown
+(function () {
+  const _orig = window.renderSettings;
+  if (typeof _orig === 'function') {
+    window.renderSettings = function () {
+      _orig.apply(this, arguments);
+      if (window.currentUser && window.currentUser.role === 'admin') {
+        setTimeout(loadAnnAdminList, 0);
+      }
+    };
+  }
+})();

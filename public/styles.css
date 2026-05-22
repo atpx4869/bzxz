@@ -1102,3 +1102,51 @@ body::before {
 }
 .sidebar-item { position: relative; }
 
+
+/* ===== Announcement modal ===== */
+.ann-modal-mask {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  z-index: 9999; display: flex; align-items: center; justify-content: center;
+}
+.ann-modal-card {
+  background: #fff; border-radius: 10px; width: min(640px, 92vw); max-height: 80vh;
+  display: flex; flex-direction: column; box-shadow: 0 18px 48px rgba(0,0,0,0.28);
+  overflow: hidden;
+}
+.ann-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 1px solid #eee;
+}
+.ann-modal-title { font-weight: 600; font-size: 16px; }
+.ann-modal-close {
+  background: transparent; border: none; font-size: 22px; line-height: 1;
+  cursor: pointer; color: #666; padding: 0 4px;
+}
+.ann-modal-close:hover { color: #000; }
+.ann-modal-body {
+  padding: 16px 20px; overflow-y: auto; flex: 1;
+  font-size: 14px; line-height: 1.7; color: #333;
+}
+.ann-modal-body h1, .ann-modal-body h2, .ann-modal-body h3 { margin: 12px 0 8px; }
+.ann-modal-body p { margin: 6px 0; }
+.ann-modal-body ul { padding-left: 22px; margin: 6px 0; }
+.ann-modal-body code { background: #f4f4f5; padding: 1px 5px; border-radius: 3px; font-size: 13px; }
+.ann-modal-body pre { background: #f4f4f5; padding: 10px; border-radius: 6px; overflow-x: auto; }
+.ann-modal-body pre code { background: transparent; padding: 0; }
+.ann-modal-body a { color: #2563eb; text-decoration: none; }
+.ann-modal-body a:hover { text-decoration: underline; }
+.ann-modal-footer {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 12px 18px; border-top: 1px solid #eee;
+}
+
+/* Admin announcement manager */
+.ann-admin-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.ann-admin-item {
+  border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px;
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+}
+.ann-admin-item .ann-meta { font-size: 12px; color: #6b7280; }
+.ann-admin-form { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.ann-admin-form textarea { width: 100%; min-height: 140px; font-family: ui-monospace, monospace; font-size: 13px; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; }
+.ann-admin-form input[type="text"] { padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; }

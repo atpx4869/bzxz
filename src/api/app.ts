@@ -9,6 +9,7 @@ import { getDb } from '../services/db';
 import { createAuthMiddleware } from './auth-middleware';
 import { createAuthRoutes } from './auth-routes';
 import { createAdminRoutes } from './admin-routes';
+import { createAnnouncementRoutes } from './announcement-routes';
 import { createStatsRoutes } from './stats-routes';
 import { createQualificationRoutes } from './cnas-routes';
 import { createStandardsRoutes } from './standards-routes';
@@ -168,6 +169,9 @@ export function createApp() {
   // Auth routes (no auth required)
   app.use('/api/auth', createAuthRoutes(db, requireAuth));
   app.use('/api/admin', requireAdmin, createAdminRoutes(db));
+  const announcementRoutes = createAnnouncementRoutes(db, requireAuth, requireAdmin);
+  app.use('/api/announcements', announcementRoutes.userRouter);
+  app.use('/api/admin/announcements', announcementRoutes.adminRouter);
   app.use('/api/stats', createStatsRoutes(db, requireAuth));
   const qualRouter = createQualificationRoutes(db, requireAuth);
   app.use(qualRouter);

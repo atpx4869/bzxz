@@ -67,6 +67,9 @@ function onAuthReady() {
   }
   // Apply per-user tab permissions
   applyTabPermissions();
+  // Show announcements & release notes after auth
+  try { if (typeof checkAnnouncements === 'function') checkAnnouncements(); } catch(e){}
+  try { if (typeof checkReleaseNotesIfUpgraded === 'function') checkReleaseNotesIfUpgraded(); } catch(e){}
   // Default stats date range: last 30 days
   const today = beijingDate();
   const monthAgo = new Date(new Date().getTime() + 8*3600000 - 30 * 86400000).toISOString().slice(0, 10);

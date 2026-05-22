@@ -187,6 +187,24 @@ function migrate(db: Database.Database): void {
       created_at      TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- Admin-authored announcements shown once per user on next entry.
+    CREATE TABLE IF NOT EXISTS announcements (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      title       TEXT NOT NULL,
+      content_md  TEXT NOT NULL DEFAULT '',
+      created_by  INTEGER REFERENCES users(id),
+      is_active   INTEGER NOT NULL DEFAULT 1,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS announcement_reads (
+      announcement_id INTEGER NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
+      user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      read_at         TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (announcement_id, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_announcement_reads_user ON announcement_reads(user_id);
   `);
 
   // Schema migrations: add columns that may be missing on older DBs.
