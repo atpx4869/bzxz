@@ -1150,3 +1150,22 @@ body::before {
 .ann-admin-form { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 .ann-admin-form textarea { width: 100%; min-height: 140px; font-family: ui-monospace, monospace; font-size: 13px; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; }
 .ann-admin-form input[type="text"] { padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; }
+
+/* ===== Qualification visual: flatter layout (no inner stdCode group) ===== */
+.qual-visual-source.empty { background: oklch(15% 0.012 255 / 0.18); }
+.qual-visual-source.empty .qual-visual-empty-col { text-align: center; padding: 18px 0; color: var(--text-3); font-size: 11px; opacity: 0.7; }
+.qual-visual-cap-list { display: flex; flex-direction: column; gap: 0; }
+.qual-visual-cap-list .qual-visual-cap { padding: 6px 8px; border-top: 1px solid oklch(26% 0.012 255 / 0.25); border-radius: 4px; }
+.qual-visual-cap-list .qual-visual-cap:first-child { border-top: none; }
+.qual-visual-cap-list .qual-visual-cap:hover { background: oklch(22% 0.014 255 / 0.32); }
+.qual-visual-source.cma .qual-visual-cap-main { color: var(--text); }
+.qual-visual-source.cma .qual-visual-cap-list .qual-visual-cap { border-left: 2px solid transparent; }
+.qual-visual-source.cma .qual-visual-cap-list .qual-visual-cap:hover { border-left-color: #f59e0b; }
+.qual-visual-source.cnas .qual-visual-cap-list .qual-visual-cap { border-left: 2px solid transparent; }
+.qual-visual-source.cnas .qual-visual-cap-list .qual-visual-cap:hover { border-left-color: #3b82f6; }
+.qual-visual-more-btn {
+  margin-top: 6px; padding: 4px 8px; font-size: 10px; color: var(--text-2);
+  background: transparent; border: 1px dashed oklch(26% 0.012 255 / 0.5); border-radius: 4px;
+  cursor: pointer; width: 100%; transition: all 0.15s;
+}
+.qual-visual-more-btn:hover { background: oklch(22% 0.014 255 / 0.5); color: var(--text); }

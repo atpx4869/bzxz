@@ -90,44 +90,37 @@ function renderQualVisual(queries, data) {
   }
 
   function renderSourceColumn(title, sourceClass, items) {
-    const grouped = new Map();
-    for (const it of items) {
-      const code = it.stdCode || '未列标准号';
-      if (!grouped.has(code)) grouped.set(code, { code, name: cleanStdName(code, it.stdName || it.testStandard || ''), items: [] });
-      grouped.get(code).items.push(it);
-    }
-    const blocks = [...grouped.values()].map((g, idx) => {
-      const gid = `qv_${sourceClass}_${Math.random().toString(36).slice(2)}_${idx}`;
-      const rows = g.items.slice(0, 8).map(it => {
-        const expiredCls = it.expiryDate && it.expiryDate < now ? ' expired' : '';
-        const chips = [
-          it.category ? `<span>${escapeHtml(it.category)}</span>` : '',
-          it.matchedQuery ? `<span>命中 ${escapeHtml(it.matchedQuery)}</span>` : '',
-        ].filter(Boolean).join('');
-        return `<div class="qual-visual-cap${expiredCls}">
-          <div class="qual-visual-cap-main">${escapeHtml(it.testItem || it.testStandard || it.stdName || '能力记录')}</div>
-          ${chips ? `<div class="qual-visual-cap-chips">${chips}</div>` : ''}
-          ${it.testStandard ? `<div class="qual-visual-cap-std">${escapeHtml(it.testStandard)}</div>` : ''}
-          ${it.limitDesc && it.limitDesc !== '/' && it.limitDesc !== '—' ? `<div class="qual-visual-cap-limit">限制: ${escapeHtml(it.limitDesc)}</div>` : ''}
-          ${(it.effectiveDate || it.expiryDate) ? `<div class="qual-visual-cap-date">${it.effectiveDate ? '生效 ' + escapeHtml(it.effectiveDate) : ''}${it.expiryDate ? ' · 到期 ' + escapeHtml(it.expiryDate) : ''}</div>` : ''}
-        </div>`;
-      }).join('');
-      const more = g.items.length > 8 ? `<div class="qual-visual-more">还有 ${g.items.length - 8} 条匹配能力</div>` : '';
-      return `<div class="qual-visual-standard">
-        <div class="qual-visual-standard-head" onclick="toggleQualVisualStandard('${gid}')">
-          <div>
-            <span class="qual-visual-arrow" id="${gid}_arrow">▶</span>
-            <strong>${escapeHtml(g.code)}</strong>
-          </div>
-          <span>${g.items.length} 条</span>
-        </div>
-        ${g.name ? `<div class="qual-visual-standard-name">${escapeHtml(g.name)}</div>` : ''}
-        <div class="qual-visual-standard-body" id="${gid}_body" style="display:none">${rows}${more}</div>
+    // Outer card already groups by stdCode, so flatten — show capabilities directly.
+    if (!items.length) {
+      return `<div class="qual-visual-source ${sourceClass} empty">
+        <div class="qual-visual-source-head"><strong>${title}</strong><span>无匹配</span></div>
+        <div class="qual-visual-empty-col">— 无本地缓存匹配 —</div>
       </div>`;
-    }).join('');
+    }
+    const INITIAL = 5;
+    const gid = `qv_${sourceClass}_${Math.random().toString(36).slice(2)}`;
+    const renderRow = (it) => {
+      const expiredCls = it.expiryDate && it.expiryDate < now ? ' expired' : '';
+      const chips = [
+        it.category ? `<span>${escapeHtml(it.category)}</span>` : '',
+        it.matchedQuery ? `<span>命中 ${escapeHtml(it.matchedQuery)}</span>` : '',
+      ].filter(Boolean).join('');
+      return `<div class="qual-visual-cap${expiredCls}">
+        <div class="qual-visual-cap-main">${escapeHtml(it.testItem || it.testStandard || it.stdName || '能力记录')}</div>
+        ${chips ? `<div class="qual-visual-cap-chips">${chips}</div>` : ''}
+        ${it.testStandard ? `<div class="qual-visual-cap-std">${escapeHtml(it.testStandard)}</div>` : ''}
+        ${it.limitDesc && it.limitDesc !== '/' && it.limitDesc !== '—' ? `<div class="qual-visual-cap-limit">限制: ${escapeHtml(it.limitDesc)}</div>` : ''}
+        ${(it.effectiveDate || it.expiryDate) ? `<div class="qual-visual-cap-date">${it.effectiveDate ? '生效 ' + escapeHtml(it.effectiveDate) : ''}${it.expiryDate ? ' · 到期 ' + escapeHtml(it.expiryDate) : ''}</div>` : ''}
+      </div>`;
+    };
+    const visibleRows = items.slice(0, INITIAL).map(renderRow).join('');
+    const hiddenRows = items.length > INITIAL
+      ? `<div class="qual-visual-more-wrap" id="${gid}_more" style="display:none">${items.slice(INITIAL).map(renderRow).join('')}</div>
+         <button class="qual-visual-more-btn" id="${gid}_btn" onclick="toggleQualVisualMore('${gid}')">展开剩余 ${items.length - INITIAL} 条 ▼</button>`
+      : '';
     return `<div class="qual-visual-source ${sourceClass}">
-      <div class="qual-visual-source-head"><strong>${title}</strong><span>${items.length ? items.length + ' 条' : '无匹配'}</span></div>
-      ${blocks || '<div class="qual-visual-empty-col">无本地缓存匹配</div>'}
+      <div class="qual-visual-source-head"><strong>${title}</strong><span>${items.length} 条</span></div>
+      <div class="qual-visual-cap-list">${visibleRows}${hiddenRows}</div>
     </div>`;
   }
 
@@ -195,23 +188,27 @@ function renderQualVisual(queries, data) {
   out.innerHTML = `<div class="qual-visual-results">${sections}</div>`;
 }
 
-function toggleQualVisualStandard(gid) {
-  const body = document.getElementById(gid + '_body');
-  const arrow = document.getElementById(gid + '_arrow');
-  if (!body) return;
-  const collapsed = body.style.display === 'none';
-  body.style.display = collapsed ? '' : 'none';
-  if (arrow) arrow.style.transform = collapsed ? 'rotate(90deg)' : '';
+function toggleQualVisualMore(gid) {
+  const wrap = document.getElementById(gid + '_more');
+  const btn = document.getElementById(gid + '_btn');
+  if (!wrap) return;
+  const collapsed = wrap.style.display === 'none';
+  wrap.style.display = collapsed ? '' : 'none';
+  if (btn) btn.innerHTML = collapsed
+    ? '收起 ▲'
+    : `展开剩余 ${wrap.children.length} 条 ▼`;
 }
 
 function toggleQualVisualSection(sectionId, expand) {
   const section = document.getElementById(sectionId);
   if (!section) return;
-  section.querySelectorAll('.qual-visual-standard-body').forEach(body => {
-    body.style.display = expand ? '' : 'none';
+  section.querySelectorAll('.qual-visual-more-wrap').forEach(wrap => {
+    wrap.style.display = expand ? '' : 'none';
   });
-  section.querySelectorAll('.qual-visual-arrow').forEach(arrow => {
-    arrow.style.transform = expand ? 'rotate(90deg)' : '';
+  section.querySelectorAll('.qual-visual-more-btn').forEach(btn => {
+    const wrap = btn.previousElementSibling;
+    const cnt = wrap ? wrap.children.length : 0;
+    btn.innerHTML = expand ? '收起 ▲' : `展开剩余 ${cnt} 条 ▼`;
   });
 }
 
