@@ -16,6 +16,16 @@ export function getRootDir(): string {
   return process.env.BZXZ_BASE_DIR || process.cwd();
 }
 
+/**
+ * Directory holding read-only bundled assets (public/, scripts/ocr_ddddocr.py).
+ * In Electron packaged mode this is `process.resourcesPath` (set by
+ * electron/main.ts via BZXZ_STATIC_DIR). In dev mode it defaults to the
+ * same root as writable data, so paths still resolve correctly.
+ */
+export function getStaticDir(): string {
+  return process.env.BZXZ_STATIC_DIR || getRootDir();
+}
+
 export function getExportsDir(): string {
   return path.join(getRootDir(), 'data', 'exports');
 }

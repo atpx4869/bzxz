@@ -12,7 +12,7 @@ import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain, session, 
 Menu.setApplicationMenu(null);
 import path from 'node:path';
 import net from 'node:net';
-import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, cpSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 import { networkInterfaces } from 'node:os';
 import { Readable } from 'node:stream';
@@ -449,14 +449,57 @@ function updateTrayMenu() {
   tray.setContextMenu(contextMenu);
 }
 
-async function startServer(): Promise<number> {
-  // app.getAppPath() = app.asar in packed, project root in dev
-  // process.resourcesPath = resources/ dir in packed, undefined in dev
-  const baseDir = (process as any).resourcesPath
-    ? (process as any).resourcesPath // resources/ dir where extraResources live
-    : process.cwd();
+/**
+ * Resolve the directory under which we store all persistent user data
+ * (data/bzxz.db, data/exports/, etc.).
+ *
+ *   - Portable build: ${PORTABLE_EXECUTABLE_DIR} — the folder the .exe sits in
+ *   - NSIS installed: the install directory (parent of the .exe)
+ *   - Dev mode:        the project root (process.cwd())
+ *
+ * This keeps user-customizable data next to the program itself, so moving or
+ * relocating the install folder also moves the data.
+ */
+function resolveInstallDir(): string {
+  if (process.env.PORTABLE_EXECUTABLE_DIR) return process.env.PORTABLE_EXECUTABLE_DIR;
+  if (app.isPackaged) return path.dirname(app.getPath('exe'));
+  return process.cwd();
+}
 
-  process.env.BZXZ_BASE_DIR = baseDir;
+/**
+ * One-time migration: pre-1.x builds wrote data/bzxz.db underneath
+ * `<install>/resources/`. We now store it directly under `<install>/`, so on
+ * first launch after upgrade copy the old folder over if the new one is empty.
+ */
+function migrateLegacyDataDir(installDir: string): void {
+  try {
+    const newDir = path.join(installDir, 'data');
+    const legacyDir = path.join((process as any).resourcesPath || '', 'data');
+    if (!legacyDir || legacyDir === newDir) return;
+    if (!existsSync(legacyDir)) return;
+    // Only migrate when the new dir is missing or empty.
+    if (existsSync(newDir)) {
+      try {
+        if (readdirSync(newDir).length > 0) return;
+      } catch { return; }
+    }
+    cpSync(legacyDir, newDir, { recursive: true });
+    console.log(`[bzxz] migrated legacy data dir ${legacyDir} → ${newDir}`);
+  } catch (err) {
+    console.warn('[bzxz] legacy data migration failed:', err);
+  }
+}
+
+async function startServer(): Promise<number> {
+  const installDir = resolveInstallDir();
+  if (app.isPackaged) migrateLegacyDataDir(installDir);
+
+  process.env.BZXZ_BASE_DIR = installDir;
+  // public/ and scripts/ live alongside the packed app via extraResources;
+  // in dev they're at the project root (same as installDir).
+  process.env.BZXZ_STATIC_DIR = app.isPackaged
+    ? ((process as any).resourcesPath as string)
+    : installDir;
   process.env.BZXZ_APP_VERSION = app.getVersion();
   await ensureDataDirs();
 

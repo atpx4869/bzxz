@@ -52,11 +52,14 @@ export function createApp() {
   const db = getDb();
   const { requireAuth, requireAdmin } = createAuthMiddleware(db);
 
-  // Resolve base path: Electron uses BZXZ_BASE_DIR env, dev mode uses cwd
+  // Writable user data (data/, exports/) lives under BZXZ_BASE_DIR.
+  // Bundled read-only assets (public/, scripts/) live under BZXZ_STATIC_DIR,
+  // which in Electron packaged mode points at `resourcesPath`.
   const baseDir = process.env.BZXZ_BASE_DIR || process.cwd();
+  const staticDir = process.env.BZXZ_STATIC_DIR || baseDir;
 
   app.use(express.json());
-  app.use(express.static(path.join(baseDir, 'public')));
+  app.use(express.static(path.join(staticDir, 'public')));
 
   // Legacy route aliases: rewrite old paths to new canonical paths in-place so the actual
   // route handlers below only know about the new layout. Removed in a future major.
@@ -64,7 +67,7 @@ export function createApp() {
 
   // Serve index.html at root
   app.get('/', (_req, res) => {
-    const indexPath = path.join(baseDir, 'public', 'index.html');
+    const indexPath = path.join(staticDir, 'public', 'index.html');
     if (existsSync(indexPath)) {
       res.sendFile(indexPath);
     } else {

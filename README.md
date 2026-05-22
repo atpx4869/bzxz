@@ -333,4 +333,15 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
-- **品牌升�
+- **品牌升级** — 产品名统一为「标准盒子 / StandardsBox」；登录页改为深色玻璃拟态，新增版本号 + 在线状态指示；主工作区跟进玻璃拟态主题
+- **桌面端端口设置** — 设置页新增"固定端口 + 端口检测"，未指定/被占用自动 fallback 到随机端口
+- **打包修复** — `playwright` 改为 runtime dep + asarUnpack，修复 NSIS/portable 包内 CNAS 抓取报 `Cannot find package 'playwright'` 的问题
+- **1.12.0** — 启动脚本端口被占自动 fallback，桌面端默认窗口加宽避免下载按钮被挤掉
+- **1.11.0** — 诊断面板加"上游延迟统计"，undici pipelining 缓解 GBW 慢握手；BY 内网 isAvailable 加 60s 负缓存
+- **1.10.0** — 启动时环境自检（BW/BZ/BY 连通 + OCR worker 预热），异常顶部红条提示
+- **1.9.0** — Python OCR 常驻守护进程（OCR 从 1-3s 降到 ~50-200ms）；tesseract 也改单例常驻；下载并发默认 3→5
+- **1.8.0** — 整源删除 BZVIP；API 统一 `{ data, error }` 壳 + camelCase；路由前缀重组（旧路径 alias 兼容）；下载端点鉴权；db schema 迁移改用 PRAGMA 列检测
+
+## License
+
+ISC

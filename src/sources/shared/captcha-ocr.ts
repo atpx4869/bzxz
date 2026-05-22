@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import path from 'node:path';
 import readline from 'node:readline';
 import { randomUUID } from 'node:crypto';
-import { getRootDir } from '../../shared/fs';
+import { getStaticDir } from '../../shared/fs';
 
 interface OcrResult {
   text: string;
@@ -23,7 +23,7 @@ const PYTHON_CANDIDATES = process.platform === 'win32'
   : ['python3', 'python'];
 
 function getPythonBridge(): string {
-  return path.join(getRootDir(), 'scripts', 'ocr_ddddocr.py');
+  return path.join(getStaticDir(), 'scripts', 'ocr_ddddocr.py');
 }
 
 export async function ocrCaptcha(base64Image: string): Promise<OcrResult> {
