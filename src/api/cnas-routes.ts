@@ -2,8 +2,9 @@ import express from 'express';
 import { z } from 'zod';
 import type Database from 'better-sqlite3';
 import { QualificationService } from '../services/qualification-service';
+import { PRESET_CNAS_LABS } from '../services/preset-cnas-labs';
 import { normalizeError } from '../shared/errors';
-import { respond } from '../shared/response';
+import { respond, respondError } from '../shared/response';
 import { toCamelCase, toSnakeCase } from '../shared/case';
 
 export function createQualificationRoutes(db: Database.Database, requireAuth: express.RequestHandler):
@@ -83,6 +84,40 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
       respond(res, { ok: true });
     } catch (e) { next(normalizeError(e)); }
   });
+
+  // ─── Preset CNAS labs (built-in recommendations) ───────────────────────────
+  router.get('/api/qualifications/presets/cnas', requireAuth, (_req, res) => {
+    const existing = db.prepare('SELECT lab_no FROM cnas_labs').all() as { lab_no: string }[];
+    const subscribed = new Set(existing.map(r => r.lab_no));
+    const items = PRESET_CNAS_LABS.map(p => ({
+      labName: p.labName,
+      labNo: p.labNo,
+      baseInfoId: p.baseInfoId,
+      certUpdateTs: p.certUpdateTs || '',
+      validate: p.validate || '',
+      note: p.note || '',
+      subscribed: subscribed.has(p.labNo),
+    }));
+    respond(res, { items });
+  });
+
+  router.post('/api/qualifications/presets/cnas/:labNo/subscribe', requireAuth, (req, res, next) => {
+    try {
+      const labNo = String(req.params.labNo);
+      const preset = PRESET_CNAS_LABS.find(p => p.labNo === labNo);
+      if (!preset) { respondError(res, 404, 'NOT_FOUND', '未找到内置候选机构'); return; }
+      const lab = svc.addCnasLab({
+        lab_no: preset.labNo,
+        lab_name: preset.labName,
+        base_info_id: preset.baseInfoId,
+        cert_update_ts: preset.certUpdateTs || '',
+        validate: preset.validate || '',
+        url_params: preset.urlParams || {},
+      });
+      respond(res, toCamelCase(lab), 201);
+    } catch (e) { next(normalizeError(e)); }
+  });
+
 
   // ─── CMA Labs (under /qualifications/labs/cma) ───
   router.get('/api/qualifications/labs/cma/search', requireAuth, async (req, res, next) => {

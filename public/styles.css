@@ -797,6 +797,14 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
 .qual-tab { transition: color 0.15s, border-color 0.15s; }
 .qual-tab:hover { color: var(--text) !important; }
 
+.qual-preset-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid oklch(26% 0.012 255 / 0.45); border-radius: var(--radius); background: oklch(17% 0.014 255 / 0.46); margin-bottom: 8px; }
+.qual-preset-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.qual-preset-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.qual-preset-no { font-size: 11px; color: var(--accent); font-family: var(--mono, monospace); }
+.qual-preset-note { font-size: 11px; color: var(--text-3); }
+.qual-preset-meta { font-size: 11px; color: var(--text-3); }
+.qual-preset-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
 .library-grid { display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.15fr); gap: 14px; }
 .library-card { min-width: 0; padding: 16px; border: 1px solid oklch(26% 0.012 255 / 0.45); border-radius: var(--radius); background: oklch(17% 0.014 255 / 0.46); }
 .library-card.wide { grid-column: 1 / -1; }

@@ -20,6 +20,42 @@ interface AnnouncementRow {
 
 const GITHUB_RELEASE_API = 'https://api.github.com/repos/atpx4869/bzxz/releases/tags/v';
 const GITHUB_LATEST_API = 'https://api.github.com/repos/atpx4869/bzxz/releases/latest';
+const GITHUB_COMMITS_API = 'https://api.github.com/repos/atpx4869/bzxz/commits';
+
+// Commits 缓存：最多 10 条结果，10 分钟内不重复请求 GitHub。
+let commitsCache: { fetchedAt: number; body: Array<{ sha: string; shortSha: string; title: string; body: string; author: string; date: string; htmlUrl: string }> | null } | null = null;
+const COMMITS_CACHE_MS = 10 * 60 * 1000;
+
+async function fetchRecentCommits(limit = 10): Promise<Array<{ sha: string; shortSha: string; title: string; body: string; author: string; date: string; htmlUrl: string }> | null> {
+  if (commitsCache && Date.now() - commitsCache.fetchedAt < COMMITS_CACHE_MS) return commitsCache.body;
+  try {
+    const res = await fetch(`${GITHUB_COMMITS_API}?per_page=${Math.min(Math.max(1, limit), 30)}`, {
+      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'bzxz/announcements' },
+    });
+    if (!res.ok) { commitsCache = { fetchedAt: Date.now(), body: null }; return null; }
+    const arr = await res.json() as Array<{ sha: string; html_url: string; commit: { message: string; author: { name: string; date: string } } }>;
+    const out = arr.map(c => {
+      const msg = String(c.commit?.message || '').trim();
+      const firstNl = msg.indexOf('\n');
+      const title = firstNl === -1 ? msg : msg.slice(0, firstNl).trim();
+      const body = firstNl === -1 ? '' : msg.slice(firstNl + 1).trim();
+      return {
+        sha: c.sha,
+        shortSha: c.sha.slice(0, 7),
+        title,
+        body,
+        author: c.commit?.author?.name || '',
+        date: c.commit?.author?.date || '',
+        htmlUrl: c.html_url || '',
+      };
+    });
+    commitsCache = { fetchedAt: Date.now(), body: out };
+    return out;
+  } catch {
+    commitsCache = { fetchedAt: Date.now(), body: null };
+    return null;
+  }
+}
 
 // In-memory cache: keyed by version string, value lives ~30 min.
 const releaseCache = new Map<string, { fetchedAt: number; body: { tag: string; name: string; bodyMd: string; htmlUrl: string; publishedAt: string } | null }>();
@@ -117,6 +153,19 @@ export function createAnnouncementRoutes(
       const notes = await fetchReleaseNotes(version);
       if (!notes) { respond(res, { available: false }); return; }
       respond(res, { available: true, ...notes });
+    } catch (error) { next(normalizeError(error)); }
+  });
+
+  // GET /api/announcements/recent-commits?limit=10
+  // Returns the last N commits on the default branch — used as the post-upgrade
+  // announcement body so users see *exactly* what changed since they last opened
+  // the app, without needing a Release to be cut on GitHub.
+  router.get('/recent-commits', requireAuth, async (req, res, next) => {
+    try {
+      const limit = Math.min(Math.max(parseInt(String(req.query.limit || '10'), 10) || 10, 1), 30);
+      const commits = await fetchRecentCommits(limit);
+      if (!commits) { respond(res, { available: false, commits: [] }); return; }
+      respond(res, { available: true, commits });
     } catch (error) { next(normalizeError(error)); }
   });
 

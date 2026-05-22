@@ -351,7 +351,58 @@ async function loadQualLabs() {
     qualCmaLabsCache = cmaLabs;
     renderQualLabs('cnas', cnasLabs);
     renderQualLabs('cma', cmaLabs);
+    loadQualPresets();
   } catch (e) { /* silent */ }
+}
+
+async function loadQualPresets() {
+  const box = document.getElementById('qualPresetCnas');
+  if (!box) return;
+  try {
+    const res = await fetch('/api/qualifications/presets/cnas');
+    const data = await readApiResponse(res);
+    const items = (data && (data.items || data)) || [];
+    if (!Array.isArray(items) || !items.length) {
+      box.innerHTML = '<div style="color:var(--text-3);font-size:12px">暂无内置候选机构</div>';
+      return;
+    }
+    box.innerHTML = items.map(it => {
+      const labelEsc = (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      const subscribed = !!it.subscribed;
+      const btn = subscribed
+        ? '<button class="btn btn-sm btn-ghost" disabled>已订阅</button>'
+        : `<button class="btn btn-sm btn-primary" onclick="subscribeQualPreset('${labelEsc(it.labNo)}', this)">一键订阅</button>`;
+      const meta = [it.certUpdateTs ? '认可更新 ' + it.certUpdateTs : '', it.validate ? '有效期 ' + it.validate : ''].filter(Boolean).join(' · ');
+      return `<div class="qual-preset-item">
+        <div class="qual-preset-info">
+          <div class="qual-preset-name">${labelEsc(it.labName)} <span class="qual-preset-no">${labelEsc(it.labNo)}</span></div>
+          ${it.note ? `<div class="qual-preset-note">${labelEsc(it.note)}</div>` : ''}
+          ${meta ? `<div class="qual-preset-meta">${labelEsc(meta)}</div>` : ''}
+        </div>
+        <div class="qual-preset-actions">${btn}</div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    box.innerHTML = '<div style="color:var(--danger);font-size:12px">加载推荐订阅失败</div>';
+  }
+}
+
+async function subscribeQualPreset(labNo, btn) {
+  if (!labNo) return;
+  if (btn) { btn.disabled = true; btn.textContent = '订阅中…'; }
+  try {
+    const res = await fetch('/api/qualifications/presets/cnas/' + encodeURIComponent(labNo) + '/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+    const data = await readApiResponse(res);
+    if (!res.ok) throw new Error((data && data.error) || '订阅失败');
+    if (typeof showToast === 'function') showToast('订阅成功，开始同步…', 'success');
+    try {
+      await fetch('/api/qualifications/labs/cnas/sync?labNo=' + encodeURIComponent(labNo), { method: 'POST' });
+    } catch (e) {}
+    await loadQualLabs();
+  } catch (e) {
+    if (typeof showToast === 'function') showToast('订阅失败：' + (e.message || e), 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '一键订阅'; }
+  }
 }
 
 function formatSyncStatus(lab) {

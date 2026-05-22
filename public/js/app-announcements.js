@@ -140,15 +140,35 @@
         notes = await apiGet('/api/announcements/release-notes?version=' + encodeURIComponent(version));
       } catch (e) {}
 
+      // 拉取最近 10 次提交，作为升级公告的一部分
+      let commitsMd = '';
+      try {
+        const cm = await apiGet('/api/announcements/recent-commits?limit=10');
+        const list = (cm && cm.commits) || [];
+        if (Array.isArray(list) && list.length) {
+          const lines = list.map(c => {
+            const sha = c.shortSha || (c.sha ? String(c.sha).slice(0, 7) : '');
+            const title = (c.title || '').replace(/[\r\n]+/g, ' ').trim();
+            const author = c.author || '';
+            const date = c.date ? String(c.date).slice(0, 10) : '';
+            const meta = [author, date].filter(Boolean).join(', ');
+            const link = c.htmlUrl ? '[`' + sha + '`](' + c.htmlUrl + ')' : '`' + sha + '`';
+            return '- ' + link + ' ' + title + (meta ? ' _(' + meta + ')_' : '');
+          });
+          commitsMd = '\n\n### 最近 10 次提交\n\n' + lines.join('\n');
+        }
+      } catch (e) {}
+
       const isFirstLaunch = !last;
       const headerTitle = (notes && notes.available && notes.name)
         ? notes.name
         : (isFirstLaunch ? '欢迎使用标准盒子 v' + version : '已升级到 v' + version);
-      const bodyMd = (notes && notes.available && (notes.bodyMd || notes.body))
+      const baseBody = (notes && notes.available && (notes.bodyMd || notes.body))
         ? (notes.bodyMd || notes.body)
         : (isFirstLaunch
             ? '感谢使用标准盒子！\n\n- 当前版本：**v' + version + '**\n- 默认权限仅包含 *标准检索 / 批量下载 / 标准补全*；管理员可在用户管理中按账号分配更多功能。\n- 如需查看完整更新日志，请打开 [GitHub Releases](https://github.com/atpx4869/bzxz/releases)。'
             : '已升级到版本 **v' + version + '**\n\n详细变更见 [GitHub Releases](https://github.com/atpx4869/bzxz/releases/tag/v' + version + ')。');
+      const bodyMd = baseBody + commitsMd;
       const html = renderMarkdown(bodyMd);
       showModal(headerTitle, html, () => {
         try { localStorage.setItem(LS_VERSION_KEY, version); } catch (e) {}
