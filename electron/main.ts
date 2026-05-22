@@ -63,7 +63,7 @@ interface UpdateInfo {
 
 function getDefaultSettings(): DesktopSettings {
   return {
-    downloadPath: path.join(app.getPath('downloads'), 'bzxz'),
+    downloadPath: path.join(app.getPath('desktop'), 'bzxz'),
     webServiceEnabled: true,
     preferredPort: null,
   };

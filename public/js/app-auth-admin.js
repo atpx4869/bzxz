@@ -155,17 +155,19 @@ function toggleUserDropdown() {
 }
 
 // ── Login overlay: version + online status ──
-async function initLoginOverlayMeta() {
-  // Version: from electron preload bridge if available, otherwise from /api/health response (no version) → leave default
-  const verEl = document.getElementById('authVersion');
-  if (verEl && window.bzxz && typeof window.bzxz.getAppVersion === 'function') {
-    try {
-      const v = await window.bzxz.getAppVersion();
-      if (v) verEl.textContent = 'v' + v;
-    } catch {}
-  }
+function initLoginOverlayMeta() {
+  // 先启动健康检查轮询，避免 IPC 调用挂起时整个登录页一直显示“正在检查服务…”
   pollLoginHealth();
   setInterval(pollLoginHealth, 30000);
+
+  // 版本号尽力而为：给 IPC 调用一个 2 秒超时，避免 preload 未就绪时阻塞
+  const verEl = document.getElementById('authVersion');
+  if (verEl && window.bzxz && typeof window.bzxz.getAppVersion === 'function') {
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000));
+    Promise.race([window.bzxz.getAppVersion(), timeout])
+      .then((v) => { if (v) verEl.textContent = 'v' + v; })
+      .catch(() => { /* 留给 /api/health 返回的 version 兜底 */ });
+  }
 }
 
 async function pollLoginHealth() {
@@ -600,9 +602,4 @@ async function showUserDetail(userId) {
     }
 
     modal.innerHTML = `<h3>用户: ${escapeHtml(d.user.displayName || d.user.username)}</h3>
-      ${summaryHtml}${sourceHtml}${listHtml}
-      <button class="btn btn-ghost btn-sm" style="margin-top:12px" data-action="modal-close">关闭</button>`;
-  } catch (e) {
-    modal.innerHTML = `<p style="color:var(--danger)">加载失败: ${escapeHtml(e.message)}</p>`;
-  }
-}
+      ${summaryHtml}
