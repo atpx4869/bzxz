@@ -80,4 +80,27 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.6",
     "@types/multer": "^2.1.0",
-    "@types/node
+    "@types/node": "^25.5.0",
+    "@types/supertest": "^7.2.0",
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1",
+    "supertest": "^7.2.2",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  },
+  "dependencies": {
+    "@types/cheerio": "^0.22.35",
+    "bcrypt": "^6.0.0",
+    "better-sqlite3": "^12.9.0",
+    "cheerio": "^1.2.0",
+    "express": "^5.2.1",
+    "multer": "^2.1.1",
+    "pdf-lib": "^1.17.1",
+    "playwright": "^1.59.1",
+    "sharp": "^0.34.5",
+    "tesseract.js": "^5.1.1",
+    "xlsx": "^0.18.5",
+    "zod": "^4.3.6"
+  }
+}
