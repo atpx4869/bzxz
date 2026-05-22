@@ -270,17 +270,23 @@ function cleanupLegacyCmaData(db: Database.Database): void {
 }
 
 function ensureGuestUser(db: Database.Database): void {
-  const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(GUEST_USERNAME);
+  // Default permission set: standards search, batch download, complete-info.
+  // Admin can broaden this later; we won't overwrite their changes on boot.
+  const DEFAULT_GUEST_TABS = JSON.stringify(['search', 'batch', 'complete']);
+  const existing = db.prepare('SELECT id, allowed_tabs FROM users WHERE username = ?').get(GUEST_USERNAME) as { id: number; allowed_tabs: string | null } | undefined;
   if (!existing) {
     db.prepare(
       'INSERT INTO users (username, password, display_name, role, is_active, allowed_tabs) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(GUEST_USERNAME, GUEST_PASSWORD_SENTINEL, GUEST_DISPLAY_NAME, 'user', 1, null);
+    ).run(GUEST_USERNAME, GUEST_PASSWORD_SENTINEL, GUEST_DISPLAY_NAME, 'user', 1, DEFAULT_GUEST_TABS);
     return;
   }
-
+  // Refresh metadata, preserve admin-customized allowed_tabs.
   db.prepare(
-    'UPDATE users SET display_name = ?, role = ?, is_active = 1, allowed_tabs = NULL WHERE username = ?'
+    'UPDATE users SET display_name = ?, role = ?, is_active = 1 WHERE username = ?'
   ).run(GUEST_DISPLAY_NAME, 'user', GUEST_USERNAME);
+  if (existing.allowed_tabs == null) {
+    db.prepare('UPDATE users SET allowed_tabs = ? WHERE username = ?').run(DEFAULT_GUEST_TABS, GUEST_USERNAME);
+  }
 }
 
 export function getRealUserCount(db: Database.Database): number {

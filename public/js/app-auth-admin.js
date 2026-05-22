@@ -42,7 +42,10 @@ async function checkAuthStatus() {
       document.getElementById('authOverlay').classList.remove('hidden');
     } else if (!data.loginRequired) {
       // Login not required — use guest
-      currentUser = { id: 0, username: '_guest', displayName: '访客', role: 'user', allowedTabs: null };
+      // Safe fallback: should rarely run since /api/auth/status now returns the
+      // real guest user. Match the backend default tab set so a future change
+      // (e.g. an empty/null response) doesn't accidentally expose all tabs.
+      currentUser = { id: 0, username: '_guest', displayName: '访客', role: 'user', allowedTabs: ['search', 'batch', 'complete'] };
       document.getElementById('authOverlay').classList.add('hidden');
       onAuthReady();
     } else {
@@ -605,9 +608,4 @@ async function showUserDetail(userId) {
     }
 
     modal.innerHTML = `<h3>用户: ${escapeHtml(d.user.displayName || d.user.username)}</h3>
-      ${summaryHtml}${sourceHtml}${listHtml}
-      <button class="btn btn-ghost btn-sm" style="margin-top:12px" data-action="modal-close">关闭</button>`;
-  } catch (e) {
-    modal.innerHTML = `<p style="color:var(--danger)">加载失败: ${escapeHtml(e.message)}</p>`;
-  }
-}
+      ${summa

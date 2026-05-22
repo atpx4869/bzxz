@@ -990,7 +990,7 @@ async function loadAnnAdminList() {
   if (!box) return;
   try {
     const data = await adminListAnnouncements();
-    const items = (data && (data.items || data)) || [];
+    const items = (data && (data.announcements || data.items)) || [];
     if (!items.length) { box.innerHTML = '<div class="setting-hint">暂无公告</div>'; return; }
     box.innerHTML = items.map(it => {
       const t = escapeHtml ? escapeHtml(it.title || '') : (it.title || '');
