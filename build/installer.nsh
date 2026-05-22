@@ -32,4 +32,21 @@
 
   ; 同名残留时先清掉，避免 Rename 失败
   IfFileExists "$INSTDIR\..\._bzxz_data_backup\*.*" 0 +2
-    RMDir /r "$IN
+    RMDir /r "$INSTDIR\..\._bzxz_data_backup"
+
+  Rename "$INSTDIR\data" "$INSTDIR\..\._bzxz_data_backup"
+
+  ; 默认卸载流程：删除安装目录所有文件
+  RMDir /r "$INSTDIR"
+
+  ; 还原 data 目录
+  CreateDirectory "$INSTDIR"
+  Rename "$INSTDIR\..\._bzxz_data_backup" "$INSTDIR\data"
+
+  Goto remove_done
+
+  normal_remove:
+    RMDir /r "$INSTDIR"
+
+  remove_done:
+!macroend
