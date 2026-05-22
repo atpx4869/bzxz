@@ -973,7 +973,11 @@ body::before {
   mask-image: radial-gradient(ellipse at center, black 30%, transparent 85%);
   -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 85%);
 }
-.topbar, .sidebar, .content, .download-center { position: relative; z-index: 1; }
+/* Lift main panels above body::before grid background. .topbar/.sidebar/
+   .download-center each rely on their own position: fixed, so we only
+   touch z-index here. .content needs position: relative to host z-index. */
+.topbar, .sidebar, .download-center { z-index: 210; }
+.content { position: relative; z-index: 1; }
 
 /* Topbar — frosted */
 .topbar {
