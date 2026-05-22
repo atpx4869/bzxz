@@ -118,7 +118,14 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
 
 /* Environment warning banner — shown when startup self-check finds problems */
 .env-warning {
-  background: oklch(58% 0.20 25 / 0.12);
+  position: fixed;
+  top: var(--topbar-h);
+  left: var(--sidebar-w);
+  right: 0;
+  z-index: 205;
+  background: oklch(58% 0.20 25 / 0.18);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border-bottom: 1px solid oklch(58% 0.20 25 / 0.3);
   color: var(--text);
   padding: 8px 18px;
@@ -129,6 +136,7 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
   cursor: pointer;
   transition: background 0.15s var(--ease-out);
 }
+body.sidebar-collapsed .env-warning { left: var(--sidebar-collapsed-w); }
 .env-warning:hover { background: oklch(58% 0.20 25 / 0.18); }
 .env-warning-icon { font-size: 14px; flex: 0 0 auto; }
 .env-warning-text { flex: 1; color: var(--text-2); }
