@@ -23,10 +23,10 @@ describe('createApp', () => {
     const response = await request(app()).get('/api/health');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({
-      data: { ok: true, sources: ['bz', 'gbw', 'by'] },
-      error: null,
-    });
+    expect(response.body.error).toBeNull();
+    expect(response.body.data.ok).toBe(true);
+    expect(response.body.data.sources).toEqual(['bz', 'gbw', 'by']);
+    expect(typeof response.body.data.version).toBe('string');
   });
 
   it('validates search query', async () => {

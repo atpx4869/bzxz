@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>bzxz · 标准检索</title>
+<title>标准盒子 · StandardsBox</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;1,8..60,400&family=DM+Mono:ital,wght@0,400;0,500&display=swap" rel="stylesheet">
@@ -15,7 +15,7 @@
 <!-- Topbar -->
 <header class="topbar">
   <button class="topbar-toggle" onclick="toggleSidebar()" title="切换侧栏">≡</button>
-  <span class="topbar-title">标准检索</span>
+  <span class="topbar-title"><span class="topbar-brand">标准盒子</span><span class="topbar-brand-sep">·</span><span class="topbar-brand-sub">StandardsBox</span></span>
   <div class="source-health-strip" id="sourceHealthStrip"></div>
   <div class="topbar-actions">
     <button class="topbar-btn download-center-toggle" id="downloadCenterToggle" onclick="toggleDownloadCenter()" title="下载中心">下载 <span id="downloadCenterBadge">0</span></button>
@@ -414,21 +414,44 @@
 
 <!-- Auth overlay -->
 <div class="auth-overlay" id="authOverlay">
-  <div class="auth-card">
-    <h2 id="authTitle">bzxz · 登录</h2>
-    <form id="authForm">
+  <div class="auth-bg" aria-hidden="true">
+    <span class="auth-orb auth-orb-a"></span>
+    <span class="auth-orb auth-orb-b"></span>
+    <span class="auth-orb auth-orb-c"></span>
+    <span class="auth-grid"></span>
+  </div>
+  <div class="auth-card glass">
+    <div class="auth-brand">
+      <div class="auth-logo" aria-hidden="true">
+        <span class="auth-logo-glyph">标</span>
+      </div>
+      <div class="auth-brand-text">
+        <div class="auth-brand-cn">标准盒子</div>
+        <div class="auth-brand-en">StandardsBox</div>
+        <div class="auth-brand-tag">多源标准检索 · 批量下载 · 资质查询</div>
+      </div>
+    </div>
+    <h2 id="authTitle" class="auth-card-title">欢迎回来，请登录</h2>
+    <form id="authForm" class="auth-form">
       <div class="form-group">
         <label>用户名</label>
-        <input id="authUsername" required autocomplete="username">
+        <input id="authUsername" required autocomplete="username" placeholder="请输入用户名">
       </div>
       <div class="form-group">
         <label>密码</label>
-        <input id="authPassword" type="password" required autocomplete="current-password">
+        <input id="authPassword" type="password" required autocomplete="current-password" placeholder="请输入密码">
       </div>
-      <button type="submit" class="btn btn-primary" id="authSubmitBtn">登录</button>
+      <button type="submit" class="btn btn-primary auth-submit" id="authSubmitBtn">登录</button>
       <a class="auth-toggle" id="authToggle">没有账号？注册</a>
     </form>
     <div class="auth-error" id="authError"></div>
+    <div class="auth-footer">
+      <span class="auth-status" id="authStatus" data-state="loading">
+        <span class="auth-status-dot"></span>
+        <span class="auth-status-text">正在检查服务…</span>
+      </span>
+      <span class="auth-version" id="authVersion">v—</span>
+    </div>
   </div>
 </div>
 

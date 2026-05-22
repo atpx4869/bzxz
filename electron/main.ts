@@ -155,7 +155,7 @@ function getWebAccessInfo() {
     lanUrls,
     primaryUrl: settings.webServiceEnabled && lanUrls[0] ? lanUrls[0] : localUrl,
     firewallHint: settings.webServiceEnabled
-      ? '同一局域网设备访问前，请允许 Windows 防火墙放行 bzxz 或当前端口。'
+      ? '同一局域网设备访问前，请允许 Windows 防火墙放行 标准盒子 或当前端口。'
       : '局域网 Web 访问已关闭；桌面端和本机 localhost 仍可使用。',
   };
 }
@@ -353,7 +353,7 @@ function webAccessGate(req: Request, res: Response, next: NextFunction) {
     next();
     return;
   }
-  res.status(403).send('bzxz Web access is disabled on this desktop host.');
+  res.status(403).send('标准盒子 / StandardsBox web access is disabled on this desktop host.');
 }
 
 function createWindow() {
@@ -362,7 +362,7 @@ function createWindow() {
     height: 860,
     minWidth: 960,
     minHeight: 600,
-    title: 'bzxz · 标准检索',
+    title: '标准盒子 · StandardsBox',
     icon: path.join(__dirname, '..', '..', 'public', 'favicon-256.png'),
     backgroundColor: '#1a1a2e',
     show: false,
@@ -424,7 +424,7 @@ function updateTrayMenu() {
   const accessInfo = getWebAccessInfo();
 
   const contextMenu = Menu.buildFromTemplate([
-    { label: '打开 bzxz', click: () => {
+    { label: '打开 标准盒子', click: () => {
       if (mainWindow) {
         mainWindow.show();
         mainWindow.focus();
@@ -445,7 +445,7 @@ function updateTrayMenu() {
     }},
   ]);
 
-  tray.setToolTip(`bzxz · ${accessInfo.primaryUrl}`);
+  tray.setToolTip(`标准盒子 · ${accessInfo.primaryUrl}`);
   tray.setContextMenu(contextMenu);
 }
 
@@ -457,6 +457,7 @@ async function startServer(): Promise<number> {
     : process.cwd();
 
   process.env.BZXZ_BASE_DIR = baseDir;
+  process.env.BZXZ_APP_VERSION = app.getVersion();
   await ensureDataDirs();
 
   const expressApp = express();

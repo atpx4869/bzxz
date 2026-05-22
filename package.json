@@ -23,7 +23,7 @@
   "type": "commonjs",
   "build": {
     "appId": "com.bzxz.app",
-    "productName": "bzxz",
+    "productName": "标准盒子",
     "directories": {
       "output": "release"
     },

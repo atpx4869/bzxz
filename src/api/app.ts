@@ -170,7 +170,8 @@ export function createApp() {
   app.use(qualRouter);
 
   app.get('/api/health', (_req, res) => {
-    respond(res, { ok: true, sources: sourceRegistry.list() });
+    const version = process.env.npm_package_version || process.env.BZXZ_APP_VERSION || '';
+    respond(res, { ok: true, version, sources: sourceRegistry.list() });
   });
 
   // ─── Diagnostics ──────────────────────────────────────────────────────────

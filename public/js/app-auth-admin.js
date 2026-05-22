@@ -36,7 +36,7 @@ async function checkAuthStatus() {
       onAuthReady();
     } else if (data.needsSetup) {
       isRegisterMode = true;
-      document.getElementById('authTitle').textContent = 'bzxz · 初始化注册';
+      document.getElementById('authTitle').textContent = '首次启动，请创建管理员账号';
       document.getElementById('authSubmitBtn').textContent = '注册';
       document.getElementById('authToggle').textContent = '';
       document.getElementById('authOverlay').classList.remove('hidden');
@@ -137,7 +137,7 @@ document.getElementById('authForm').addEventListener('submit', async (e) => {
 document.getElementById('authToggle').addEventListener('click', () => {
   if (!document.getElementById('authToggle').textContent) return;
   isRegisterMode = !isRegisterMode;
-  document.getElementById('authTitle').textContent = isRegisterMode ? 'bzxz · 注册' : 'bzxz · 登录';
+  document.getElementById('authTitle').textContent = isRegisterMode ? '创建账号，开始使用 标准盒子' : '欢迎回来，请登录';
   document.getElementById('authSubmitBtn').textContent = isRegisterMode ? '注册' : '登录';
   document.getElementById('authToggle').textContent = isRegisterMode ? '已有账号？登录' : '没有账号？注册';
   document.getElementById('authError').textContent = '';
@@ -153,6 +153,52 @@ async function doLogout() {
 function toggleUserDropdown() {
   document.getElementById('userDropdown').classList.toggle('open');
 }
+
+// ── Login overlay: version + online status ──
+async function initLoginOverlayMeta() {
+  // Version: from electron preload bridge if available, otherwise from /api/health response (no version) → leave default
+  const verEl = document.getElementById('authVersion');
+  if (verEl && window.bzxz && typeof window.bzxz.getAppVersion === 'function') {
+    try {
+      const v = await window.bzxz.getAppVersion();
+      if (v) verEl.textContent = 'v' + v;
+    } catch {}
+  }
+  pollLoginHealth();
+  setInterval(pollLoginHealth, 30000);
+}
+
+async function pollLoginHealth() {
+  const el = document.getElementById('authStatus');
+  if (!el) return;
+  const overlay = document.getElementById('authOverlay');
+  // Skip polling when login overlay is hidden
+  if (!overlay || overlay.classList.contains('hidden')) return;
+  const textEl = el.querySelector('.auth-status-text');
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const res = await fetch('/api/health', { signal: ctrl.signal, cache: 'no-store' });
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const total = Array.isArray(data.sources) ? data.sources.length : 0;
+      el.dataset.state = 'online';
+      if (textEl) textEl.textContent = total > 0 ? `服务在线 · ${total} 个数据源` : '服务在线';
+      const verEl = document.getElementById('authVersion');
+      if (verEl && (!verEl.textContent || verEl.textContent === 'v—') && data.version) {
+        verEl.textContent = 'v' + data.version;
+      }
+      return;
+    }
+    throw new Error('bad status');
+  } catch {
+    el.dataset.state = 'offline';
+    if (textEl) textEl.textContent = '服务离线';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', initLoginOverlayMeta);
 
 function showChangePwd() {
   document.getElementById('userDropdown').classList.remove('open');
