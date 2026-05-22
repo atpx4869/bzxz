@@ -21,4 +21,8 @@ contextBridge.exposeInMainWorld('bzxz', {
   },
   copyWebAccessUrl: (url?: string) => ipcRenderer.invoke('bzxz:copy-web-access-url', url),
   openWebAccessUrl: (url?: string) => ipcRenderer.invoke('bzxz:open-web-access-url', url),
+  getPortConfig: () => ipcRenderer.invoke('bzxz:get-port-config'),
+  setPortConfig: (port: number | null) => ipcRenderer.invoke('bzxz:set-port-config', port),
+  checkPort: (port: number) => ipcRenderer.invoke('bzxz:check-port', port),
+  relaunchApp: () => ipcRenderer.invoke('bzxz:relaunch-app'),
 });

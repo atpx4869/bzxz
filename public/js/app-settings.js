@@ -4,6 +4,25 @@ const SETTINGS_NOTES = { gbw: '自动验证码 5~15s', bz: '合成PDF 30~90s', b
 var startupSettingState = { loaded: false, loading: false, enabled: false, supported: false, error: '' };
 var webAccessState = { loaded: false, loading: false, info: null, error: '' };
 var appUpdateState = { loaded: false, checking: false, installing: false, progress: null, info: null, error: '' };
+var portSettingState = {
+  loaded: false,
+  loading: false,
+  preferredPort: null,
+  actualPort: 0,
+  minPort: 1024,
+  maxPort: 65535,
+  inputValue: '',
+  pendingPort: null,
+  checking: false,
+  checkResult: null,   // { available, error, port, note }
+  saving: false,
+  saveError: '',
+  needsRestart: false,
+};
+
+function hasDesktopPortApi() {
+  return Boolean(window.bzxz && window.bzxz.isElectron && window.bzxz.getPortConfig && window.bzxz.setPortConfig && window.bzxz.checkPort);
+}
 
 function hasDesktopStartupApi() {
   return Boolean(window.bzxz && window.bzxz.isElectron && window.bzxz.getOpenAtLogin && window.bzxz.setOpenAtLogin);
@@ -293,6 +312,179 @@ async function toggleWebServiceSetting(enabled) {
   renderSettings();
 }
 
+function renderPortSettingCard() {
+  var supported = hasDesktopPortApi();
+  var s = portSettingState;
+  var mode = supported ? (s.preferredPort ? '固定端口' : '随机端口') : '仅桌面端';
+  var statusClass = s.saveError ? ' danger'
+    : (s.checkResult && s.checkResult.available === false) ? ' danger'
+    : (s.preferredPort && s.preferredPort === s.actualPort) ? ' success'
+    : '';
+  var inputValue = s.inputValue != null ? s.inputValue : (s.preferredPort == null ? '' : String(s.preferredPort));
+  var note;
+  if (!supported) {
+    note = '仅桌面端可设置内置服务端口，Web 页面无法修改。';
+  } else if (s.saveError) {
+    note = s.saveError;
+  } else if (s.needsRestart) {
+    note = '已保存。需要重启桌面程序后新端口才会生效。';
+  } else if (s.preferredPort && s.actualPort && s.preferredPort !== s.actualPort) {
+    note = '已配置 ' + s.preferredPort + '，但启动时被占用，当前实际使用随机端口 ' + s.actualPort + '。';
+  } else if (s.preferredPort) {
+    note = '已固定端口。修改后需要重启桌面程序。';
+  } else {
+    note = '留空使用随机端口；填入 1024 - 65535 之间的端口号可固定。';
+  }
+  var checkText = '';
+  if (s.checking) {
+    checkText = '检测中…';
+  } else if (s.checkResult) {
+    if (s.checkResult.available) {
+      checkText = '端口 ' + s.checkResult.port + ' 可用' + (s.checkResult.note ? '（' + s.checkResult.note + '）' : '');
+    } else {
+      checkText = '端口 ' + (s.checkResult.port != null ? s.checkResult.port : '?') + ' 不可用：' + (s.checkResult.error || '未知原因');
+    }
+  }
+  var checkClass = s.checking ? ' muted'
+    : (s.checkResult && s.checkResult.available) ? ' success'
+    : (s.checkResult && s.checkResult.available === false) ? ' danger'
+    : ' muted';
+  var disabled = !supported || s.loading || s.saving;
+  return `
+      <div class="settings-card wide desktop-setting-card">
+        <div class="settings-card-header">
+          <div>
+            <div class="settings-kicker">桌面程序</div>
+            <div class="settings-value">内置服务端口</div>
+            <div class="setting-hint">${escapeHtml(note)}</div>
+          </div>
+          <span class="desktop-setting-status${statusClass}">${s.loading ? '读取中' : escapeHtml(mode)}</span>
+        </div>
+        <div class="port-setting-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px">
+          <input id="portSettingInput" type="number" inputmode="numeric"
+            min="${s.minPort}" max="${s.maxPort}"
+            placeholder="留空 = 随机"
+            value="${escapeHtml(inputValue)}"
+            ${disabled ? 'disabled' : ''}
+            oninput="onPortInputChange(this.value)"
+            style="flex:0 0 160px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);font:13px 'DM Mono',monospace">
+          <button class="btn btn-sm btn-ghost" ${disabled || !s.inputValue ? 'disabled' : ''} onclick="checkPortNow()">${s.checking ? '检测中…' : '检测'}</button>
+          <button class="btn btn-sm btn-primary" ${disabled ? 'disabled' : ''} onclick="savePortConfig()">${s.saving ? '保存中…' : '保存'}</button>
+          <button class="btn btn-sm btn-ghost" ${disabled || !s.preferredPort ? 'disabled' : ''} onclick="clearPortConfig()">恢复随机</button>
+          ${s.needsRestart ? `<button class="btn btn-sm btn-primary" onclick="relaunchAppNow()">立即重启</button>` : ''}
+        </div>
+        <div class="setting-hint port-setting-status${checkClass}" style="margin-top:6px;min-height:18px">${escapeHtml(checkText)}</div>
+        <div class="setting-hint" style="margin-top:4px;color:var(--text-3)">当前实际端口: <code>${s.actualPort || '—'}</code></div>
+      </div>`;
+}
+
+async function ensurePortSettingLoaded(force) {
+  if (!hasDesktopPortApi()) {
+    portSettingState.loaded = true;
+    return;
+  }
+  if (!force && (portSettingState.loaded || portSettingState.loading)) return;
+  portSettingState.loading = true;
+  try {
+    var cfg = await window.bzxz.getPortConfig();
+    portSettingState.preferredPort = cfg && cfg.preferredPort != null ? Number(cfg.preferredPort) : null;
+    portSettingState.actualPort = cfg && cfg.actualPort ? Number(cfg.actualPort) : 0;
+    portSettingState.minPort = cfg && cfg.minPort ? Number(cfg.minPort) : 1024;
+    portSettingState.maxPort = cfg && cfg.maxPort ? Number(cfg.maxPort) : 65535;
+    if (portSettingState.inputValue === '' && portSettingState.preferredPort != null) {
+      portSettingState.inputValue = String(portSettingState.preferredPort);
+    }
+  } catch (err) {
+    portSettingState.saveError = (err && err.message) || '读取端口配置失败';
+  } finally {
+    portSettingState.loaded = true;
+    portSettingState.loading = false;
+  }
+  renderSettings();
+}
+
+function onPortInputChange(value) {
+  portSettingState.inputValue = String(value || '').trim();
+  portSettingState.checkResult = null;
+  portSettingState.saveError = '';
+  // Keep the input in sync without a full re-render so the cursor doesn't jump.
+  var hint = document.querySelector('.port-setting-status');
+  if (hint) hint.textContent = '';
+  var checkBtn = document.querySelector('.port-setting-row .btn-ghost');
+  if (checkBtn) checkBtn.disabled = !portSettingState.inputValue;
+}
+
+async function checkPortNow() {
+  if (!hasDesktopPortApi()) return;
+  var raw = (portSettingState.inputValue || '').trim();
+  if (!raw) {
+    portSettingState.checkResult = { available: false, error: '请先输入端口号', port: null };
+    renderSettings();
+    return;
+  }
+  var n = Number(raw);
+  if (!Number.isInteger(n) || n < portSettingState.minPort || n > portSettingState.maxPort) {
+    portSettingState.checkResult = { available: false, error: '端口必须是 ' + portSettingState.minPort + ' - ' + portSettingState.maxPort + ' 之间的整数', port: n };
+    renderSettings();
+    return;
+  }
+  portSettingState.checking = true;
+  portSettingState.checkResult = null;
+  renderSettings();
+  try {
+    var res = await window.bzxz.checkPort(n);
+    portSettingState.checkResult = res || { available: false, error: '检测失败', port: n };
+  } catch (err) {
+    portSettingState.checkResult = { available: false, error: (err && err.message) || '检测失败', port: n };
+  } finally {
+    portSettingState.checking = false;
+  }
+  renderSettings();
+}
+
+async function savePortConfig() {
+  if (!hasDesktopPortApi()) return;
+  var raw = (portSettingState.inputValue || '').trim();
+  var n = raw === '' ? null : Number(raw);
+  if (n !== null && (!Number.isInteger(n) || n < portSettingState.minPort || n > portSettingState.maxPort)) {
+    portSettingState.saveError = '端口必须是 ' + portSettingState.minPort + ' - ' + portSettingState.maxPort + ' 之间的整数（留空使用随机端口）';
+    renderSettings();
+    return;
+  }
+  portSettingState.saving = true;
+  portSettingState.saveError = '';
+  renderSettings();
+  try {
+    var res = await window.bzxz.setPortConfig(n);
+    portSettingState.preferredPort = res && res.preferredPort != null ? Number(res.preferredPort) : null;
+    portSettingState.actualPort = res && res.actualPort ? Number(res.actualPort) : portSettingState.actualPort;
+    portSettingState.needsRestart = Boolean(res && res.needsRestart);
+    if (typeof showToast === 'function') {
+      showToast(portSettingState.needsRestart ? '已保存，重启桌面程序后生效' : '已保存', 'success');
+    }
+  } catch (err) {
+    portSettingState.saveError = (err && err.message) || '保存失败';
+  } finally {
+    portSettingState.saving = false;
+  }
+  renderSettings();
+}
+
+async function clearPortConfig() {
+  portSettingState.inputValue = '';
+  portSettingState.checkResult = null;
+  await savePortConfig();
+}
+
+async function relaunchAppNow() {
+  if (!window.bzxz?.relaunchApp) return;
+  try {
+    await window.bzxz.relaunchApp();
+  } catch (err) {
+    if (typeof showToast === 'function') showToast((err && err.message) || '重启失败', 'fail');
+  }
+}
+
 function renderStartupSettingCard() {
   var supported = hasDesktopStartupApi();
   var disabled = !supported || startupSettingState.loading;
@@ -401,6 +593,7 @@ function renderSettings() {
   const updateCard = renderUpdateCard();
   const webAccessCard = renderWebAccessCard();
   const startupCard = renderStartupSettingCard();
+  const portCard = renderPortSettingCard();
 
   document.getElementById('settingsBody').innerHTML = `
     <div class="settings-grid">
@@ -437,6 +630,7 @@ function renderSettings() {
       </div>
       ${updateCard}
       ${webAccessCard}
+      ${portCard}
       ${startupCard}
     </div>
     <div class="setting-section">
@@ -458,6 +652,17 @@ function renderSettings() {
   initDragSort();
   ensureWebAccessLoaded(false);
   ensureStartupSettingLoaded(false);
+  ensurePortSettingLoaded(false);
+  // Keep focus on the port input across re-renders so typing isn't interrupted.
+  var portInput = document.getElementById('portSettingInput');
+  if (portInput && document.activeElement !== portInput && portSettingState.inputValue && document.querySelector('.port-setting-row')) {
+    // Only refocus if the user just touched it (input value differs from saved).
+    var saved = portSettingState.preferredPort == null ? '' : String(portSettingState.preferredPort);
+    if (portSettingState.inputValue !== saved) {
+      portInput.focus();
+      try { portInput.setSelectionRange(portInput.value.length, portInput.value.length); } catch {}
+    }
+  }
 }
 
 var sourceStatusCache = {};

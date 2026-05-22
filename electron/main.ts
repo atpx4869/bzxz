@@ -11,6 +11,7 @@ import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain, session, 
 
 Menu.setApplicationMenu(null);
 import path from 'node:path';
+import net from 'node:net';
 import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 import { networkInterfaces } from 'node:os';
@@ -33,7 +34,15 @@ const SETTINGS_FILE = path.join(app.getPath('userData'), 'bzxz-settings.json');
 interface DesktopSettings {
   downloadPath: string;
   webServiceEnabled: boolean;
+  /** User-preferred HTTP port. null/0 = pick a random free port at startup. */
+  preferredPort: number | null;
 }
+
+// Reserved/well-known port floor — refuse anything below this so the user
+// doesn't accidentally collide with system services (and on non-admin Windows
+// binding under 1024 quietly fails anyway).
+const MIN_USER_PORT = 1024;
+const MAX_USER_PORT = 65535;
 
 interface UpdateAsset {
   name: string;
@@ -56,7 +65,45 @@ function getDefaultSettings(): DesktopSettings {
   return {
     downloadPath: path.join(app.getPath('downloads'), 'bzxz'),
     webServiceEnabled: true,
+    preferredPort: null,
   };
+}
+
+function normalizePreferredPort(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  if (!Number.isInteger(n)) return null;
+  if (n < MIN_USER_PORT || n > MAX_USER_PORT) return null;
+  return n;
+}
+
+/** Check if a TCP port is bindable on 0.0.0.0 right now. */
+function checkPortAvailable(port: number): Promise<{ available: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    const tester = net.createServer();
+    let settled = false;
+    const done = (result: { available: boolean; error?: string }) => {
+      if (settled) return;
+      settled = true;
+      tester.removeAllListeners();
+      try { tester.close(); } catch { /* ignore */ }
+      resolve(result);
+    };
+    tester.once('error', (err: NodeJS.ErrnoException) => {
+      const msg = err.code === 'EADDRINUSE' ? '端口已被占用'
+        : err.code === 'EACCES' ? '权限不足，无法绑定该端口'
+        : (err.message || '端口不可用');
+      done({ available: false, error: msg });
+    });
+    tester.once('listening', () => {
+      done({ available: true });
+    });
+    try {
+      tester.listen(port, '0.0.0.0');
+    } catch (err) {
+      done({ available: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  });
 }
 
 function loadSettings(): DesktopSettings {
@@ -415,13 +462,36 @@ async function startServer(): Promise<number> {
   const expressApp = express();
   expressApp.use(webAccessGate);
   expressApp.use(createApp());
-  return new Promise((resolve) => {
-    const server = expressApp.listen(0, '0.0.0.0', () => {  // 0 = random available port
+
+  const preferred = loadSettings().preferredPort;
+
+  // Try the user-preferred port first if configured; on EADDRINUSE/EACCES
+  // fall back to a random free port so the desktop app always boots. The
+  // tray/UI surface both the configured value and the actual one.
+  const tryListen = (port: number): Promise<{ port: number; usedFallback: boolean }> => new Promise((resolve, reject) => {
+    const server = expressApp.listen(port, '0.0.0.0');
+    server.once('listening', () => {
       const addr = server.address();
-      const port = typeof addr === 'object' && addr ? addr.port : 3000;
-      resolve(port);
+      const actual = typeof addr === 'object' && addr ? addr.port : port;
+      resolve({ port: actual, usedFallback: false });
+    });
+    server.once('error', (err: NodeJS.ErrnoException) => {
+      try { server.close(); } catch { /* ignore */ }
+      reject(err);
     });
   });
+
+  if (preferred && preferred > 0) {
+    try {
+      const r = await tryListen(preferred);
+      return r.port;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      console.warn(`[bzxz] preferred port ${preferred} unavailable (${code || 'error'}); falling back to a random port`);
+    }
+  }
+  const r = await tryListen(0); // 0 = random available
+  return r.port;
 }
 
 app.whenReady().then(async () => {
@@ -477,6 +547,48 @@ app.whenReady().then(async () => {
     const target = pickWebAccessUrl(url);
     void shell.openExternal(target);
     return { url: target };
+  });
+
+  // ── Port configuration ─────────────────────────────────────────────────
+  // `preferredPort` is what the user typed; `actualPort` is what we actually
+  // bound to (they differ when the preferred port was busy at boot and we
+  // fell back to a random one). UI surfaces both so users aren't confused.
+  ipcMain.handle('bzxz:get-port-config', () => {
+    const settings = loadSettings();
+    return {
+      preferredPort: settings.preferredPort,
+      actualPort: serverPort,
+      minPort: MIN_USER_PORT,
+      maxPort: MAX_USER_PORT,
+    };
+  });
+  ipcMain.handle('bzxz:check-port', async (_event, port: unknown) => {
+    const n = normalizePreferredPort(port);
+    if (n === null) {
+      return { available: false, error: '端口范围必须在 1024 - 65535 之间', port: null };
+    }
+    // The current bzxz server is already listening on serverPort, so checking
+    // its own port would always return "in use". Treat that case as a no-op.
+    if (n === serverPort) {
+      return { available: true, port: n, note: '当前已在使用此端口' };
+    }
+    const result = await checkPortAvailable(n);
+    return { ...result, port: n };
+  });
+  ipcMain.handle('bzxz:set-port-config', (_event, port: unknown) => {
+    const settings = loadSettings();
+    settings.preferredPort = normalizePreferredPort(port);
+    saveSettings(settings);
+    return {
+      preferredPort: settings.preferredPort,
+      actualPort: serverPort,
+      needsRestart: settings.preferredPort !== null && settings.preferredPort !== serverPort,
+    };
+  });
+  ipcMain.handle('bzxz:relaunch-app', () => {
+    isQuitting = true;
+    app.relaunch();
+    app.exit(0);
   });
 
   createWindow();
