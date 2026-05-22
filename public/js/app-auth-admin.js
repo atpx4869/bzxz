@@ -602,4 +602,9 @@ async function showUserDetail(userId) {
     }
 
     modal.innerHTML = `<h3>用户: ${escapeHtml(d.user.displayName || d.user.username)}</h3>
-      ${summaryHtml}
+      ${summaryHtml}${sourceHtml}${listHtml}
+      <button class="btn btn-ghost btn-sm" style="margin-top:12px" data-action="modal-close">关闭</button>`;
+  } catch (e) {
+    modal.innerHTML = `<p style="color:var(--danger)">加载失败: ${escapeHtml(e.message)}</p>`;
+  }
+}
