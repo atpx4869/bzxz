@@ -4,10 +4,11 @@
 
 ### Changed
 - 资质订阅与同步日志从「资质查询」整体迁入「系统设置 → 资质订阅」，资质查询页面只保留「搜索」和「可视化」两个子标签，专注查询场景；订阅管理在系统设置中以独立 section 渲染（含 订阅管理 / 同步日志 子标签 + 推荐订阅 + CNAS/CMA 添加表单 + 同步全部）
+- 退出登录改为"停在登录页 + toast 提示"：免登录 + loopback 模式下，退出登录不再立刻被后端兜底成新 guest 会话（看起来像退不掉），现在停在登录卡片并显示 toast『已退出登录』；登录卡片下方新增「继续以访客身份使用」链接，一键回到访客态（仅当 `loginRequired=false` 时露出）。Vite 入口 `web/src/modules/auth/session.ts` 与 legacy `public/js/app-auth-admin.js` 同步改动
 
 ### Fixed
 - 修改密码输错原密码时 `apiFetch` 将 401 误判为会话过期，把用户踢回登录页：现在 `/api/auth/*` 上的 401 统一由调用方处理，不再触发 overlay
-- `doLogout` 仅切回 overlay 但未刷新状态：登出后会重新拉取 `/api/auth/status`，若 `loginRequired=false` 自动回到访客态而非卡在登录卡片
+- 退出登录按钮"按了没反应"：旧 `doLogout` 在 DELETE /session 后立刻 `checkAuthStatus`，免登录模式下后端会马上派一个新 guest 会话，UI 一闪即恢复，看起来像退不掉。改为停在登录页并提供「继续以访客身份使用」入口
 - 登录 overlay 在登出 / 会话过期时残留 register-mode 文案与上次输入的密码：新增 `resetAuthFormToLogin()`，每次显示 overlay 前先回到 login 默认态并清空密码框；登录/注册切换时也清空密码
 - 登录表单可双击重复提交：提交期间禁用按钮，并校验用户名/密码非空
 

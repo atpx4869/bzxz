@@ -10,7 +10,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;1,8..60,400&family=DM+Mono:ital,wght@0,400;0,500&display=swap" rel="stylesheet">
 <script src="/vendor/chart.umd.min.js"></script>
-<link rel="stylesheet" href="/styles.css">
 </head>
 <body>
 
@@ -492,15 +491,42 @@
   <div class="download-center-body" id="downloadCenterBody"></div>
 </aside>
 
-<script src="/js/app-core.js"></script>
-<script src="/js/app-search.js"></script>
-<script src="/js/app-download.js"></script>
-<script src="/js/app-complete.js"></script>
-<script src="/js/app-settings.js"></script>
-<script src="/js/app-detail-utils.js"></script>
-<script src="/js/app-auth-admin.js"></script>
-<script src="/js/app-announcements.js"></script>
-<script src="/js/app-qual.js"></script>
+<!--
+  脚本加载顺序（迁移期 P0.5 → P1）
+
+  ┌─ TS 入口（Vite + ESM）─────────────────────────────────────────────
+  │   main.ts 必须先执行：它通过 Object.assign(window, …) + defineProperty
+  │   把 state / api / switchTab / users / stats / auth 全部挂到 window。
+  │   下面的 legacy 脚本（IIFE / 顶层 let）会去读这些 window.* 才能工作。
+  └────────────────────────────────────────────────────────────────────
+-->
+<script type="module" src="/src/main.ts"></script>
+
+<!--
+  ┌─ Legacy 脚本（未迁，走 Express /legacy 静态前缀）──────────────────
+  │   已迁出 public/js（已成为 TS 模块，不在此处加载）：
+  │     • app-core.js        → src/lib/* + src/modules/tabs.ts
+  │     • app-auth-admin.js  → src/modules/auth/* + src/modules/admin/*
+  │
+  │   未迁（P1 排期，按行数 / 风险倒序）：
+  │     • app-search.js       (852)  — 搜索主流程，含搜索历史/筛选/源选择
+  │     • app-settings.js     (~)    — innerHTML 重渲染根因，要先重构
+  │     • app-download.js            — 批量下载 + SSE 进度
+  │     • app-complete.js            — 标准补全
+  │     • app-detail-utils.js        — 详情卡通用工具（被多文件依赖）
+  │     • app-announcements.js       — 公告 Modal
+  │     • app-qual.js                — 资质查询页交互
+  │
+  │   顺序约束：app-detail-utils 被 search/complete/qual 引用，必须先加载。
+  └────────────────────────────────────────────────────────────────────
+-->
+<script src="/legacy/app-detail-utils.js"></script>
+<script src="/legacy/app-search.js"></script>
+<script src="/legacy/app-download.js"></script>
+<script src="/legacy/app-complete.js"></script>
+<script src="/legacy/app-settings.js"></script>
+<script src="/legacy/app-announcements.js"></script>
+<script src="/legacy/app-qual.js"></script>
 
 </body>
 </html>

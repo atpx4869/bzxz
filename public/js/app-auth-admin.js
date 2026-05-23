@@ -65,10 +65,21 @@ function resetAuthFormToLogin() {
   if (pwd) pwd.value = '';
 }
 
+// 记录上次 status 拉回来的 loginRequired —— 退出登录后用来决定要不要露出
+// "继续以访客身份使用"链接（免登录模式下退出要停在登录页，需要一个回访客的入口）。
+var lastLoginRequired = true;
+function updateGuestContinueVisibility() {
+  var el = document.getElementById('authGuestContinue');
+  if (!el) return;
+  el.style.display = lastLoginRequired ? 'none' : '';
+}
+
 async function checkAuthStatus() {
   try {
     const res = await fetch('/api/auth/status', { credentials: 'same-origin' });
     const data = await readApiResponse(res);
+    lastLoginRequired = !!data.loginRequired;
+    updateGuestContinueVisibility();
     if (data.user) {
       currentUser = data.user;
       document.getElementById('authOverlay').classList.add('hidden');
@@ -224,10 +235,16 @@ async function doLogout() {
   document.getElementById('userDropdown').classList.remove('open');
   resetAuthFormToLogin();
   document.getElementById('authOverlay').classList.remove('hidden');
-  // Re-run status so that if loginRequired is off + we're on loopback the
-  // backend hands us a fresh guest session instead of leaving the user
-  // stuck on the login form.
-  try { await checkAuthStatus(); } catch (e) { /* overlay already visible */ }
+  // 免登录 + loopback 模式下，露出"继续以访客身份使用"，用户点了才回访客态；
+  // 不再立即 checkAuthStatus，否则后端会马上发一个新 guest 会话，看起来像退不掉。
+  updateGuestContinueVisibility();
+  try { if (typeof showToast === 'function') showToast('已退出登录', 'success'); } catch (e) { /* toast 不阻塞 */ }
+}
+
+// 用户在登录页点"继续以访客身份使用"时调用 —— 重新拉 status，
+// 若后端给了 guest 会话就会自动 onAuthReady + 隐藏 overlay。
+async function continueAsGuest() {
+  try { await checkAuthStatus(); } catch (e) { /* overlay 已可见 */ }
 }
 
 function toggleUserDropdown() {
