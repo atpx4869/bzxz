@@ -129,7 +129,9 @@ start.bat
 ```
 ├── .github/workflows/   # GitHub Actions 自动打包
 ├── electron/            # Electron 主进程 + preload
-├── public/              # 前端 SPA (index.html)
+├── public/              # 前端 SPA (legacy index.html + styles.css，过渡期保留)
+├── web/                 # 新前端：Vite + TypeScript（详见 web/README.md）
+│   └── src/styles/      # 模块化 CSS（base / layout / components / pages / responsive / theme）
 ├── scripts/             # 勘察脚本 + 注册机 + OCR 桥接
 ├── src/
 │   ├── api/             # Express 路由（含 auth/admin/stats/资质）
@@ -340,6 +342,9 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **前端模块化（P1）** — `public/styles.css` 1179 行整体拆分为 31 个文件，
+  布局在 `web/src/styles/{base,layout,components,pages,responsive,theme}/`。过渡期与原文件
+  重复加载、cascade 等价，零视觉回归；详见 [`web/src/styles/SECTIONS.md`](./web/src/styles/SECTIONS.md)
 - **1.14.1** — 文本可用性轮询提速：首次 2s→300ms、缓存命中场景视觉延迟 ~2.3s → ~0.3s
 - **1.14.0** — 前端大改：tri-state 文本徽章、骨架屏列对齐、状态分组+折叠持久化、source-progress 进度条带、vim 风格键盘导航、右键上下文菜单；移除"正在检测文本…"持久 toast
 - **品牌升级** — 产品名统一为「标准盒子 / StandardsBox」；登录页改为深色玻璃拟态，新增版本号 + 在线状态指示；主工作区跟进玻璃拟态主题
