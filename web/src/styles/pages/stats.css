@@ -1,0 +1,13 @@
+/* Stats page —— 原 public/styles.css 行 707–719。 */
+
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.stat-card { background: oklch(16% 0.014 255 / 0.5); border: 1px solid oklch(26% 0.012 255 / 0.3); border-radius: var(--radius-sm); padding: 16px; transition: border-color 0.15s; }
+.stat-card:hover { border-color: oklch(34% 0.016 255 / 0.4); }
+.stat-card .stat-value { font: 600 26px/1 'DM Sans', sans-serif; color: var(--text); }
+.stat-card .stat-label { font-size: 11px; color: var(--text-3); margin-top: 6px; letter-spacing: 0.02em; }
+.stats-controls { display: flex; gap: 8px; margin-bottom: 18px; align-items: center; }
+.stats-controls input[type="date"] { padding: 7px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text); font: 400 12px 'DM Sans', sans-serif; outline: none; }
+.stats-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.stats-chart-box { background: oklch(16% 0.014 255 / 0.5); border: 1px solid oklch(26% 0.012 255 / 0.3); border-radius: var(--radius-sm); padding: 18px; }
+.stats-chart-box h4 { font-size: 13px; color: var(--text-2); margin-bottom: 14px; font-weight: 600; }
+.stats-chart-box canvas { max-height: 200px; }

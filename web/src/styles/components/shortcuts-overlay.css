@@ -1,0 +1,18 @@
+/* Shortcuts overlay —— 原 public/styles.css 行 622–630。
+ *
+ * 依赖：
+ *   - .shortcuts-panel 的 `animation: toastIn 0.25s ...` 复用了
+ *     components/toast.css 里定义的 @keyframes toastIn。CSS keyframes
+ *     全局命名，无 import 概念，但删/改 toastIn 时要联动检查这里。
+ *   - .shortcuts-panel 的 background/border/backdrop-filter 还会被
+ *     theme/glass.css 里 `.confirm-card, .download-center, ..., .shortcuts-panel`
+ *     一组覆盖（cascade 后赢的是 theme 层）。 */
+
+.shortcuts-overlay { display: none; position: fixed; inset: 0; z-index: 600; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); align-items: center; justify-content: center; }
+.shortcuts-overlay.open { display: flex; }
+.shortcuts-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 32px 36px; box-shadow: 0 24px 80px rgba(0,0,0,0.5); min-width: 400px; animation: toastIn 0.25s var(--ease-spring); }
+.shortcuts-panel h3 { font-size: 16px; font-weight: 600; margin-bottom: 18px; }
+.shortcuts-panel .kbd-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid oklch(26% 0.012 255 / 0.3); font-size: 13px; }
+.shortcuts-panel .kbd-row:last-child { border: none; }
+.shortcuts-panel .kbd-key { display: inline-flex; gap: 4px; }
+.shortcuts-panel .kbd-key kbd { display: inline-block; padding: 3px 10px; border-radius: 5px; background: var(--surface-h); border: 1px solid var(--border); font: 400 11px 'DM Mono', monospace; color: var(--text-2); box-shadow: 0 1px 2px rgba(0,0,0,0.2); }

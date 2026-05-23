@@ -1,0 +1,12 @@
+/* Admin announcement manager —— 原 public/styles.css 行 1151–1161。
+ * 与 pages/announcement.css 同样采用亮色配色（管理界面位于亮色公告 modal 内）。 */
+
+.ann-admin-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.ann-admin-item {
+  border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px;
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+}
+.ann-admin-item .ann-meta { font-size: 12px; color: #6b7280; }
+.ann-admin-form { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.ann-admin-form textarea { width: 100%; min-height: 140px; font-family: ui-monospace, monospace; font-size: 13px; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; }
+.ann-admin-form input[type="text"] { padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; }

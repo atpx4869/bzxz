@@ -1,0 +1,125 @@
+/* 跨组件响应式断点 —— 原 public/styles.css 行 889–963 的三个 @media 块。
+ *
+ * 这部分本来按 SECTIONS.md 应该按组件去分散到 layout/*、components/*、pages/*；
+ * 但实测 75 行 cross-cutting 规则散到 15 个文件后阅读成本远高于收益（每条规则
+ * 都得在两个地方对照才能理解断点行为），所以这一刀保留 `responsive.css` 作为
+ * 单一汇总点。每个块内仍按选择器属于哪个组件做了分段注释，未来若 component
+ * 文件被进一步拆细，可以再按注释把对应行 inline 进去。
+ *
+ * cascade 位置：在 pages/* 之后、theme/glass.css 之前导入——
+ * 这样窄屏覆盖仍能压过基线规则，而玻璃主题（最后赢）依旧负责跨设备的视觉。 */
+
+@media (max-width: 1100px) {
+  /* topbar.css */
+  .source-health-strip { display: none; }
+}
+
+@media (max-width: 900px) {
+  /* result-card.css —— 卡片 7 列网格折叠成单列堆叠 */
+  .results-table-head { display: none; }
+  .result-card { grid-template-columns: 24px minmax(0, 1fr); align-items: start; gap: 10px 12px; }
+  .result-card .card-id { grid-column: 2; }
+  .result-card .card-body { grid-column: 2; }
+  .result-card .card-state,
+  .result-card .card-source-line,
+  .result-card .card-date { grid-column: 2; }
+  .result-card .card-state { flex-direction: row; align-items: center; flex-wrap: wrap; }
+  .result-card .card-date { display: flex; flex-wrap: wrap; gap: 10px; }
+  .result-card .card-actions { grid-column: 2; justify-content: flex-start; flex-wrap: wrap; }
+
+  /* toggle-switch.css —— settings 三列 → 单列 */
+  .settings-grid { grid-template-columns: 1fr; }
+  .setting-choice-grid { grid-template-columns: 1fr; }
+
+  /* modal.css —— detail 双栏 → 单栏 */
+  .detail-grid { grid-template-columns: 1fr; }
+
+  /* batch-card.css */
+  .batch-card-head { flex-direction: column; align-items: stretch; }
+  .batch-mode-pill, .batch-summary { text-align: left; }
+  .batch-result-card { grid-template-columns: 20px minmax(104px, 34%) minmax(0, 1fr); }
+  .batch-result-card .card-src { grid-column: 2 / -1; width: max-content; }
+  .batch-result-card.unmatched { grid-template-columns: minmax(104px, 34%) minmax(0, 1fr); }
+
+  /* completion.css */
+  .complete-workspace { grid-template-columns: 1fr; }
+  .complete-steps { grid-template-columns: 1fr; }
+
+  /* qualifications.css */
+  .library-grid, .qual-visual-workspace { grid-template-columns: 1fr; }
+  .qual-visual-source-grid { grid-template-columns: 1fr; }
+  .qual-visual-source + .qual-visual-source { border-left: none; border-top: 1px solid oklch(26% 0.012 255 / 0.36); }
+}
+
+@media (max-width: 640px) {
+  /* base.css 变量收紧 —— 移动端固定窄边栏 */
+  :root { --sidebar-w: 60px; --sidebar-collapsed-w: 60px; }
+
+  /* content + sidebar 折叠 */
+  .content { margin-left: var(--sidebar-w); padding: 20px 14px 96px; }
+  .sidebar-text, .sidebar-desc, .sidebar-user-name, .sidebar-user-role { display: none; }
+  .sidebar-item { justify-content: center; padding: 9px 0; margin: 1px 6px; width: calc(100% - 12px); }
+  .sidebar-item .sidebar-icon { width: auto; }
+  .sidebar-user { justify-content: center; padding: 12px 8px; }
+
+  /* topbar */
+  .topbar { padding-inline: 10px; }
+  .topbar-title { font-size: 14px; }
+  .source-health-strip { display: none; }
+  .download-center-toggle { min-width: 48px; padding-inline: 8px; }
+
+  /* download-center —— 占满除窄边栏外的横向空间 */
+  .download-center { left: calc(var(--sidebar-w) + 10px); right: 10px; bottom: 10px; width: auto; }
+
+  /* search-bar */
+  .search-row { flex-wrap: wrap; padding: 8px; }
+  .search-row input { flex: 1 1 100%; padding: 8px 8px; }
+  .source-tags { flex: 1 1 auto; flex-wrap: wrap; margin-right: 0; }
+
+  /* result-card / toolbar */
+  .toolbar, .toolbar-left, .toolbar-right { flex-wrap: wrap; }
+
+  /* modal.css —— detail modal */
+  .modal { width: calc(100% - 20px); padding: 18px; max-height: 88vh; }
+  .detail-hero { padding-right: 32px; }
+  .detail-title-row { align-items: flex-start; flex-direction: column; }
+  .detail-title-row h3 { white-space: normal; }
+  .detail-chips { gap: 6px; }
+
+  /* completion.css */
+  .complete-dropzone, .complete-download-card { align-items: flex-start; flex-direction: column; }
+  .complete-options { grid-template-columns: 1fr; }
+  .complete-result-stats { grid-template-columns: 1fr; }
+
+  /* qualifications.css */
+  .library-item { grid-template-columns: 1fr; }
+  .library-actions { justify-content: flex-start; }
+  .qual-visual-stats { grid-template-columns: 1fr; }
+
+  /* batch-card.css */
+  .batch-stats { grid-template-columns: 1fr; }
+
+  /* toggle-switch.css */
+  .source-priority-row { grid-template-columns: 24px 20px minmax(0, 1fr) auto; }
+  .source-priority-row .source-pill { display: none; }
+
+  /* log-panel.css */
+  .log-panel { left: var(--sidebar-w); }
+  body.sidebar-collapsed .log-panel { left: var(--sidebar-collapsed-w); }
+  .log-body { padding-inline: 14px; }
+  .log-header { padding-inline: 14px; }
+  .log-item { grid-template-columns: 46px minmax(0, 1fr); }
+  .log-status { grid-column: 2; text-align: left; }
+
+  /* modal.css —— modal source 子表头隐藏 + 行重排 */
+  .modal-source-default { align-items: flex-start; flex-direction: column; }
+  .modal-source-title-row { flex-direction: column; }
+  .modal-source-stats { max-width: none; justify-content: flex-start; }
+  .modal-source-table-head { display: none; }
+  .modal-source-row { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+  .modal-source-note.extra { grid-column: 1 / -1; }
+  .modal-source-actions { grid-column: 1 / -1; justify-content: flex-start; }
+
+  /* filter-bar.css */
+  .filter-sort { flex: 1 1 100%; margin-left: 0; }
+}

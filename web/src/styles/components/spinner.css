@@ -1,0 +1,5 @@
+/* Spinner —— 原 public/styles.css 行 466–468。
+ * 同"过渡期重复加载、cascade 等价"模式，详见 SECTIONS.md。 */
+
+.spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid oklch(30% 0.014 255); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }

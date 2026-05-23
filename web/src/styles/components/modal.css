@@ -1,0 +1,72 @@
+/* Modal —— 拼合两段：
+ *   行 145–156：Confirm modal（.confirm-overlay/.confirm-card/.btn-danger）
+ *   行 411–465：Detail modal（.modal-overlay/.modal/.detail-*/.modal-source-*）+ `@keyframes panelIn`
+ *
+ * .modal-source-row 在窄屏的 grid 重排（行 955–961）归 responsive.css。 */
+
+/* --- Confirm modal --- */
+.confirm-overlay { position: fixed; inset: 0; background: oklch(8% 0.01 255 / 0.7); backdrop-filter: blur(4px); z-index: 1100; display: flex; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: opacity 0.18s ease, visibility 0.18s ease; }
+.confirm-overlay.open { opacity: 1; visibility: visible; }
+.confirm-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 24px; max-width: 420px; min-width: 300px; box-shadow: 0 20px 60px oklch(0% 0 0 / 0.5); transform: translateY(-12px); transition: transform 0.18s var(--ease-out); }
+.confirm-overlay.open .confirm-card { transform: translateY(0); }
+.confirm-title { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+.confirm-body { font-size: 13px; color: var(--text-2); line-height: 1.55; margin-bottom: 18px; }
+.confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.confirm-card.danger .confirm-title { color: var(--danger); }
+.confirm-actions .btn-danger { background: var(--danger); color: #fff; }
+.confirm-actions .btn-danger:hover { background: oklch(55% 0.20 25); }
+
+/* --- Detail modal --- */
+.modal-overlay { position: fixed; inset: 0; z-index: 400; background: rgba(0,0,0,0.55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); display: none; align-items: center; justify-content: center; }
+.modal-overlay.open { display: flex; }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 28px; max-width: 860px; width: calc(100% - 48px); max-height: 84vh; overflow-y: auto; position: relative; box-shadow: 0 24px 80px rgba(0,0,0,0.5); animation: panelIn 0.25s var(--ease-spring); }
+@keyframes panelIn { from { opacity: 0; transform: scale(0.96) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+.modal-close { position: absolute; top: 16px; right: 16px; background: none; border: none; cursor: pointer; color: var(--text-3); font-size: 22px; line-height: 1; transition: color 0.15s; }
+.modal-close:hover { color: var(--text); }
+.modal h3 { font: 500 20px 'DM Sans', sans-serif; margin-bottom: 18px; color: var(--accent); }
+.modal .field { margin-bottom: 14px; }
+.modal .field-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); margin-bottom: 3px; }
+.modal .field-value { font-size: 14px; color: var(--text); line-height: 1.5; }
+.detail-panel { min-width: 0; }
+.detail-hero { padding: 2px 42px 18px 0; border-bottom: 1px solid oklch(28% 0.014 255 / 0.55); margin-bottom: 16px; }
+.detail-kicker { color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+.detail-title-row { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.detail-title-row h3 { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); font: 650 24px/1.2 'DM Sans', sans-serif; }
+.detail-title { margin-top: 8px; color: var(--text); font-size: 15px; font-weight: 600; line-height: 1.55; }
+.detail-chips { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.detail-chip { display: inline-flex; align-items: center; min-height: 24px; padding: 3px 9px; border-radius: 999px; background: oklch(22% 0.014 255 / 0.62); color: var(--text-2); font-size: 11px; font-weight: 600; }
+.detail-grid { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(330px, 1.1fr); gap: 14px; align-items: start; }
+.detail-info-card, .modal-source-panel { border: 1px solid oklch(27% 0.012 255 / 0.52); border-radius: var(--radius-sm); background: oklch(17% 0.014 255 / 0.48); padding: 14px; }
+.detail-section-title,
+.modal-source-title { margin-bottom: 10px; font-size: 12px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.06em; }
+.detail-info-grid { display: grid; gap: 10px; }
+.detail-info-item { min-width: 0; padding-bottom: 10px; border-bottom: 1px solid oklch(26% 0.012 255 / 0.32); }
+.detail-info-item:last-child { border-bottom: 0; padding-bottom: 0; }
+.detail-info-label { color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.detail-info-value { color: var(--text); font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.detail-empty { color: var(--text-3); font-size: 13px; }
+.detail-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.modal-source-panel { margin-top: 0; }
+.modal-source-title { margin-bottom: 10px; font-size: 12px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.06em; }
+.modal-source-default { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; margin-bottom: 8px; border: 1px solid oklch(32% 0.014 255 / 0.5); border-radius: var(--radius-sm); background: oklch(18% 0.014 255 / 0.72); }
+.modal-source-default strong { display: block; color: var(--text); font-size: 13px; }
+.modal-source-default span { display: block; margin-top: 3px; color: var(--text-3); font-size: 12px; }
+.modal-source-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.modal-source-subtitle { margin-top: 3px; font-size: 12px; color: var(--text-3); line-height: 1.5; }
+.modal-source-stats { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 5px; max-width: 56%; }
+.modal-source-stats span { padding: 3px 8px; border-radius: 999px; background: oklch(22% 0.014 255 / 0.65); color: var(--text-2); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.modal-source-table-head { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(80px, 0.8fr) 70px minmax(96px, auto); gap: 10px; padding: 0 12px 6px; color: var(--text-3); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+.modal-source-table-head span:last-child { text-align: right; }
+.modal-source-list { display: grid; gap: 6px; }
+.modal-source-row { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(80px, 0.8fr) 70px minmax(96px, auto); align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid oklch(26% 0.012 255 / 0.42); border-radius: var(--radius-sm); background: oklch(17% 0.014 255 / 0.48); }
+.modal-source-row.disabled { opacity: 0.56; }
+.modal-source-row.checking { border-color: oklch(70% 0.14 85 / 0.35); }
+.modal-source-main { min-width: 0; display: flex; align-items: center; gap: 8px; }
+.modal-source-note { color: var(--text-3); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.modal-source-note.extra { color: var(--text-2); }
+.modal-source-status { min-width: 48px; font-size: 12px; font-weight: 700; text-align: right; }
+.modal-source-status.ok { color: var(--success); }
+.modal-source-status.warn { color: var(--warning); }
+.modal-source-status.bad { color: var(--danger); }
+.modal-source-status.muted { color: var(--text-3); }
+.modal-source-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }

@@ -1,0 +1,6 @@
+/* Content shell —— 原 public/styles.css 行 86–90。
+ * theme/glass.css 里 .content { position: relative; z-index: 1 } 让正文坐到 body::before 上方。 */
+
+.content { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 32px 40px; min-height: calc(100vh - var(--topbar-h)); transition: margin-left 0.3s var(--ease-out); }
+.page { display: none; }
+.page:first-child { display: block; }

@@ -1,0 +1,73 @@
+/* Toggle switch + Settings 区段控件 —— 原 public/styles.css 行 479–548。
+ * 这一段除了开关本体，还含 .setting-* / .settings-* / .source-priority-* / .desktop-setting-* /
+ * .web-access-* / .update-* / .sortable-* / .drag-handle 等设置页通用组件——
+ * SECTIONS.md 当年把它整段标注为 toggle-switch，这里保持一致。 */
+
+.toggle-switch { display: inline-block; cursor: pointer; position: relative; }
+.toggle-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.toggle-switch:has(input:disabled) { cursor: not-allowed; opacity: 0.55; }
+.toggle-track { display: block; width: 44px; height: 24px; background: var(--border); border-radius: 12px; position: relative; transition: background 0.2s var(--ease-out); }
+.toggle-switch input:checked + .toggle-track { background: var(--accent); }
+.toggle-thumb { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: #fff; border-radius: 50%; transition: transform 0.2s var(--ease-spring); box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
+.toggle-switch input:checked + .toggle-track .toggle-thumb { transform: translateX(20px); }
+
+.setting-section .field-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
+.setting-section { margin-bottom: 20px; }
+.settings-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 22px; }
+.settings-card { min-width: 0; padding: 14px; border: 1px solid oklch(26% 0.012 255 / 0.45); border-radius: var(--radius-sm); background: oklch(17% 0.014 255 / 0.58); }
+.settings-card.wide { grid-column: 1 / -1; }
+.settings-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.settings-kicker { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.settings-value { margin-top: 4px; font-size: 18px; font-weight: 600; color: var(--text); }
+.setting-choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.setting-choice { text-align: left; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; background: oklch(20% 0.014 255 / 0.5); color: var(--text-2); cursor: pointer; transition: border-color 0.16s var(--ease-out), background 0.16s var(--ease-out), transform 0.16s var(--ease-out); }
+.setting-choice:hover { border-color: oklch(38% 0.016 255 / 0.65); transform: translateY(-1px); }
+.setting-choice.active { border-color: var(--accent); background: oklch(24% 0.05 250 / 0.45); color: var(--text); }
+.setting-choice span { display: inline-block; margin-bottom: 8px; color: var(--accent); font-size: 11px; font-weight: 700; }
+.setting-choice strong { display: block; font-size: 14px; margin-bottom: 4px; }
+.setting-choice em { display: block; font-style: normal; color: var(--text-3); font-size: 12px; line-height: 1.55; }
+.setting-options { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.setting-options .btn { min-width: 38px; justify-content: center; }
+.setting-hint { margin: 6px 0 10px; font-size: 12px; color: var(--text-3); }
+.source-priority-list { border: 1px solid oklch(26% 0.012 255 / 0.45); border-radius: var(--radius-sm); overflow: hidden; background: oklch(17% 0.014 255 / 0.38); }
+.setting-row { transition: background 0.15s, opacity 0.15s; }
+.source-priority-row { display: grid; grid-template-columns: 28px 24px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 11px 12px; border-bottom: 1px solid oklch(26% 0.012 255 / 0.38); }
+.source-priority-row:last-child { border-bottom: 0; }
+.source-priority-row:hover { background: oklch(22% 0.016 255 / 0.42); }
+.priority-rank { color: var(--text-3); font: 600 11px 'DM Mono', monospace; }
+.setting-row-main { min-width: 0; }
+.setting-row-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.setting-row-note { margin-top: 3px; font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.desktop-setting-card { padding: 0; }
+.desktop-setting-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 14px; }
+.desktop-setting-controls { display: flex; align-items: center; gap: 10px; }
+.desktop-setting-status { color: var(--text-3); font: 700 12px 'DM Mono', monospace; white-space: nowrap; }
+.desktop-setting-status.success { color: var(--success); }
+.desktop-setting-status.danger { color: var(--danger); }
+.web-access-card .settings-card-header { margin-bottom: 10px; }
+.web-access-url-list { display: grid; gap: 8px; }
+.web-access-url-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 8px; border: 1px solid oklch(26% 0.012 255 / 0.42); border-radius: var(--radius-sm); background: oklch(15% 0.012 255 / 0.35); }
+.web-access-url-row span { color: var(--text-3); font-size: 12px; }
+.web-access-url-row code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent-h); font: 600 12px 'DM Mono', monospace; }
+.update-card .settings-actions { margin-top: 12px; }
+.version-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; color: var(--text-3); font-size: 12px; }
+.version-row span { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; border: 1px solid oklch(26% 0.012 255 / 0.42); border-radius: var(--radius-sm); background: oklch(15% 0.012 255 / 0.35); }
+.version-row strong { color: var(--text); font: 700 12px 'DM Mono', monospace; }
+.update-asset-list { display: grid; gap: 7px; margin-top: 10px; }
+.update-asset { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; text-align: left; padding: 8px 10px; border: 1px solid oklch(26% 0.012 255 / 0.42); border-radius: var(--radius-sm); background: oklch(15% 0.012 255 / 0.35); color: var(--text-2); cursor: pointer; }
+.update-asset:hover { border-color: oklch(38% 0.016 255 / 0.65); color: var(--text); }
+.update-asset span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.update-asset em { color: var(--text-3); font-style: normal; font-size: 12px; }
+.update-progress { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; margin-top: 10px; }
+.update-progress div { height: 5px; overflow: hidden; border-radius: 999px; background: oklch(26% 0.012 255 / 0.5); }
+.update-progress span { display: block; height: 100%; border-radius: inherit; background: var(--success); transition: width 0.2s var(--ease-out); }
+.update-progress em { color: var(--text-3); font-style: normal; font-size: 12px; white-space: nowrap; }
+.source-pill { pointer-events: none; }
+.settings-source-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.source-status-list { font-size: 13px; color: var(--text-3); border: 1px solid oklch(26% 0.012 255 / 0.42); border-radius: var(--radius-sm); padding: 12px; background: oklch(17% 0.014 255 / 0.38); }
+.settings-actions { display: flex; gap: 8px; }
+
+.sortable-ghost { opacity: 0.3; }
+.sortable-drag { opacity: 0.7; }
+.drag-handle { cursor: grab; color: var(--text-3); padding: 0 4px; user-select: none; }
+.drag-handle:active { cursor: grabbing; }

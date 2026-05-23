@@ -1,0 +1,34 @@
+/* Skeleton loading —— 原 public/styles.css 行 591–620。
+ * 含 layout-mirroring `.sk-row` 与内嵌 @media（≤1100px）。
+ * 内嵌 @media 与本组件耦合紧密，按 SECTIONS.md 保留在本文件，
+ * 不并入 responsive.css。 */
+
+.skeleton-card { display: flex; align-items: center; gap: 16px; padding: 18px 22px; border-radius: var(--radius); background: oklch(19% 0.014 255 / 0.5); border: 1px solid oklch(26% 0.012 255 / 0.3); margin-bottom: 10px; }
+.skeleton-line { height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--surface-h) 25%, oklch(28% 0.014 255) 50%, var(--surface-h) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+.skeleton-line.w60 { width: 60%; }
+.skeleton-line.w40 { width: 40%; }
+.skeleton-line.w80 { width: 80%; height: 14px; margin-bottom: 8px; }
+.skeleton-badge { width: 48px; height: 22px; border-radius: 100px; }
+.skeleton-body { flex: 1; }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* Layout-mirroring skeleton (matches .result-card 7-col grid) */
+.skeleton-card.sk-row { display: grid; grid-template-columns: 28px minmax(150px, 190px) minmax(220px, 1fr) minmax(128px, 160px) minmax(88px, 128px) minmax(118px, 142px) 172px; align-items: center; gap: 14px; padding: 14px 16px; opacity: 0; animation: skRowIn 0.35s var(--ease-out) forwards; }
+.skeleton-card.sk-row .sk-check { width: 16px; height: 16px; border-radius: 4px; }
+.skeleton-card.sk-row .sk-num { height: 14px; width: 80%; }
+.skeleton-card.sk-row .sk-title { height: 13px; width: 88%; margin-bottom: 6px; }
+.skeleton-card.sk-row .sk-sub { height: 11px; width: 56%; }
+.skeleton-card.sk-row .sk-state { display: flex; flex-direction: column; gap: 6px; }
+.skeleton-card.sk-row .sk-status { height: 20px; width: 76px; border-radius: 100px; }
+.skeleton-card.sk-row .sk-text { height: 18px; width: 60px; border-radius: 100px; }
+.skeleton-card.sk-row .sk-src { height: 16px; width: 48px; border-radius: 4px; }
+.skeleton-card.sk-row .sk-date { display: grid; gap: 4px; }
+.skeleton-card.sk-row .sk-d1, .skeleton-card.sk-row .sk-d2 { height: 10px; width: 100%; }
+.skeleton-card.sk-row .sk-d2 { width: 78%; }
+.skeleton-card.sk-row .sk-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.skeleton-card.sk-row .sk-btn { width: 44px; height: 26px; border-radius: var(--radius-sm); }
+@keyframes skRowIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (max-width: 1100px) {
+  .skeleton-card.sk-row { grid-template-columns: 24px minmax(0, 1fr); gap: 10px 12px; }
+  .skeleton-card.sk-row .sk-body, .skeleton-card.sk-row .sk-state, .skeleton-card.sk-row .sk-source, .skeleton-card.sk-row .sk-date, .skeleton-card.sk-row .sk-actions { grid-column: 2; }
+}

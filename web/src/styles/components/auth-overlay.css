@@ -1,0 +1,75 @@
+/* ─────────────────────────────────────────────────────────────────────
+   Auth overlay (登录/注册/改密弹层)
+   原 public/styles.css 行 632–684 + 行 691–695（@media 响应式 override）。
+
+   迁移期约束：本文件**不能**单独切走——legacy public/index.html 仍直接
+   <link> public/styles.css，那边删了 auth 样式就会丢登录主题。所以这里
+   与原文件**重复加载**（cascade 等价：相同选择器、specificity、@import
+   后顺序）。等 Vite 入口取代 legacy 入口时，做两步原子切换：
+     1. 删 public/styles.css 行 632–684 + 行 691–695
+     2. 删 index.css 里 `@import '../../../public/styles.css'`
+
+   配套 TS：web/src/modules/auth/overlay.ts（DOM 行为、登录/注册切换、
+   错误提示）；本文件只管视觉。
+   ───────────────────────────────────────────────────────────────────── */
+
+/* ── Auth overlay (dark glass-morphism) ── */
+.auth-overlay { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 24px; overflow: hidden; background: radial-gradient(120% 80% at 15% 10%, oklch(22% 0.08 270) 0%, oklch(12% 0.03 260) 45%, oklch(8% 0.02 255) 100%); }
+.auth-overlay.hidden { display: none; }
+.auth-overlay .auth-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.auth-overlay .auth-orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.55; mix-blend-mode: screen; animation: authOrb 18s ease-in-out infinite; }
+.auth-overlay .auth-orb-a { width: 520px; height: 520px; left: -120px; top: -140px; background: radial-gradient(circle, oklch(66% 0.22 250) 0%, transparent 70%); animation-delay: 0s; }
+.auth-overlay .auth-orb-b { width: 460px; height: 460px; right: -140px; bottom: -120px; background: radial-gradient(circle, oklch(64% 0.20 320) 0%, transparent 70%); animation-delay: -6s; }
+.auth-overlay .auth-orb-c { width: 360px; height: 360px; left: 38%; top: 55%; background: radial-gradient(circle, oklch(68% 0.18 200) 0%, transparent 70%); opacity: 0.4; animation-delay: -12s; }
+@keyframes authOrb { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(30px,-20px) scale(1.06); } }
+.auth-overlay .auth-grid { position: absolute; inset: 0; background-image: linear-gradient(oklch(100% 0 0 / 0.025) 1px, transparent 1px), linear-gradient(90deg, oklch(100% 0 0 / 0.025) 1px, transparent 1px); background-size: 56px 56px; mask-image: radial-gradient(ellipse at center, black 35%, transparent 78%); -webkit-mask-image: radial-gradient(ellipse at center, black 35%, transparent 78%); }
+
+.auth-card { position: relative; z-index: 1; width: 420px; max-width: 100%; padding: 36px 38px 26px; border-radius: 22px; background: oklch(20% 0.018 260 / 0.55); border: 1px solid oklch(90% 0.02 260 / 0.10); box-shadow: 0 30px 90px -20px oklch(0% 0 0 / 0.55), 0 0 0 1px oklch(100% 0 0 / 0.04) inset, 0 1px 0 oklch(100% 0 0 / 0.08) inset; backdrop-filter: blur(28px) saturate(140%); -webkit-backdrop-filter: blur(28px) saturate(140%); animation: authCardIn 0.5s var(--ease-spring); }
+@keyframes authCardIn { from { opacity: 0; transform: translateY(18px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+.auth-brand { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+.auth-logo { width: 56px; height: 56px; flex-shrink: 0; border-radius: 14px; background: oklch(100% 0 0 / 0.04); display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 24px -8px oklch(66% 0.22 270 / 0.45), 0 0 0 1px oklch(100% 0 0 / 0.08) inset; overflow: hidden; }
+.auth-logo-img { width: 100%; height: 100%; object-fit: contain; display: block; filter: drop-shadow(0 4px 8px oklch(0% 0 0 / 0.4)); }
+.auth-logo-glyph { font: 600 24px/1 'Source Serif 4', 'DM Sans', serif; color: #fff; letter-spacing: 0; text-shadow: 0 1px 2px oklch(0% 0 0 / 0.25); }
+.auth-brand-text { display: flex; flex-direction: column; min-width: 0; }
+.auth-brand-cn { font: 600 22px/1.15 'DM Sans', sans-serif; color: oklch(96% 0.01 260); letter-spacing: 0.5px; }
+.auth-brand-en { font: 500 12px/1.2 'DM Sans', sans-serif; color: oklch(70% 0.06 260); letter-spacing: 0.18em; text-transform: uppercase; margin-top: 2px; }
+.auth-brand-tag { font: 400 11px/1.3 'DM Sans', sans-serif; color: oklch(60% 0.02 260); margin-top: 6px; letter-spacing: 0.02em; }
+
+.auth-card-title { font: 500 15px/1.3 'DM Sans', sans-serif; color: oklch(82% 0.015 260); margin: 4px 0 22px; letter-spacing: 0.01em; }
+
+.auth-form .form-group { margin-bottom: 14px; }
+.auth-form label { display: block; font-size: 11px; color: oklch(68% 0.02 260); margin-bottom: 7px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.auth-form input { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid oklch(100% 0 0 / 0.08); background: oklch(10% 0.015 260 / 0.55); color: oklch(95% 0.005 260); font: 400 14px 'DM Sans', sans-serif; outline: none; transition: border-color 0.2s, box-shadow 0.2s, background 0.2s; }
+.auth-form input::placeholder { color: oklch(48% 0.02 260); }
+.auth-form input:hover { border-color: oklch(100% 0 0 / 0.14); }
+.auth-form input:focus { border-color: oklch(70% 0.20 250 / 0.75); background: oklch(12% 0.018 260 / 0.7); box-shadow: 0 0 0 4px oklch(66% 0.20 250 / 0.14), 0 0 22px -6px oklch(66% 0.22 250 / 0.45); }
+
+.auth-submit { width: 100%; margin-top: 14px; padding: 13px; border-radius: 10px; font-weight: 600; letter-spacing: 0.04em; background: linear-gradient(135deg, oklch(66% 0.22 250), oklch(60% 0.22 285)); border: none; color: #fff; cursor: pointer; transition: transform 0.18s var(--ease-out), box-shadow 0.18s var(--ease-out), filter 0.18s; box-shadow: 0 10px 28px -10px oklch(66% 0.22 260 / 0.7), 0 0 0 1px oklch(100% 0 0 / 0.06) inset; }
+.auth-submit:hover { transform: translateY(-1px); filter: brightness(1.07); box-shadow: 0 14px 32px -8px oklch(66% 0.22 260 / 0.8), 0 0 0 1px oklch(100% 0 0 / 0.1) inset; }
+.auth-submit:active { transform: translateY(0); filter: brightness(0.97); }
+
+.auth-toggle { display: block; text-align: center; margin-top: 14px; color: oklch(72% 0.12 250); font-size: 12.5px; cursor: pointer; text-decoration: none; letter-spacing: 0.02em; transition: color 0.18s; }
+.auth-toggle:hover { color: oklch(82% 0.16 250); text-decoration: underline; }
+
+.auth-error { margin-top: 14px; padding: 10px 14px; border-radius: 10px; background: oklch(40% 0.16 25 / 0.18); border: 1px solid oklch(60% 0.20 25 / 0.32); color: oklch(82% 0.14 25); font-size: 12.5px; }
+.auth-error:empty { display: none; }
+
+.auth-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 22px; padding-top: 16px; border-top: 1px solid oklch(100% 0 0 / 0.06); font-size: 11.5px; color: oklch(58% 0.02 260); letter-spacing: 0.04em; }
+.auth-status { display: inline-flex; align-items: center; gap: 7px; }
+.auth-status-dot { width: 8px; height: 8px; border-radius: 50%; background: oklch(60% 0.02 260); box-shadow: 0 0 0 0 currentColor; transition: background 0.25s, box-shadow 0.25s; }
+.auth-status[data-state="loading"] .auth-status-dot { background: oklch(72% 0.14 85); animation: authPulse 1.4s ease-in-out infinite; color: oklch(72% 0.14 85); }
+.auth-status[data-state="online"] .auth-status-dot { background: oklch(72% 0.18 158); box-shadow: 0 0 0 4px oklch(72% 0.18 158 / 0.18); color: oklch(72% 0.18 158); }
+.auth-status[data-state="offline"] .auth-status-dot { background: oklch(62% 0.20 25); box-shadow: 0 0 0 4px oklch(62% 0.20 25 / 0.18); color: oklch(62% 0.20 25); }
+.auth-status[data-state="online"] .auth-status-text { color: oklch(78% 0.10 158); }
+.auth-status[data-state="offline"] .auth-status-text { color: oklch(76% 0.14 25); }
+@keyframes authPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+.auth-version { font-family: 'DM Mono', ui-monospace, monospace; font-size: 11px; color: oklch(58% 0.02 260); }
+
+/* 响应式（原 styles.css 行 691–695，归到本组件） */
+@media (max-width: 520px) {
+  .auth-card { padding: 28px 22px 22px; border-radius: 18px; }
+  .auth-brand { gap: 12px; }
+  .auth-logo { width: 46px; height: 46px; }
+  .auth-brand-cn { font-size: 19px; }
+}

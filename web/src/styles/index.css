@@ -1,0 +1,72 @@
+/* CSS 入口 —— P1 全量拆分已完成。
+ *
+ * 目录结构：
+ *   base.css           变量 / reset / 全站滚动条 / countIn 工具动画
+ *   layout/            topbar、sidebar、content shell、log-panel
+ *   components/        btn / search / filter / modal / toggle-switch / download-center / ...
+ *   pages/             search-result（result-card）、batch、stats、users、qual、completion、announcement、admin
+ *   responsive.css     跨组件 @media 汇总（1100 / 900 / 640px）
+ *   theme/glass.css    全局玻璃主题 —— 必须最后赢
+ *
+ * 过渡期：public/styles.css 仍被 legacy public/index.html 直接 <link>，所以这里
+ * 依然 @import 它 —— 新拆出来的每个文件与 styles.css 里对应段落"重复加载、
+ * cascade 等价"（选择器和 specificity 一致；按 @import 顺序新文件在后，等同 styles.css 唯一来源）。
+ *
+ * 真正的两步切换（待 legacy public/index.html 废弃时执行）：
+ *   1. 从 public/styles.css 删除对应段落（每个文件头部都标注了原行号）
+ *   2. 删除下面 @import '../../../public/styles.css'
+ * 届时 web/src/styles/* 成为唯一来源。
+ */
+
+@import './base.css';
+@import '../../../public/styles.css';
+
+/* layout —— 全局壳子，必须先于 components 加载，因为 component 选择器
+ * 经常依赖 .content / .topbar / .sidebar 作为父级上下文。 */
+@import './layout/topbar.css';
+@import './layout/sidebar.css';
+@import './layout/content.css';
+@import './layout/log-panel.css';
+
+/* components —— 顺序内含一处依赖：
+ *   buttons.css 定义 @keyframes btn-spin
+ *     → progress-strip.css .src-prog-spin、result-card.css .btn-spinner 复用
+ *   modal.css 定义 @keyframes panelIn
+ *     → user-dropdown.css 复用，所以 user-dropdown 必须在 modal 之后
+ *   toast.css 定义 @keyframes toastIn
+ *     → shortcuts-overlay.css 复用，所以排在 toast 之后
+ * 其余按字母序，避免阅读时找不到。 */
+@import './components/auth-overlay.css';
+@import './components/buttons.css';
+@import './components/context-menu.css';
+@import './components/download-center.css';
+@import './components/env-warning.css';
+@import './components/filter-bar.css';
+@import './components/modal.css';
+@import './components/progress-strip.css';
+@import './components/search-bar.css';
+@import './components/search-history.css';
+@import './components/skeleton.css';
+@import './components/spinner.css';
+@import './components/toast.css';
+@import './components/shortcuts-overlay.css';
+@import './components/toggle-switch.css';
+@import './components/batch-card.css';
+@import './components/user-dropdown.css';
+@import './components/result-card.css';
+
+/* pages —— 单页面 scope，加载顺序无 keyframe 依赖。
+ * announcement.css 与 admin.css 是亮色调色板，独立于全局暗色主题，互不冲突。 */
+@import './pages/stats.css';
+@import './pages/users.css';
+@import './pages/qualifications.css';
+@import './pages/completion.css';
+@import './pages/announcement.css';
+@import './pages/admin.css';
+
+/* responsive —— 跨组件 @media 汇总（详见文件头部的"为何不分散"说明）。
+ * 必须在 pages/* 之后，theme/glass.css 之前 —— 窄屏覆盖压过基线，主题最后赢。 */
+@import './responsive.css';
+
+/* theme —— 玻璃主题，必须最后加载以确保跨设备视觉一致。 */
+@import './theme/glass.css';
