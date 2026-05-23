@@ -15,6 +15,8 @@ npm run dev
 
 ## 项目架构
 
+### 后端（src/）
+
 ```
 src/
 ├── index.ts                       # 入口
@@ -25,6 +27,10 @@ src/
 │   ├── export-task-service.ts     # 导出任务队列
 │   ├── export-task-store.ts       # 任务状态存储
 │   └── source-registry.ts         # 源注册表（新增源改这）
+├── shared/
+│   ├── pooled-fetch.ts            # 带并发池的 fetch 封装
+│   ├── page-cache.ts              # 分页结果磁盘缓存
+│   └── text-availability-cache.ts # gbw 文本可用性缓存
 └── sources/
     ├── bz-zhenggui/               # bz源实现
     │   └── bz-zhenggui-adapter.ts
@@ -36,6 +42,34 @@ src/
     └── shared/
         └── captcha-ocr.ts         # 验证码OCR (ddddocr→tesseract)
 ```
+
+### 前端（public/）
+
+无构建步骤，原生 ESM 模块按职责拆分：
+
+| 模块 | 职责 |
+|------|------|
+| `js/app-core.js` | 全局状态、消息提示、source pill 控件 |
+| `js/app-search.js` | 搜索、结果渲染（卡片/分组/骨架屏）、键盘导航、右键菜单、文本可用性轮询 |
+| `js/app-download.js` | 单个下载、验证码弹窗 |
+| `js/app-complete.js` | 批量导出 + 任务进度面板 |
+| `js/app-settings.js` | 配置项 UI |
+| `js/app-detail-utils.js` | 详情页字段格式化共享逻辑 |
+| `js/app-auth-admin.js` | 登录/注册/管理员视图 |
+| `js/app-announcements.js` | 公告轮播 |
+| `js/app-qual.js` | 资质/许可证模块 |
+
+样式集中在 `public/styles.css`，使用 OKLCH 色变量 + DM Sans/DM Mono/Source Serif 4 字体栈。
+
+### 持久化文件（data/）
+
+| 文件/目录 | 作用 |
+|-----------|------|
+| `bzxz.db` | better-sqlite3 主库（用户、任务） |
+| `.server-port` | 上次启动端口，用于 electron 重连 |
+| `.page-cache.json` | 搜索分页 JSON 缓存 |
+| `.text-availability-cache.json` | gbw 全文可用性缓存 |
+| `exports/` | 导出产物（已 .gitignore） |
 
 ## SourceAdapter 接口
 
@@ -104,6 +138,34 @@ curl.exe -X POST "http://localhost:3000/api/standards/bz:443847/export"
 # gbw自动下载
 Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/standards/gbw:{id}/auto-download"
 ```
+
+## 前端键盘快捷键
+
+结果列表聚焦时（点击任意结果行后自动激活）：
+
+| 键 | 作用 |
+|----|------|
+| `j` / `↓` | 下一行 |
+| `k` / `↑` | 上一行 |
+| `g g` | 跳到首行 |
+| `G` | 跳到末行 |
+| `x` | 切换勾选 |
+| `d` | 单条下载 |
+| `s` | 查看详情 |
+| `Enter` | 打开当前行详情 |
+| `Esc` | 取消激活 / 关闭右键菜单 |
+
+全局：
+
+| 键 | 作用 |
+|----|------|
+| `Ctrl + K` | 聚焦搜索框 |
+| `Ctrl + Enter` | 触发搜索 |
+| `Ctrl + A` | 全选当前结果 |
+| `Ctrl + D` | 取消全选 |
+| `Alt + 1..6` | 切换 source pill |
+
+右键任意结果行可打开上下文菜单（复制编号、复制标题、查看详情、单条下载…）。
 
 ## 导出文件
 

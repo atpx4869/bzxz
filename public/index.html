@@ -262,8 +262,7 @@
     <div class="qual-tab-bar" style="display:flex;gap:0;margin-bottom:14px;border-bottom:1px solid var(--border)">
       <button class="qual-tab active" data-qual-tab="search" onclick="switchQualTab('search')" style="padding:8px 16px;font-size:13px;border:none;background:none;color:var(--text);cursor:pointer;border-bottom:2px solid var(--accent);font-weight:500">搜索</button>
       <button class="qual-tab" data-qual-tab="visual" onclick="switchQualTab('visual')" style="padding:8px 16px;font-size:13px;border:none;background:none;color:var(--text-3);cursor:pointer;border-bottom:2px solid transparent;font-weight:500">可视化</button>
-      <button class="qual-tab" data-qual-tab="labs" onclick="switchQualTab('labs')" style="padding:8px 16px;font-size:13px;border:none;background:none;color:var(--text-3);cursor:pointer;border-bottom:2px solid transparent;font-weight:500">订阅管理</button>
-      <button class="qual-tab" data-qual-tab="logs" onclick="switchQualTab('logs')" style="padding:8px 16px;font-size:13px;border:none;background:none;color:var(--text-3);cursor:pointer;border-bottom:2px solid transparent;font-weight:500">同步日志</button>
+      <span style="margin-left:auto;align-self:center;font-size:12px;color:var(--text-3)">订阅管理与同步日志已移至 <a href="javascript:switchTab('settings')" style="color:var(--accent);text-decoration:none">系统设置</a></span>
     </div>
     <div id="qualSearchTab" style="display:flex;flex-direction:column;height:calc(100vh - var(--topbar-h) - 140px)">
       <input class="qual-search-input" id="qualSearchInput" type="text" placeholder="输入标准号、实验室名称或关键词…" onkeydown="if(event.key==='Enter')doQualSearch()">
@@ -273,28 +272,6 @@
         <button class="qual-filter-btn" data-qual-source="CMA" onclick="setQualFilter(this,'CMA')">CMA</button>
       </div>
       <div id="qualResults" style="flex:1;overflow-y:auto"><div class="qual-empty">输入关键词搜索资质信息</div></div>
-    </div>
-    <div id="qualLabsTab" style="display:none">
-      <div class="qual-section-title">推荐订阅 <span style="color:var(--text-3);font-size:11px;margin-left:6px;text-transform:none;letter-spacing:0">内置 CNAS 机构，一键订阅 + 同步</span></div>
-      <div id="qualPresetCnas" style="margin-bottom:14px"><div style="color:var(--text-3);font-size:12px">加载中…</div></div>
-      <div class="qual-section-title">CNAS 实验室</div>
-      <div id="qualCnasLabs"></div>
-      <div class="qual-add-form">
-        <input id="qualCnasInput" placeholder="CNAS URL 或 baseInfoId" onkeydown="if(event.key==='Enter')addQualLab('cnas')">
-        <button class="btn btn-sm btn-primary" onclick="addQualLab('cnas')">添加</button>
-      </div>
-      <div class="qual-section-title">CMA 实验室</div>
-      <div id="qualCmaLabs"></div>
-      <div class="qual-add-form">
-        <input id="qualCmaInput" placeholder="输入 CMA 机构名称" onkeydown="if(event.key==='Enter')searchCmaLabCandidates()">
-        <button class="btn btn-sm btn-primary" onclick="searchCmaLabCandidates()">搜索机构</button>
-      </div>
-      <div id="qualCmaCandidates" style="margin-top:8px"></div>
-      <div style="text-align:right;margin-top:12px">
-        <button class="btn btn-sm btn-ghost" onclick="syncAllQualLabs()">同步全部</button>
-      </div>
-      <div class="qual-section-title" style="margin-top:24px">同步日志</div>
-      <div id="qualLabsSyncLogs" style="max-height:300px;overflow-y:auto;font-size:12px"></div>
     </div>
     <div id="qualVisualTab" style="display:none">
       <div class="qual-visual-workspace">
@@ -313,13 +290,6 @@
         </section>
       </div>
       <div id="qualVisualResults"></div>
-    </div>
-    <div id="qualLogsTab" style="display:none">
-      <div style="display:flex;gap:8px;margin-bottom:12px">
-        <button class="qual-filter-btn active" data-log-source="cnas" onclick="switchLogSource(this,'cnas')">CNAS</button>
-        <button class="qual-filter-btn" data-log-source="cma" onclick="switchLogSource(this,'cma')">CMA</button>
-      </div>
-      <div id="qualSyncLogs" style="max-height:400px;overflow-y:auto;font-size:12px"></div>
     </div>
   </div>
 
@@ -375,6 +345,46 @@
     <h2 style="font-size:20px;font-weight:600;margin-bottom:18px">系统设置</h2>
     <div id="settingsBody">
       <span class="spinner"></span>加载中
+    </div>
+    <!-- 资质订阅（CNAS / CMA） -->
+    <div class="setting-section qual-settings-section" style="margin-top:24px">
+      <div class="field-label" style="display:flex;align-items:center;justify-content:space-between">
+        <span>资质订阅</span>
+        <span style="font-size:11px;color:var(--text-3);font-weight:400">CNAS / CMA 机构能力数据，订阅后定时同步至本地</span>
+      </div>
+      <div class="qual-settings-tabs" style="display:flex;gap:0;margin:12px 0 14px;border-bottom:1px solid var(--border)">
+        <button class="qual-settings-tab active" data-qual-settings-tab="labs" onclick="switchQualSettingsTab('labs')" style="padding:8px 16px;font-size:13px;border:none;background:none;color:var(--text);cursor:pointer;border-bottom:2px solid var(--accent);font-weight:500">订阅管理</button>
+        <button class="qual-settings-tab" data-qual-settings-tab="logs" onclick="switchQualSettingsTab('logs')" style="padding:8px 16px;font-size:13px;border:none;background:none;color:var(--text-3);cursor:pointer;border-bottom:2px solid transparent;font-weight:500">同步日志</button>
+      </div>
+      <div id="qualLabsTab">
+        <div class="qual-section-title">推荐订阅 <span style="color:var(--text-3);font-size:11px;margin-left:6px;text-transform:none;letter-spacing:0">内置 CNAS 机构，一键订阅 + 同步</span></div>
+        <div id="qualPresetCnas" style="margin-bottom:14px"><div style="color:var(--text-3);font-size:12px">加载中…</div></div>
+        <div class="qual-section-title">CNAS 实验室</div>
+        <div id="qualCnasLabs"></div>
+        <div class="qual-add-form">
+          <input id="qualCnasInput" placeholder="CNAS URL 或 baseInfoId" onkeydown="if(event.key==='Enter')addQualLab('cnas')">
+          <button class="btn btn-sm btn-primary" onclick="addQualLab('cnas')">添加</button>
+        </div>
+        <div class="qual-section-title">CMA 实验室</div>
+        <div id="qualCmaLabs"></div>
+        <div class="qual-add-form">
+          <input id="qualCmaInput" placeholder="输入 CMA 机构名称" onkeydown="if(event.key==='Enter')searchCmaLabCandidates()">
+          <button class="btn btn-sm btn-primary" onclick="searchCmaLabCandidates()">搜索机构</button>
+        </div>
+        <div id="qualCmaCandidates" style="margin-top:8px"></div>
+        <div style="text-align:right;margin-top:12px">
+          <button class="btn btn-sm btn-ghost" onclick="syncAllQualLabs()">同步全部</button>
+        </div>
+        <div class="qual-section-title" style="margin-top:24px">最近同步</div>
+        <div id="qualLabsSyncLogs" style="max-height:300px;overflow-y:auto;font-size:12px"></div>
+      </div>
+      <div id="qualLogsTab" style="display:none">
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button class="qual-filter-btn active" data-log-source="cnas" onclick="switchLogSource(this,'cnas')">CNAS</button>
+          <button class="qual-filter-btn" data-log-source="cma" onclick="switchLogSource(this,'cma')">CMA</button>
+        </div>
+        <div id="qualSyncLogs" style="max-height:400px;overflow-y:auto;font-size:12px"></div>
+      </div>
     </div>
   </div>
 </div>

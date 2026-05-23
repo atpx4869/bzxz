@@ -6,18 +6,43 @@ function beijingTime() { const d = new Date(new Date().getTime() + 8*3600000); r
 function utcToBeijing(utcStr) { if (!utcStr) return ''; const d = new Date(utcStr); d.setTime(d.getTime() + 8*3600000); return d.toISOString().slice(0, 16).replace('T', ' '); }
 
 function switchQualTab(tab) {
+  // 订阅管理 / 同步日志 已迁移到「系统设置」，这里只保留搜索 + 可视化。
+  if (tab === 'labs' || tab === 'logs') {
+    if (typeof switchTab === 'function') switchTab('settings');
+    setTimeout(() => switchQualSettingsTab(tab === 'logs' ? 'logs' : 'labs'), 0);
+    return;
+  }
   document.querySelectorAll('.qual-tab').forEach(t => {
     const active = t.dataset.qualTab === tab;
     t.classList.toggle('active', active);
     t.style.color = active ? 'var(--text)' : 'var(--text-3)';
     t.style.borderBottomColor = active ? 'var(--accent)' : 'transparent';
   });
-  document.getElementById('qualSearchTab').style.display = tab === 'search' ? '' : 'none';
-  document.getElementById('qualVisualTab').style.display = tab === 'visual' ? '' : 'none';
-  document.getElementById('qualLabsTab').style.display = tab === 'labs' ? '' : 'none';
-  document.getElementById('qualLogsTab').style.display = tab === 'logs' ? '' : 'none';
-  if (tab === 'labs') { loadQualLabs(); loadLabsSyncLogs(); }
-  if (tab === 'logs') loadQualSyncLogs('cnas');
+  const searchEl = document.getElementById('qualSearchTab');
+  const visualEl = document.getElementById('qualVisualTab');
+  if (searchEl) searchEl.style.display = tab === 'search' ? '' : 'none';
+  if (visualEl) visualEl.style.display = tab === 'visual' ? '' : 'none';
+}
+
+// Sub-tab switcher for the qual-subscription section that lives inside
+// the 系统设置 page. Tabs: 'labs' (订阅管理) or 'logs' (同步日志).
+function switchQualSettingsTab(tab) {
+  document.querySelectorAll('.qual-settings-tab').forEach(t => {
+    const active = t.dataset.qualSettingsTab === tab;
+    t.classList.toggle('active', active);
+    t.style.color = active ? 'var(--text)' : 'var(--text-3)';
+    t.style.borderBottomColor = active ? 'var(--accent)' : 'transparent';
+  });
+  const labsEl = document.getElementById('qualLabsTab');
+  const logsEl = document.getElementById('qualLogsTab');
+  if (labsEl) labsEl.style.display = tab === 'labs' ? '' : 'none';
+  if (logsEl) logsEl.style.display = tab === 'logs' ? '' : 'none';
+  if (tab === 'labs') {
+    if (typeof loadQualLabs === 'function') loadQualLabs();
+    if (typeof loadLabsSyncLogs === 'function') loadLabsSyncLogs();
+  } else if (tab === 'logs') {
+    if (typeof loadQualSyncLogs === 'function') loadQualSyncLogs('cnas');
+  }
 }
 
 async function doQualBatchVisual() {
@@ -77,7 +102,7 @@ function renderQualVisual(queries, data) {
     <div class="${expired ? 'warn' : ''}"><strong>${expired}</strong><span>已过期记录</span></div>`;
 
   if (!queries.some(query => (data[query] || []).length)) {
-    out.innerHTML = '<div class="qual-visual-result empty">本地缓存暂无匹配资质。请先在订阅管理中订阅机构并同步能力。</div>';
+    out.innerHTML = '<div class="qual-visual-result empty">本地缓存暂无匹配资质。请先在「系统设置 → 资质订阅」中订阅机构并同步能力。</div>';
     return;
   }
 

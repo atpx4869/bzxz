@@ -4,13 +4,32 @@ let isRegisterMode = false;
 let trendChart = null;
 let sourceChart = null;
 
+// Helper — true when the URL points at an auth endpoint where a 401 means
+// "wrong credentials" (e.g. /api/auth/login, /api/auth/password) and MUST NOT
+// be reinterpreted as "session expired → show login overlay".
+function _isAuthEndpoint(url) {
+  try { return String(url || '').includes('/api/auth/'); }
+  catch { return false; }
+}
+
+function _handleSessionExpired() {
+  currentUser = null;
+  resetAuthFormToLogin();
+  var overlay = document.getElementById('authOverlay');
+  if (overlay) overlay.classList.remove('hidden');
+  // Re-pull setup/login-required so the overlay shows the right copy
+  // (e.g. needsSetup vs. login form) instead of whatever was rendered last.
+  if (typeof checkAuthStatus === 'function') {
+    try { checkAuthStatus(); } catch (e) { /* swallow — overlay already visible */ }
+  }
+}
+
 // Global fetch 401 interceptor
 const _origFetch = window.fetch;
 window.fetch = function(...args) {
   return _origFetch.apply(this, args).then(res => {
-    if (res.status === 401 && !args[0]?.toString().includes('/api/auth/')) {
-      currentUser = null;
-      document.getElementById('authOverlay').classList.remove('hidden');
+    if (res.status === 401 && !_isAuthEndpoint(args[0])) {
+      _handleSessionExpired();
     }
     return res;
   });
@@ -18,42 +37,69 @@ window.fetch = function(...args) {
 
 async function apiFetch(url, options = {}) {
   const res = await fetch(url, { ...options, credentials: 'same-origin' });
-  if (res.status === 401) {
-    currentUser = null;
-    document.getElementById('authOverlay').classList.remove('hidden');
+  // Treat 401 on auth endpoints (wrong password, etc.) as a normal failure —
+  // the caller renders the error. Only session-expired 401s from non-auth
+  // endpoints should boot the user to the login overlay.
+  if (res.status === 401 && !_isAuthEndpoint(url)) {
+    _handleSessionExpired();
     throw new Error('未登录');
   }
   return res;
 }
 
+// Reset the auth overlay to its default "login" state. Called whenever we
+// show the overlay so stale register-mode copy / cleared password input from
+// the prior session doesn't bleed through.
+function resetAuthFormToLogin() {
+  isRegisterMode = false;
+  var title = document.getElementById('authTitle');
+  if (title) title.textContent = '欢迎回来，请登录';
+  var submit = document.getElementById('authSubmitBtn');
+  if (submit) {
+    submit.textContent = '登录';
+    submit.disabled = false;
+  }
+  var err = document.getElementById('authError');
+  if (err) err.textContent = '';
+  var pwd = document.getElementById('authPassword');
+  if (pwd) pwd.value = '';
+}
+
 async function checkAuthStatus() {
   try {
-    const res = await fetch('/api/auth/status');
+    const res = await fetch('/api/auth/status', { credentials: 'same-origin' });
     const data = await readApiResponse(res);
     if (data.user) {
       currentUser = data.user;
       document.getElementById('authOverlay').classList.add('hidden');
       onAuthReady();
-    } else if (data.needsSetup) {
+      return;
+    }
+    // No user — start from a clean login form before applying the right copy.
+    resetAuthFormToLogin();
+    if (data.needsSetup) {
       isRegisterMode = true;
       document.getElementById('authTitle').textContent = '首次启动，请创建管理员账号';
       document.getElementById('authSubmitBtn').textContent = '注册';
       document.getElementById('authToggle').textContent = '';
       document.getElementById('authOverlay').classList.remove('hidden');
     } else if (!data.loginRequired) {
-      // Login not required — use guest
-      // Safe fallback: should rarely run since /api/auth/status now returns the
-      // real guest user. Match the backend default tab set so a future change
-      // (e.g. an empty/null response) doesn't accidentally expose all tabs.
+      // Login not required — backend should hand us a guest user; fall back
+      // to a synthetic guest if the response is empty. Mirror the backend
+      // default tab list so a stale response doesn't expose all tabs.
       currentUser = { id: 0, username: '_guest', displayName: '访客', role: 'user', allowedTabs: ['search', 'batch', 'complete'] };
       document.getElementById('authOverlay').classList.add('hidden');
       onAuthReady();
     } else {
-      // Show/hide register toggle based on setting
       document.getElementById('authToggle').textContent = data.registrationEnabled ? '没有账号？注册' : '';
       document.getElementById('authOverlay').classList.remove('hidden');
     }
-  } catch { document.getElementById('authOverlay').classList.remove('hidden'); }
+  } catch (e) {
+    // Network/parse failure — show login overlay with a clean form so the
+    // user can retry (the form submit handler will surface "网络错误").
+    resetAuthFormToLogin();
+    document.getElementById('authOverlay').classList.remove('hidden');
+  }
 }
 
 function onAuthReady() {
@@ -124,20 +170,37 @@ document.getElementById('authForm').addEventListener('submit', async (e) => {
   const username = document.getElementById('authUsername').value.trim();
   const password = document.getElementById('authPassword').value;
   const errEl = document.getElementById('authError');
+  const submitBtn = document.getElementById('authSubmitBtn');
   errEl.textContent = '';
+  if (!username || !password) {
+    errEl.textContent = '请填写用户名和密码';
+    return;
+  }
+  if (submitBtn) submitBtn.disabled = true;
   const endpoint = isRegisterMode ? '/api/auth/register' : '/api/auth/login';
   try {
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
       body: JSON.stringify({ username, password }),
     });
     const data = await readApiResponse(res);
-    if (!res.ok) { errEl.textContent = data.message || '操作失败'; return; }
+    if (!res.ok || !data.user) {
+      errEl.textContent = data.message || (isRegisterMode ? '注册失败' : '登录失败');
+      return;
+    }
     currentUser = data.user;
+    // Reset transient form state on success so a future logout shows a clean form.
+    document.getElementById('authPassword').value = '';
+    isRegisterMode = false;
     document.getElementById('authOverlay').classList.add('hidden');
     onAuthReady();
-  } catch { errEl.textContent = '网络错误'; }
+  } catch (err) {
+    errEl.textContent = '网络错误';
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
 });
 
 document.getElementById('authToggle').addEventListener('click', () => {
@@ -147,13 +210,24 @@ document.getElementById('authToggle').addEventListener('click', () => {
   document.getElementById('authSubmitBtn').textContent = isRegisterMode ? '注册' : '登录';
   document.getElementById('authToggle').textContent = isRegisterMode ? '已有账号？登录' : '没有账号？注册';
   document.getElementById('authError').textContent = '';
+  // Avoid carrying the password across modes — a value typed for login should
+  // not survive into the register flow (and vice versa).
+  var pwd = document.getElementById('authPassword');
+  if (pwd) pwd.value = '';
 });
 
 async function doLogout() {
-  await fetch('/api/auth/session', { method: 'DELETE' });
+  try {
+    await fetch('/api/auth/session', { method: 'DELETE', credentials: 'same-origin' });
+  } catch (e) { /* network failure shouldn't block logout UI */ }
   currentUser = null;
   document.getElementById('userDropdown').classList.remove('open');
+  resetAuthFormToLogin();
   document.getElementById('authOverlay').classList.remove('hidden');
+  // Re-run status so that if loginRequired is off + we're on loopback the
+  // backend hands us a fresh guest session instead of leaving the user
+  // stuck on the login form.
+  try { await checkAuthStatus(); } catch (e) { /* overlay already visible */ }
 }
 
 function toggleUserDropdown() {
@@ -214,14 +288,17 @@ function showChangePwd() {
   if (!oldPwd) return;
   const newPwd = prompt('请输入新密码（至少6位）');
   if (!newPwd || newPwd.length < 6) { showToast('密码至少6位', 'fail'); return; }
+  // /api/auth/password is in the auth-endpoint exclude list, so a 401 from
+  // a wrong old password no longer bumps the user back to the login overlay.
   apiFetch('/api/auth/password', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ oldPassword: oldPwd, newPassword: newPwd }),
-  }).then(r => readApiResponse(r)).then(d => {
-    if (d.ok) showToast('密码已修改', 'success');
+  }).then(async (r) => {
+    const d = await readApiResponse(r);
+    if (r.ok && d.ok) showToast('密码已修改', 'success');
     else showToast(d.message || '修改失败', 'fail');
-  });
+  }).catch(() => showToast('修改失败', 'fail'));
 }
 
 // ── Stats ──

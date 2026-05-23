@@ -255,9 +255,11 @@ start.bat
 - BZ 页级实时进度
 - 搜索历史（可配置条数 3~20，localStorage 持久化）
 - 常用标准收藏、本地文件库、下载历史
-- 键盘快捷键（`Ctrl+K` 搜索 / `Ctrl+Enter` 确认 / `Esc` 关闭 / `?` 查看）
+- 键盘快捷键：全局 `Ctrl+K` 聚焦搜索 / `Ctrl+Enter` 触发 / `Ctrl+A` 全选 / `Ctrl+D` 取消 / `Alt+1..6` 切源；结果列表 vim 风格 `j` `k` `g g` `G` `x` `d` `s` `Enter`（详见 [DEVELOPMENT.md](./DEVELOPMENT.md#前端键盘快捷键)）
+- 结果行右键菜单：复制编号 / 复制标题 / 查看详情 / 单条下载
+- 状态分组（现行 / 即将实施 / 其它 / 废止）默认折叠 `废止`，折叠状态持久化
 - BW 自动 OCR 验证码 + 后台文本可用性检测（乐观 UI，搜索即可下载）
-- 搜索状态指示器（右下角：正在搜索 → 搜索中 N/M 源 → 正在检测文本 → 文本检测完成）
+- 搜索状态指示器：右下角 toast「正在搜索 → 搜索中 N/M 源」+ 卡片级文本可用性 tri-state 徽章（检测中脉冲点 / 有正文 / 无正文）+ 顶部 source-progress 进度条带
 - 下载模式设置（顺序/竞速）、下载优先级、并发数和超时时间（持久化）
 - 数据源健康检测（设置页手动检测 + 单源重试）
 - 底部日志面板 + 执行历史
@@ -338,6 +340,8 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **1.14.1** — 文本可用性轮询提速：首次 2s→300ms、缓存命中场景视觉延迟 ~2.3s → ~0.3s
+- **1.14.0** — 前端大改：tri-state 文本徽章、骨架屏列对齐、状态分组+折叠持久化、source-progress 进度条带、vim 风格键盘导航、右键上下文菜单；移除"正在检测文本…"持久 toast
 - **品牌升级** — 产品名统一为「标准盒子 / StandardsBox」；登录页改为深色玻璃拟态，新增版本号 + 在线状态指示；主工作区跟进玻璃拟态主题
 - **桌面端端口设置** — 设置页新增"固定端口 + 端口检测"，未指定/被占用自动 fallback 到随机端口
 - **打包修复** — `playwright` 改为 runtime dep + asarUnpack，修复 NSIS/portable 包内 CNAS 抓取报 `Cannot find package 'playwright'` 的问题
