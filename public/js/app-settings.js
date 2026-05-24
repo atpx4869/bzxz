@@ -351,7 +351,7 @@ function renderPortSettingCard() {
     : ' muted';
   var disabled = !supported || s.loading || s.saving;
   return `
-      <div class="settings-card wide desktop-setting-card">
+      <div class="settings-card wide port-setting-card">
         <div class="settings-card-header">
           <div>
             <div class="settings-kicker">桌面程序</div>
