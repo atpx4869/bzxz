@@ -155,17 +155,20 @@ function renderQualVisual(queries, data) {
     const labNamesArr = [...group.labNames];
     const labInfo = labNamesArr.length > 1 ? labNamesArr.map(n => escapeHtml(n)).join(' / ') : (labNamesArr[0] ? escapeHtml(labNamesArr[0]) : '');
     return `<div class="qual-visual-lab-card">
-      <div class="qual-visual-lab-head">
+      <div class="qual-visual-lab-head" onclick="toggleQualVisualCard(this.parentElement)" style="cursor:pointer">
         <div>
           ${labInfo && !singleLab ? `<h4>${labInfo}</h4>` : ''}
           ${labInfo && singleLab ? `<span class="qual-visual-lab-muted">${escapeHtml(labInfo)}</span>` : ''}
           <div><span>${escapeHtml(group.stdCode || '未列标准号')}</span><span>${total} 条匹配能力</span></div>
           ${group.stdName ? `<p>${escapeHtml(group.stdName)}</p>` : ''}
         </div>
+        <span class="qual-visual-lab-arrow" aria-hidden="true">▾</span>
       </div>
-      <div class="qual-visual-source-grid">
-        ${renderSourceColumn('CMA', 'cma', group.cma)}
-        ${renderSourceColumn('CNAS', 'cnas', group.cnas)}
+      <div class="qual-visual-lab-body">
+        <div class="qual-visual-source-grid">
+          ${renderSourceColumn('CMA', 'cma', group.cma)}
+          ${renderSourceColumn('CNAS', 'cnas', group.cnas)}
+        </div>
       </div>
     </div>`;
   }
@@ -224,17 +227,31 @@ function toggleQualVisualMore(gid) {
     : `展开剩余 ${wrap.children.length} 条 ▼`;
 }
 
+function toggleQualVisualCard(card) {
+  if (!card) return;
+  card.classList.toggle('collapsed');
+}
+
 function toggleQualVisualSection(sectionId, expand) {
   const section = document.getElementById(sectionId);
   if (!section) return;
-  section.querySelectorAll('.qual-visual-more-wrap').forEach(wrap => {
-    wrap.style.display = expand ? '' : 'none';
+  // 折叠/展开整张卡片（lab-body 通过 .collapsed 隐藏）
+  section.querySelectorAll('.qual-visual-lab-card').forEach(card => {
+    card.classList.toggle('collapsed', !expand);
   });
-  section.querySelectorAll('.qual-visual-more-btn').forEach(btn => {
-    const wrap = btn.previousElementSibling;
-    const cnt = wrap ? wrap.children.length : 0;
-    btn.innerHTML = expand ? '收起 ▲' : `展开剩余 ${cnt} 条 ▼`;
-  });
+  // 展开时同步把每张卡片里的"展开剩余 N 条"也打开；折叠时不动溢出区
+  // （反正卡片本体已隐藏，溢出区状态在用户下次展开卡片时再生效）
+  if (expand) {
+    section.querySelectorAll('.qual-visual-more-wrap').forEach(wrap => {
+      wrap.style.display = '';
+    });
+    section.querySelectorAll('.qual-visual-more-btn').forEach(btn => {
+      const wrap = btn.previousElementSibling;
+      const cnt = wrap ? wrap.children.length : 0;
+      btn.innerHTML = '收起 ▲';
+      if (cnt === 0) btn.style.display = 'none';
+    });
+  }
 }
 
 function setQualFilter(btn, source) {

@@ -853,6 +853,10 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
 .qual-visual-labs { display: flex; flex-wrap: wrap; gap: 4px; }
 .qual-visual-labs span { padding: 2px 6px; border-radius: 999px; background: oklch(22% 0.014 255 / 0.55); color: var(--text-2); font-size: 10px; }
 .qual-visual-lab-card { border: 1px solid oklch(26% 0.012 255 / 0.45); border-radius: var(--radius); background: oklch(17% 0.014 255 / 0.42); overflow: hidden; }
+.qual-visual-lab-card.collapsed .qual-visual-lab-body { display: none; }
+.qual-visual-lab-card.collapsed .qual-visual-lab-head { border-bottom-color: transparent; }
+.qual-visual-lab-card.collapsed .qual-visual-lab-arrow { transform: rotate(-90deg); }
+.qual-visual-lab-arrow { color: var(--text-3); font-size: 11px; align-self: center; transition: transform 0.15s ease; flex-shrink: 0; }
 .qual-visual-lab-head { display: flex; justify-content: space-between; gap: 10px; padding: 10px 12px; border-bottom: 1px solid oklch(26% 0.012 255 / 0.36); }
 .qual-visual-lab-head h4 { margin: 0 0 4px; color: var(--text); font-size: 13px; font-weight: 650; }
 .qual-visual-lab-muted { font-size: 10px; color: var(--text-3); opacity: 0.6; }
