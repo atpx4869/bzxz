@@ -61,45 +61,87 @@ export interface CnasCertTask {
 }
 
 export class CnasScraper {
-  private browser: Browser | null = null;
-  private page: Page | null = null;
+  /** Shared headless Chromium. Each sync job creates its own context + page
+   *  so multiple users can sync different labs in parallel without colliding. */
+  private browser: import('playwright').Browser | null = null;
+  private browserLaunch: Promise<import('playwright').Browser> | null = null;
 
-  /** Launch stealth browser and navigate to CNAS page */
-  private async ensureBrowser(): Promise<Page> {
-    if (this.page && !this.page.isClosed()) return this.page;
+  /** Cap concurrent CNAS pages to keep CNAS's anti-bot from tripping. */
+  private maxConcurrent = 3;
+  private activePages = 0;
+  private waiters: Array<() => void> = [];
 
-    const pw = await import('playwright');
-    this.browser = await pw.chromium.launch({
-      headless: true,
-      channel: 'chrome',
-      args: ['--disable-blink-features=AutomationControlled'],
-    });
-    const context = await this.browser.newContext({
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
-    });
-    await context.addInitScript(() => {
-      Object.defineProperty(navigator, 'webdriver', { get: () => false });
-    });
-    this.page = await context.newPage();
-    return this.page;
+  /** Launch (or return) the shared headless Chromium. De-duped under load. */
+  private async ensureBrowser(): Promise<import('playwright').Browser> {
+    if (this.browser && this.browser.isConnected()) return this.browser;
+    if (!this.browserLaunch) {
+      this.browserLaunch = (async () => {
+        const pw = await import('playwright');
+        const b = await pw.chromium.launch({
+          headless: true,
+          channel: 'chrome',
+          args: ['--disable-blink-features=AutomationControlled'],
+        });
+        b.on('disconnected', () => { this.browser = null; this.browserLaunch = null; });
+        this.browser = b;
+        return b;
+      })().catch(err => { this.browserLaunch = null; throw err; });
+    }
+    return this.browserLaunch;
   }
 
-  /** Close browser */
-  async close(): Promise<void> {
-    if (this.browser) {
-      await this.browser.close().catch(() => {});
-      this.browser = null;
-      this.page = null;
+  /** Acquire a concurrency slot; waits if maxConcurrent already running. */
+  private async acquireSlot(): Promise<void> {
+    if (this.activePages < this.maxConcurrent) { this.activePages++; return; }
+    await new Promise<void>(resolve => this.waiters.push(resolve));
+    this.activePages++;
+  }
+
+  private releaseSlot(): void {
+    this.activePages = Math.max(0, this.activePages - 1);
+    const w = this.waiters.shift();
+    if (w) w();
+  }
+
+  /** Open a fresh isolated page (own context). Caller must call release() in finally. */
+  private async openPage(): Promise<{ page: Page; release: () => Promise<void> }> {
+    await this.acquireSlot();
+    let context: import('playwright').BrowserContext | null = null;
+    try {
+      const browser = await this.ensureBrowser();
+      context = await browser.newContext({
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+      });
+      await context.addInitScript(() => {
+        Object.defineProperty(navigator, 'webdriver', { get: () => false });
+      });
+      const page = await context.newPage();
+      const ownedContext = context;
+      let released = false;
+      const release = async () => {
+        if (released) return;
+        released = true;
+        try { await ownedContext.close(); } catch { /* best effort */ }
+        this.releaseSlot();
+      };
+      return { page, release };
+    } catch (err) {
+      if (context) await context.close().catch(() => {});
+      this.releaseSlot();
+      throw err;
     }
   }
 
-  /** Navigate to lab page and wait for SmartClient session */
-  private async navigateToLab(labInfo: CnasLabInfo): Promise<Page> {
-    // Close existing browser to get fresh session
-    await this.close();
-    const page = await this.ensureBrowser();
+  /** Shutdown: close the shared browser. Called at app shutdown. */
+  async close(): Promise<void> {
+    const b = this.browser;
+    this.browser = null;
+    this.browserLaunch = null;
+    if (b) await b.close().catch(() => {});
+  }
 
-    // Build full URL with all required params
+  /** Navigate an already-acquired page to the lab URL and wait for anti-bot to settle. */
+  private async navigateToLab(page: Page, labInfo: CnasLabInfo): Promise<void> {
     const params = new URLSearchParams({
       baseInfoId: labInfo.baseInfoId,
       licNo: labInfo.labNo,
@@ -113,25 +155,24 @@ export class CnasScraper {
     if (!title || title.includes('__jsl')) {
       throw new Error('CNAS anti-bot challenge not resolved');
     }
-    return page;
   }
 
   /** Fetch the lab/organization name from the CNAS page */
   async fetchLabName(labInfo: CnasLabInfo): Promise<string> {
-    const page = await this.navigateToLab(labInfo);
+    const { page, release } = await this.openPage();
     try {
-      const name = await page.evaluate(() => {
-        // Try common selectors for the organization name on the CNAS page
+      await this.navigateToLab(page, labInfo);
+      return await page.evaluate(() => {
         const el = document.querySelector('.orgName, .lab-name, h2, h3, .title');
         if (el) return el.textContent?.trim() ?? '';
-        // Try page title
         const t = document.title;
         if (t && !t.includes('__jsl')) return t;
         return '';
       });
-      return name;
     } catch {
       return '';
+    } finally {
+      await release();
     }
   }
 
@@ -140,63 +181,62 @@ export class CnasScraper {
     const orgId = labInfo.urlParams?.id;
     if (!orgId) return { regNo: labInfo.labNo, otherNames: '', address: '', validityPeriod: '', certTasks: [] };
 
-    await this.close();
-    const page = await this.ensureBrowser();
-    const orgUrl = `${CNAS_BASE}/queryOrgInfo.action?id=${orgId}&orgEnOrCh=Ch`;
-    await page.goto(orgUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForTimeout(5000);
+    const { page, release } = await this.openPage();
+    try {
+      const orgUrl = `${CNAS_BASE}/queryOrgInfo.action?id=${orgId}&orgEnOrCh=Ch`;
+      await page.goto(orgUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.waitForTimeout(5000);
 
-    const title = await page.title();
-    if (!title || title.includes('__jsl')) {
-      throw new Error('CNAS anti-bot challenge not resolved on org info page');
-    }
-
-    const result = await page.evaluate(() => {
-      const getText = (el: Element | null) => el?.textContent?.trim() ?? '';
-
-      // Helper: find value in a label-value table row pattern
-      const findValue = (labelText: string): string => {
-        const tds = Array.from(document.querySelectorAll('td'));
-        for (let i = 0; i < tds.length - 1; i++) {
-          if (getText(tds[i]).includes(labelText)) return getText(tds[i + 1]);
-        }
-        return '';
-      };
-
-      // Parse cert tasks from table
-      const certTasks: Array<{ taskNo: string; reviewType: string; signDate: string; scopeStatus: string }> = [];
-      const tables = Array.from(document.querySelectorAll('table'));
-      for (const table of tables) {
-        const headers = Array.from(table.querySelectorAll('th, td')).map(getText);
-        const taskNoIdx = headers.findIndex(h => h.includes('任务编号'));
-        const reviewIdx = headers.findIndex(h => h.includes('评审类型'));
-        const signIdx = headers.findIndex(h => h.includes('签发日期'));
-        const statusIdx = headers.findIndex(h => h.includes('公布状态'));
-        if (taskNoIdx < 0) continue;
-        const rows = Array.from(table.querySelectorAll('tr')).slice(1);
-        for (const row of rows) {
-          const cells = Array.from(row.querySelectorAll('td'));
-          if (cells.length <= taskNoIdx) continue;
-          certTasks.push({
-            taskNo: getText(cells[taskNoIdx]),
-            reviewType: reviewIdx >= 0 && cells[reviewIdx] ? getText(cells[reviewIdx]) : '',
-            signDate: signIdx >= 0 && cells[signIdx] ? getText(cells[signIdx]) : '',
-            scopeStatus: statusIdx >= 0 && cells[statusIdx] ? getText(cells[statusIdx]) : '',
-          });
-        }
-        if (certTasks.length) break;
+      const title = await page.title();
+      if (!title || title.includes('__jsl')) {
+        throw new Error('CNAS anti-bot challenge not resolved on org info page');
       }
 
-      return {
-        regNo: findValue('注册编号'),
-        otherNames: findValue('其他名称'),
-        address: findValue('单位地址') || findValue('地址'),
-        validityPeriod: findValue('认可有效期限') || findValue('有效期'),
-        certTasks,
-      };
-    });
+      return await page.evaluate(() => {
+        const getText = (el: Element | null) => el?.textContent?.trim() ?? '';
 
-    return result;
+        const findValue = (labelText: string): string => {
+          const tds = Array.from(document.querySelectorAll('td'));
+          for (let i = 0; i < tds.length - 1; i++) {
+            if (getText(tds[i]).includes(labelText)) return getText(tds[i + 1]);
+          }
+          return '';
+        };
+
+        const certTasks: Array<{ taskNo: string; reviewType: string; signDate: string; scopeStatus: string }> = [];
+        const tables = Array.from(document.querySelectorAll('table'));
+        for (const table of tables) {
+          const headers = Array.from(table.querySelectorAll('th, td')).map(getText);
+          const taskNoIdx = headers.findIndex(h => h.includes('任务编号'));
+          const reviewIdx = headers.findIndex(h => h.includes('评审类型'));
+          const signIdx = headers.findIndex(h => h.includes('签发日期'));
+          const statusIdx = headers.findIndex(h => h.includes('公布状态'));
+          if (taskNoIdx < 0) continue;
+          const rows = Array.from(table.querySelectorAll('tr')).slice(1);
+          for (const row of rows) {
+            const cells = Array.from(row.querySelectorAll('td'));
+            if (cells.length <= taskNoIdx) continue;
+            certTasks.push({
+              taskNo: getText(cells[taskNoIdx]),
+              reviewType: reviewIdx >= 0 && cells[reviewIdx] ? getText(cells[reviewIdx]) : '',
+              signDate: signIdx >= 0 && cells[signIdx] ? getText(cells[signIdx]) : '',
+              scopeStatus: statusIdx >= 0 && cells[statusIdx] ? getText(cells[statusIdx]) : '',
+            });
+          }
+          if (certTasks.length) break;
+        }
+
+        return {
+          regNo: findValue('注册编号'),
+          otherNames: findValue('其他名称'),
+          address: findValue('单位地址') || findValue('地址'),
+          validityPeriod: findValue('认可有效期限') || findValue('有效期'),
+          certTasks,
+        };
+      });
+    } finally {
+      await release();
+    }
   }
 
   /** Fetch a single page of capabilities, returns null if anti-bot triggered */
@@ -221,7 +261,6 @@ export class CnasScraper {
           body: body.toString(),
         });
         const text = await resp.text();
-        // Check if response looks like JSON
         if (text.startsWith('{') || text.startsWith('[')) {
           return { ok: true, text };
         }
@@ -247,16 +286,17 @@ export class CnasScraper {
     labInfo: CnasLabInfo,
     onProgress?: (fetched: number, total: number) => void,
   ): Promise<CnasCapability[]> {
-    let page = await this.navigateToLab(labInfo);
+    const { page, release } = await this.openPage();
 
     const all: CnasCapability[] = [];
     let start = 0;
-    const pageSize = 200; // API caps at 200 per page
+    const pageSize = 200;
     let total = Infinity;
     const maxRetries = 5;
     let requestCount = 0;
 
     try {
+      await this.navigateToLab(page, labInfo);
       while (all.length < total) {
         let json: CnasApiResponse | null = null;
         let retries = 0;
@@ -269,7 +309,7 @@ export class CnasScraper {
             const waitSec = 15 + retries * 20;
             console.log(`CNAS anti-bot at offset ${start}, waiting ${waitSec}s then re-navigating (retry ${retries}/${maxRetries})...`);
             await sleep(waitSec * 1000);
-            page = await this.navigateToLab(labInfo);
+            await this.navigateToLab(page, labInfo);
           }
         }
 
@@ -284,20 +324,18 @@ export class CnasScraper {
         start += pageSize;
         requestCount++;
 
-        // Proactively re-navigate every 8 requests (~1600 records)
         if (requestCount >= 8 && start < total) {
           console.log(`Proactive re-navigation after ${requestCount} requests...`);
           await sleep(5000);
-          page = await this.navigateToLab(labInfo);
+          await this.navigateToLab(page, labInfo);
           requestCount = 0;
           await sleep(3000 + Math.random() * 2000);
         } else if (start < total) {
           await sleep(1500 + Math.random() * 2000);
         }
       }
-    } catch (err) {
-      await this.close();
-      throw err;
+    } finally {
+      await release();
     }
 
     return all;
@@ -312,7 +350,6 @@ export class CnasScraper {
       const licNo = params.get('licNo');
       if (!baseInfoId || !licNo) return null;
 
-      // Extract extra URL params required by CNAS site
       const extraKeys = ['id', 'labType', 'scopeStr', 'orgEnOrCh', 'attactdate'];
       const urlParams: Record<string, string> = {};
       for (const key of extraKeys) {
@@ -335,36 +372,40 @@ export class CnasScraper {
 
   /** Fetch lab info (lightweight check) */
   async fetchLabInfo(baseInfoId: string, urlParams: Record<string, string> = {}): Promise<{ certDate: string; totalSize: number }> {
-    const labInfo: CnasLabInfo = { baseInfoId, labNo: '', labName: '', certUpdateTs: '', validate: '', urlParams };
-    const page = await this.navigateToLab(labInfo);
-
-    const result = await page.evaluate(async (baseinfoId: string) => {
-      try {
-        const body = new URLSearchParams({
-          baseinfoId, type: 'L1', enstart: '0', startIndex: '0', sizePerPage: '1',
-        });
-        const resp = await fetch('/LAS/publish/queryPublishLCheckObj.action?', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: body.toString(),
-        });
-        return { ok: resp.status === 200, text: await resp.text() };
-      } catch (e) {
-        return { ok: false, error: String(e) };
-      }
-    }, baseInfoId);
-
-    if (!result.ok) throw new Error(`CNAS check failed: ${result.error}`);
-    let json: CnasApiResponse;
+    const { page, release } = await this.openPage();
     try {
-      json = JSON.parse(result.text!) as CnasApiResponse;
-    } catch {
-      throw new Error('CNAS check returned HTML instead of JSON (anti-bot triggered)');
+      const labInfo: CnasLabInfo = { baseInfoId, labNo: '', labName: '', certUpdateTs: '', validate: '', urlParams };
+      await this.navigateToLab(page, labInfo);
+      const result = await page.evaluate(async (baseinfoId: string) => {
+        try {
+          const body = new URLSearchParams({
+            baseinfoId, type: 'L1', enstart: '0', startIndex: '0', sizePerPage: '1',
+          });
+          const resp = await fetch('/LAS/publish/queryPublishLCheckObj.action?', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString(),
+          });
+          return { ok: resp.status === 200, text: await resp.text() };
+        } catch (e) {
+          return { ok: false, error: String(e) };
+        }
+      }, baseInfoId);
+
+      if (!result.ok) throw new Error(`CNAS check failed: ${result.error}`);
+      let json: CnasApiResponse;
+      try {
+        json = JSON.parse(result.text!) as CnasApiResponse;
+      } catch {
+        throw new Error('CNAS check returned HTML instead of JSON (anti-bot triggered)');
+      }
+      return {
+        certDate: json.data?.[0]?.startDate ?? '',
+        totalSize: json.totalSize,
+      };
+    } finally {
+      await release();
     }
-    return {
-      certDate: json.data?.[0]?.startDate ?? '',
-      totalSize: json.totalSize,
-    };
   }
 
   /** Check for updates (lightweight) */
@@ -381,7 +422,6 @@ export class CnasScraper {
     };
   }
 }
-
 function sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
 }

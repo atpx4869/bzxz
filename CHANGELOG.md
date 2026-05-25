@@ -3,6 +3,7 @@
 ## [1.15.0] - 2026-05-23
 
 ### Changed
+- CNAS 同步从「串行 mutex」改为「page pool 真并行」：`CnasScraper` 内部维护共享 browser + per-job context/page + 信号量 `maxConcurrent=3`。同时同步 N 个机构不再排队，整体耗时从 `N × 单机构时间` 压到 `ceil(N/3) × 单机构时间`，N=3-6 时快 3-5x。`navigateToLab` 签名由 `(labInfo) => Promise<Page>` 改为 `(page, labInfo) => Promise<void>`，不再每次 close+relaunch 整个浏览器。`QualificationService` 上一版加的 `cnasSyncChain` Promise 串行链同步移除（page pool 已承接并发安全）
 - 资质订阅与同步日志从「资质查询」整体迁入「系统设置 → 资质订阅」，资质查询页面只保留「搜索」和「可视化」两个子标签，专注查询场景；订阅管理在系统设置中以独立 section 渲染（含 订阅管理 / 同步日志 子标签 + 推荐订阅 + CNAS/CMA 添加表单 + 同步全部）
 - 设置页「桌面程序 · 内置服务端口」卡片内容左偏：原先复用了「开机自启」的 `.desktop-setting-card`（`padding: 0`），但本身没用 `.desktop-setting-row` 把 padding 补回来，内容贴边导致与上方标准卡片不齐。改为不挂 `desktop-setting-card` 类，回到 `.settings-card` 标准 14px 内边距
 - 资质「可视化」标签的「全部展开 / 全部折叠」改为整张机构卡片维度：现在折叠会真的把每张 lab-card 的内容区收起、只留标题（带 ▾/▸ 箭头），点标题也能单卡片折叠。旧实现只切换"展开剩余 N 条"溢出区，默认本来就是收起的，按"全部折叠"看起来毫无效果

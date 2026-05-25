@@ -91,21 +91,6 @@ export class QualificationService {
   private cnasScraper = new CnasScraper();
   /** In-memory sync progress: key = "cnas:labNo" or "cma:certNumber" */
   private syncProgress = new Map<string, SyncProgress>();
-  /**
-   * CnasScraper 是单例 + 单 page，并发同步会互相 close() 掉对方的浏览器实例
-   * （表现：page.evaluate: Target page, context or browser has been closed）。
-   * 用一条 Promise 链把所有 CNAS 同步串行化；CMA 走另一个 scraper，不受影响。
-   */
-  private cnasSyncChain: Promise<unknown> = Promise.resolve();
-
-  /** Serialize work that touches the shared CnasScraper instance. */
-  private runCnasSerially<T>(fn: () => Promise<T>): Promise<T> {
-    // .then(fn, fn) 让前一个任务无论成功失败都不会中断后续任务
-    const next = this.cnasSyncChain.then(() => fn(), () => fn());
-    // 把错误吞到链上，保证 cnasSyncChain 永不进入 rejected 态
-    this.cnasSyncChain = next.catch(() => undefined);
-    return next;
-  }
 
   constructor(db?: Database.Database) {
     this.db = db ?? getDb();
@@ -637,14 +622,10 @@ export class QualificationService {
   // ─── Sync: CNAS ───
 
   /**
-   * 并发安全的 CNAS 同步入口：把请求排进 cnasSyncChain 串行执行，
-   * 避免多任务同时操作 CnasScraper 单例 page。
+   * 并发安全的 CNAS 同步入口：CnasScraper 内部用 page pool（共享 browser + per-job
+   * context/page + 信号量 maxConcurrent=3）承接并发，调用方可以放心并行触发。
    */
-  syncCnasLab(labNo: string, force = false): Promise<{ action: string; records: number }> {
-    return this.runCnasSerially(() => this._syncCnasLabImpl(labNo, force));
-  }
-
-  private async _syncCnasLabImpl(labNo: string, force = false): Promise<{ action: string; records: number }> {
+  async syncCnasLab(labNo: string, force = false): Promise<{ action: string; records: number }> {
     const lab = this.db.prepare('SELECT * FROM cnas_labs WHERE lab_no = ?').get(labNo) as CnasLab | undefined;
     if (!lab) throw new Error(`CNAS lab not found: ${labNo}`);
     if (!lab.base_info_id) throw new Error(`No base_info_id for lab: ${labNo}`);
