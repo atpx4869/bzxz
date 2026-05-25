@@ -269,7 +269,6 @@
     <div class="qual-tab-bar" style="display:flex;gap:0;margin-bottom:14px;border-bottom:1px solid var(--border)">
       <button class="qual-tab active" data-qual-tab="search" onclick="switchQualTab('search')" style="padding:8px 16px;font-size:13px;border:none;background:none;color:var(--text);cursor:pointer;border-bottom:2px solid var(--accent);font-weight:500">搜索</button>
       <button class="qual-tab" data-qual-tab="visual" onclick="switchQualTab('visual')" style="padding:8px 16px;font-size:13px;border:none;background:none;color:var(--text-3);cursor:pointer;border-bottom:2px solid transparent;font-weight:500">可视化</button>
-      <span style="margin-left:auto;align-self:center;font-size:12px;color:var(--text-3)">订阅管理与同步日志已移至 <a href="javascript:switchTab('settings')" style="color:var(--accent);text-decoration:none">系统设置</a></span>
     </div>
     <div id="qualSearchTab" style="display:flex;flex-direction:column;height:calc(100vh - var(--topbar-h) - 140px)">
       <input class="qual-search-input" id="qualSearchInput" type="text" placeholder="输入标准号、实验室名称或关键词…" onkeydown="if(event.key==='Enter')doQualSearch()">
