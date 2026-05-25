@@ -3,10 +3,13 @@ import { Agent, setGlobalDispatcher } from 'undici';
 
 // Reuse TCP/TLS connections across all fetch calls
 // No proxy — direct connection only (bypass Clash / system proxy)
+// connections / pipelining 都是 *每个 origin* 的额度（undici Agent 内部按 origin
+// 维护独立 Pool），bump 到 32 是为多用户场景兜底：BZ 单次导出能并发 12 路下载页面，
+// 4-6 个用户同时导出就吃满 16 路，新请求排队明显。32 仍远低于上游服务器的限流。
 export const httpAgent = new Agent({
   keepAliveTimeout: 30_000,
   keepAliveMaxTimeout: 60_000,
-  connections: 16,
+  connections: 32,
   // Allow up to 4 in-flight requests per connection. GBW IIS handles this fine
   // and it lets us absorb burst of captcha+verify+view requests without
   // opening 4 new TCP sockets.

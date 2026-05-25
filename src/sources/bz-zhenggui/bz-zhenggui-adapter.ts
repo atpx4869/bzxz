@@ -1,4 +1,3 @@
-import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 
@@ -14,6 +13,7 @@ import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/erro
 import { buildFileName, getExportsDir } from '../../shared/fs';
 import { parseStandardId } from '../../shared/id';
 import { pooledFetch } from '../../shared/http';
+import { mergeJpegsToPdf } from '../../shared/pdf-merge';
 import { getCachedPageCount, setCachedPageCount } from '../../shared/page-cache';
 import { searchCache } from '../../shared/cache';
 import { BZ_NEW_BASE, mapBzSearchRow, mapBzDetail, type BzSearchRow } from '../shared/bz-utils';
@@ -152,24 +152,17 @@ export class BzZhengguiAdapter implements SourceAdapter {
     }
 
     const totalPages = previewPages.length;
-    const { PDFDocument } = await import('pdf-lib');
-    const pdfDoc = await PDFDocument.create();
-
-    // Parse + embed JPEG metadata in parallel (pdf-lib stores the bytes;
-    // embedJpg is async because it scans SOI/SOF markers to read dimensions).
-    const images = await Promise.all(previewPages.map((p) => pdfDoc.embedJpg(p.bytes)));
-
-    // addPage/drawImage must run sequentially to preserve page order.
-    for (let idx = 0; idx < images.length; idx += 1) {
-      const image = images[idx];
-      const page = pdfDoc.addPage([image.width, image.height]);
-      page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
-      onProgress?.(idx + 1, totalPages);
-    }
-
     const fileName = buildFileName(detail.standardNumber, detail.title);
     const filePath = path.join(getExportsDir(), fileName);
-    await writeFile(filePath, await pdfDoc.save());
+
+    // pdf-lib synthesis (embedJpg + addPage + drawImage + save) is ~0.5-3s of
+    // pure CPU and would block the main event loop / other API calls. Offload
+    // to a worker_threads pool. jpegBuffers are transferred (zero-copy).
+    await mergeJpegsToPdf({
+      jpegBuffers: previewPages.map((p) => p.bytes),
+      outputPath: filePath,
+      onProgress,
+    });
 
     return {
       standardId: id,

@@ -3,6 +3,9 @@
 ## [1.15.0] - 2026-05-23
 
 ### Changed
+- BZ 标准 PDF 合成移到 worker_threads 池：原本 `embedJpg` + `addPage` + `drawImage` + `pdfDoc.save()` 全跑在 Express 主线程上，单次合成 0.5-3s 纯 CPU 会卡住其他 API。新模块 `src/shared/pdf-merge.ts` + `src/shared/pdf-merge-worker.ts` 用 2 个常驻 worker 承接所有 BZ 导出，JPEG bytes 通过 `transferList` 零拷贝转移；主线程在合成期间继续响应搜索/详情/订阅同步请求。多用户同时下载同一标准的体感卡顿基本消除。
+- GBW captcha tesseract fallback 从单 worker 串行链改成 worker pool=2：原 `tesseractChain` 让所有 OCR 请求排队等同一个 `tesseract.js` worker，在 ddddocr 不可用时多用户 GBW 搜索 captcha 阶段会逐人 +500ms-1s。pool 至少能并行处理 2 路，剩余排队走 `tesseractWaiters` FIFO。ddddocr 主路径本来就靠 UUID 多路复用支持并发，所以这层只在降级时显效。
+- `undici` Agent `connections` 16 → 32：注释补充说明 connections/pipelining 都是 *per origin* 的额度（undici 内部按 origin 维护独立 Pool），所以 16 是单源在多用户并发下的瓶颈而非全局上限。BZ 单次导出能并发 12 路下载页面，4-6 用户同时导出就吃满。32 仍远低于上游服务器限流。
 - CNAS 同步从「串行 mutex」改为「page pool 真并行」：`CnasScraper` 内部维护共享 browser + per-job context/page + 信号量 `maxConcurrent=3`。同时同步 N 个机构不再排队，整体耗时从 `N × 单机构时间` 压到 `ceil(N/3) × 单机构时间`，N=3-6 时快 3-5x。`navigateToLab` 签名由 `(labInfo) => Promise<Page>` 改为 `(page, labInfo) => Promise<void>`，不再每次 close+relaunch 整个浏览器。`QualificationService` 上一版加的 `cnasSyncChain` Promise 串行链同步移除（page pool 已承接并发安全）
 - 资质订阅与同步日志从「资质查询」整体迁入「系统设置 → 资质订阅」，资质查询页面只保留「搜索」和「可视化」两个子标签，专注查询场景；订阅管理在系统设置中以独立 section 渲染（含 订阅管理 / 同步日志 子标签 + 推荐订阅 + CNAS/CMA 添加表单 + 同步全部）
 - 设置页「桌面程序 · 内置服务端口」卡片内容左偏：原先复用了「开机自启」的 `.desktop-setting-card`（`padding: 0`），但本身没用 `.desktop-setting-row` 把 padding 补回来，内容贴边导致与上方标准卡片不齐。改为不挂 `desktop-setting-card` 类，回到 `.settings-card` 标准 14px 内边距
