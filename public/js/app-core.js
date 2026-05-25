@@ -166,8 +166,8 @@ let activeDrag = null;
 window._tabCleanup = window._tabCleanup || {};
 
 function switchTab(tab) {
-  // Permission check
-  if (currentUser && currentUser.allowedTabs && tab !== 'users') {
+  // Permission check — 'users' 由 sidebar 显示/隐藏控制；'me' 是手机端入口（每个登录态用户都可用）
+  if (currentUser && currentUser.allowedTabs && tab !== 'users' && tab !== 'me') {
     if (currentUser.allowedTabs.indexOf(tab) < 0) return;
   }
   for (const fn of Object.values(window._tabCleanup)) {
@@ -197,8 +197,41 @@ function switchTab(tab) {
   }
   if (tab === 'batch') updateBatchSourceHint();
   // page-qual now only hosts 搜索 + 可视化, no eager load needed.
+
+  // ── URL 路由：写回 ?tab=… 同时保留 ?desktop=1 等其他参数 ──
+  try {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('tab') !== tab) {
+      params.set('tab', tab);
+      var qs = params.toString();
+      var newUrl = window.location.pathname + (qs ? '?' + qs : '') + window.location.hash;
+      window.history.replaceState(null, '', newUrl);
+    }
+  } catch (e) { /* URLSearchParams 异常忽略 */ }
+
+  // ── 派发 tabchange 事件，供 mobile-tabbar 等订阅者同步 active ──
+  try {
+    window.dispatchEvent(new CustomEvent('tabchange', { detail: { tab: tab } }));
+  } catch (e) { /* CustomEvent 兼容性兜底，IE 不在支持范围 */ }
 }
-function initRouter() { switchTab("search"); }
+
+// initRouter 解析 URL 的 ?tab=xxx，缺省走 search。
+// ?desktop=1 / layout 切换由 app-mobile.js 的 applyLayoutMode 单独处理，与本函数解耦。
+function initRouter() {
+  var KNOWN_TABS = ['search', 'batch', 'complete', 'qual', 'local', 'history', 'settings', 'users', 'stats', 'me'];
+  var requested = 'search';
+  try {
+    var params = new URLSearchParams(window.location.search);
+    var t = params.get('tab');
+    if (t && KNOWN_TABS.indexOf(t) >= 0) requested = t;
+  } catch (e) { /* ignore */ }
+  switchTab(requested);
+}
+
+// 浏览器前进/后退时按当前 URL 重新派发到对应 tab。
+window.addEventListener('popstate', function() {
+  try { initRouter(); } catch (e) { /* ignore */ }
+});
 function toggleSidebar() { document.body.classList.toggle("sidebar-collapsed"); }
 
 function initPanels() { initRouter(); }

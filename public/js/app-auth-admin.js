@@ -125,6 +125,18 @@ function onAuthReady() {
     document.getElementById('udManageUsers').style.display = '';
     if (sb) sb.style.display = '';
   }
+  // 手机端「我」页 — 填充用户卡片 + 按角色控制管理员项。桌面端 me 页通常不暴露
+  // 入口，但 force-desktop 模式下进 ?tab=me 时也能正常显示。
+  var meName = document.getElementById('meUserName');
+  if (meName) meName.textContent = currentUser.displayName || currentUser.username;
+  var meRole = document.getElementById('meUserRole');
+  if (meRole) meRole.textContent = currentUser.role === 'admin' ? '管理员' : (currentUser.username === '_guest' ? '访客' : '普通用户');
+  var meLogout = document.getElementById('meLogoutBtn');
+  if (meLogout) meLogout.style.display = currentUser.username === '_guest' ? 'none' : '';
+  var meStats = document.getElementById('meRowStats');
+  var meUsers = document.getElementById('meRowUsers');
+  if (meStats) meStats.style.display = currentUser.role === 'admin' ? '' : 'none';
+  if (meUsers) meUsers.style.display = currentUser.role === 'admin' ? '' : 'none';
   // Apply per-user tab permissions
   applyTabPermissions();
   // Show announcements & release notes after auth
@@ -144,7 +156,7 @@ function onAuthReady() {
   if (typeof pollEnvironmentCheck === 'function') pollEnvironmentCheck();
 }
 
-var TAB_LABELS = {search:'标准检索',batch:'批量下载',complete:'标准补全',history:'下载历史',qual:'资质查询',stats:'使用统计',users:'用户管理',settings:'系统设置'};
+var TAB_LABELS = {search:'标准检索',batch:'批量下载',complete:'标准补全',history:'下载历史',qual:'资质查询',stats:'使用统计',users:'用户管理',settings:'系统设置',me:'我'};
 
 function applyTabPermissions() {
   var allowed = currentUser.allowedTabs; // null = all allowed

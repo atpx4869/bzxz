@@ -660,6 +660,9 @@ function _moveActiveRow(delta) {
   _setActiveRow(cards[idx]);
 }
 document.addEventListener('keydown', e => {
+  // Mobile layout: 键盘快捷键（j/k/g/G/x/d/s 等）不可用 —— 没有物理键盘场景，
+  // 也避免和"我"页等没有 active-row 的页面交互冲突。
+  if (typeof window.isMobile === 'function' && window.isMobile()) return;
   // Skip when typing in input/textarea/contenteditable
   const tag = (e.target.tagName || '').toLowerCase();
   if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) return;
