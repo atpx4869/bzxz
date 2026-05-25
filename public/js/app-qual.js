@@ -47,7 +47,9 @@ function switchQualSettingsTab(tab) {
 
 async function doQualBatchVisual() {
   const input = document.getElementById('qualBatchInput');
-  const queries = [...new Set(input.value.split(/[\n\r,，;；]+/).map(s => s.trim()).filter(Boolean))];
+  // 行内分隔符：换行 / 逗号（中英）/ 分号（中英）/ 顿号 / 中文句号 / 制表符
+  // 不切英文句号 `.`，否则 "GB 5009.9" 这类标准号会被切坏
+  const queries = [...new Set(input.value.split(/[\n\r,，;；、。\t]+/).map(s => s.trim()).filter(Boolean))];
   const stats = document.getElementById('qualVisualStats');
   const out = document.getElementById('qualVisualResults');
   if (!queries.length) {
