@@ -12,6 +12,10 @@ function switchQualTab(tab) {
     setTimeout(() => switchQualSettingsTab(tab === 'logs' ? 'logs' : 'labs'), 0);
     return;
   }
+  // 手机模式：搜索子标签 UI 隐藏（见 styles.css），强制走可视化页。
+  if (typeof window.isMobile === 'function' && window.isMobile()) {
+    tab = 'visual';
+  }
   document.querySelectorAll('.qual-tab').forEach(t => {
     const active = t.dataset.qualTab === tab;
     t.classList.toggle('active', active);
@@ -68,9 +72,24 @@ async function doQualBatchVisual() {
     const data = await readQualApiJson(res);
     if (!res.ok) throw new Error(data.message || '查询失败');
     renderQualVisual(queries, data);
+    // 手机模式：查询成功后折叠输入框，让结果占满视野
+    if (typeof window.isMobile === 'function' && window.isMobile()) {
+      const card = document.getElementById('qualVisualInputCard');
+      if (card) card.classList.add('collapsed');
+    }
   } catch (e) {
     stats.innerHTML = `<span style="color:var(--danger)">查询失败: ${escapeHtml(e.message)}</span>`;
   }
+}
+
+function expandQualVisualInput() {
+  // 仅手机模式生效：折叠态点击标题 → 展开回 textarea
+  if (typeof window.isMobile !== 'function' || !window.isMobile()) return;
+  const card = document.getElementById('qualVisualInputCard');
+  if (!card || !card.classList.contains('collapsed')) return;
+  card.classList.remove('collapsed');
+  const input = document.getElementById('qualBatchInput');
+  if (input) setTimeout(() => input.focus(), 50);
 }
 
 function fillQualBatchFromSaved() {

@@ -275,9 +275,9 @@
     </div>
     <div id="qualVisualTab" style="display:none">
       <div class="qual-visual-workspace">
-        <section class="qual-visual-card">
+        <section class="qual-visual-card" id="qualVisualInputCard">
           <div class="batch-kicker">本地缓存能力查询</div>
-          <h3>按关键词查看已订阅机构能力</h3>
+          <h3 onclick="expandQualVisualInput()">按关键词查看已订阅机构能力</h3>
           <textarea id="qualBatchInput" class="batch-textarea" placeholder="可输入标准号、标准名称、检测项目、机构名称&#10;支持换行 / 逗号 , ， / 分号 ; ； / 顿号 、 / 句号 。 分隔&#10;例：GB 5009.9、淀粉、食品安全国家标准"></textarea>
           <div class="batch-actions">
             <button class="btn btn-primary btn-sm" onclick="doQualBatchVisual()">查询能力</button>
@@ -387,7 +387,50 @@
       </div>
     </div>
   </div>
+
+  <!-- Page: "我" (mobile-only tab; desktop sidebar 不暴露入口) -->
+  <div class="page" id="page-me">
+    <h2 style="font-size:20px;font-weight:600;margin-bottom:18px">我</h2>
+    <div class="me-section">
+      <div class="me-user">
+        <div class="me-user-avatar" id="meUserAvatar" aria-hidden="true">👤</div>
+        <div class="me-user-info">
+          <div class="me-user-name" id="meUserName">未登录</div>
+          <div class="me-user-role" id="meUserRole"></div>
+        </div>
+        <button class="btn btn-sm btn-ghost" id="meLogoutBtn" onclick="doLogout()">登出</button>
+      </div>
+    </div>
+    <div class="me-section">
+      <button class="me-row" type="button" onclick="switchTab('settings')"><span class="me-row-icon">⚙</span><span class="me-row-label">设置</span><span class="me-row-arrow">›</span></button>
+      <button class="me-row" type="button" id="meRowStats" onclick="switchTab('stats')" style="display:none"><span class="me-row-icon">📊</span><span class="me-row-label">使用统计</span><span class="me-row-arrow">›</span></button>
+      <button class="me-row" type="button" id="meRowUsers" onclick="switchTab('users')" style="display:none"><span class="me-row-icon">👥</span><span class="me-row-label">用户管理</span><span class="me-row-arrow">›</span></button>
+      <button class="me-row" type="button" id="meRowHistory" onclick="switchTab('history')"><span class="me-row-icon">📜</span><span class="me-row-label">下载历史</span><span class="me-row-arrow">›</span></button>
+    </div>
+    <div class="me-section">
+      <button class="me-row" type="button" onclick="toggleDesktopLayout()"><span class="me-row-icon">☰</span><span class="me-row-label" id="meToggleLayoutLabel">切换到完整版</span><span class="me-row-arrow">›</span></button>
+    </div>
+    <div class="me-footer">
+      <span id="meVersion">标准盒子</span>
+    </div>
+  </div>
 </div>
+
+<!-- Mobile bottom tabbar (仅 ≤640px 显示，由 app-mobile.js 与 CSS 共同控制) -->
+<nav class="mobile-tabbar" id="mobileTabbar" role="tablist" aria-label="主导航">
+  <button class="mobile-tab active" type="button" data-tab="search" role="tab" aria-selected="true">
+    <span class="mobile-tab-icon" aria-hidden="true">🔍</span>
+    <span class="mobile-tab-label">标准</span>
+  </button>
+  <button class="mobile-tab" type="button" data-tab="qual" role="tab" aria-selected="false">
+    <span class="mobile-tab-icon" aria-hidden="true">📋</span>
+    <span class="mobile-tab-label">资质</span>
+  </button>
+  <button class="mobile-tab" type="button" data-tab="me" role="tab" aria-selected="false">
+    <span class="mobile-tab-icon" aria-hidden="true">👤</span>
+    <span class="mobile-tab-label">我</span>
+  </button>
+</nav>
 
 <!-- Log panel -->
 <div class="log-panel collapsed" id="logPanel">
@@ -501,6 +544,7 @@
 <script src="/js/app-auth-admin.js"></script>
 <script src="/js/app-announcements.js"></script>
 <script src="/js/app-qual.js"></script>
+<script src="/js/app-mobile.js"></script>
 
 </body>
 </html>

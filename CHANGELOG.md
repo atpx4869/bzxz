@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- 手机端响应式骨架 + URL 路由（Phase 0+1 of 手机适配；详见 `docs/MOBILE_ADAPTATION.md`）：
+  - **URL 路由**：`switchTab(tab)` 现在写回 `?tab=…`（保留 `?desktop=1` 等其他参数）并 dispatch `tabchange` 自定义事件；`initRouter()` 从 stub 升级到读 URL 进路由（白名单校验，缺省 `search`）；`popstate` 监听让浏览器前进/后退按 URL 进路由。可分享形如 `http://<lan-ip>:5937/?tab=qual` 的深链。`public/js/app-core.js`
+  - **手机布局**：`@media (max-width:640px)` 块重写 —— sidebar 完全隐藏（不再用 60px 折叠），底部新增 `<nav class="mobile-tabbar">` 三 tab（标准 / 资质 / 我），content 留出 72px 底部 + safe-area-inset；结果卡片单列、批量勾选/快捷键禁用、按钮 ≥44×44px 触控热区；input 字号 ≥16px 防 iOS 自动缩放。`public/styles.css` + `public/index.html` + 新增 `public/js/app-mobile.js`
+  - **"我"页**：手机端专属 tab，登录态显示用户名 + 角色，按权限露出"使用统计 / 用户管理 / 下载历史"行；底部"切换到完整版"开关写 `localStorage['bzxz.layout']`，配合 `?desktop=1` URL 参数构成桌面布局逃生口。新增 `<div id="page-me">` + `me-*` 样式
+  - **Legacy guard**：`app-search.js` 全局 keydown（j/k/g/G/x/d/s）入口加 `if (window.isMobile()) return;`；`app-qual.js` `switchQualTab` 在手机模式强制走可视化页（搜索子标签 UI 隐藏）
+  - **不变**：桌面端视觉零回归（所有 `≤640px` 规则用 `body:not(.force-desktop)` 包裹，PC 端 specificity 不变）；后端、Electron 主进程、端口逻辑均未改动
+- 资质可视化手机版（Phase 2 of 手机适配，部分）：
+  - 统计 4 卡改 2×2 网格、字号增到 20px、单卡 ≥56px 触控热区。`public/styles.css`
+  - 查询成功后输入框自动折叠成一行摘要（仅手机），点折叠态标题 → 展开回 textarea 并 focus，结果占满视野。`public/index.html` + `public/js/app-qual.js`（`expandQualVisualInput()`）
+  - `qual-visual-lab-head` 改 sticky，方便长结果列表浏览；cap 行加大到 44px 触控热区
+  - 推迟：统计卡点击下钻、管理员同步进度 banner —— 留到 Phase 2.1/2.2
+
 ## [1.15.0] - 2026-05-23
 
 ### Changed
