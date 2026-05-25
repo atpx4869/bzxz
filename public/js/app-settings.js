@@ -231,15 +231,24 @@ function renderWebAccessCard() {
     : '当前是浏览器 Web 端，无法控制桌面内置服务。';
   var statusClass = webAccessState.error ? ' danger' : (enabled && lanUrls.length ? ' success' : '');
   var urlRows = urls.length ? urls.map(function(url, idx) {
-    var label = idx === 0 ? '本机' : '内网';
+    var isLocal = idx === 0;
+    var label = isLocal ? '本机' : '内网';
+    var phoneHint = !isLocal ? ' <span class="web-access-phone-hint" title="手机浏览器或扫码访问的目标地址">📱 手机版</span>' : '';
     return `
       <div class="web-access-url-row">
-        <span>${label}</span>
+        <span>${label}${phoneHint}</span>
         <code title="${escapeHtml(url)}">${escapeHtml(url)}</code>
         ${supported ? `<button class="btn btn-sm btn-ghost" onclick="copyWebAccessUrl('${escapeHtml(url)}')">复制</button>` : ''}
         ${supported ? `<button class="btn btn-sm btn-ghost" onclick="openWebAccessUrl('${escapeHtml(url)}')">打开</button>` : ''}
       </div>`;
   }).join('') : '<div class="setting-hint">未获取到访问地址</div>';
+  var phoneTipHtml = (supported && enabled && lanUrls.length) ? `
+        <div class="web-access-phone-tip">
+          <strong>📱 手机访问：</strong>
+          确认手机与本机在同一 Wi-Fi 下，在浏览器输入上方「内网」地址；
+          支持「添加到主屏」（iOS Safari / Android Chrome），独立窗口体验。
+          <span class="setting-hint" style="display:block;margin-top:4px">小贴士：HTTP 内网部署，离线缓存暂未启用。</span>
+        </div>` : '';
   return `
       <div class="settings-card wide web-access-card">
         <div class="settings-card-header">
@@ -257,6 +266,7 @@ function renderWebAccessCard() {
           </div>
         </div>
         <div class="web-access-url-list">${urlRows}</div>
+        ${phoneTipHtml}
       </div>`;
 }
 

@@ -106,6 +106,25 @@
 |---|---|---|---|
 | `public/js/app-qual.js` | 改 | 2.1 | 统计卡 click 下钻（命中/CNAS/CMA/过期 过滤当前结果） |
 | `public/styles.css` + `app-qual.js` | 改 | 2.2 | 同步进度 banner（管理员可见、轮询现有 sync-logs） |
+
+**Phase 3 落地（2026-05-25）：**
+
+| 文件 | 操作 | Phase | 内容 |
+|---|---|---|---|
+| `public/icon-192.png` / `icon-512.png` / `icon-maskable-512.png` / `apple-touch-icon.png` | **新建** | **3 ✅** | 从 `logo.png` 衍生：192/512 透明缩放、maskable 走 80% 安全区 + #0f1117 深色画布、apple 180px |
+| `public/manifest.webmanifest` | **新建** | **3 ✅** | name/short_name/start_url=/?from=pwa/display=standalone/theme_color=#0f1117 + 3 icons |
+| `public/index.html` | 改 | **3 ✅** | `<head>` 加 `<link rel="manifest">` + theme-color + 4 个 apple meta + apple-touch-icon |
+
+**Phase 4 部分落地（2026-05-25）：**
+
+| 文件 | 操作 | Phase | 内容 |
+|---|---|---|---|
+| `public/js/app-settings.js` | 改 | **4 ✅** | `renderWebAccessCard()` 给内网 URL 行加「📱 手机版」徽章；卡片底部增加「📱 手机访问」灰提示框（Wi-Fi 同网 + 添加到主屏指引 + HTTP 无离线缓存说明） |
+| `public/styles.css` | 改 | **4 ✅** | `.web-access-phone-hint` 徽章 / `.web-access-phone-tip` 提示框样式 |
+
+> **桌面端原有能力**（URL 列表、复制、打开、`webServiceEnabled` 开关、端口 fallback 红字提示）在 `web-access-card` + `renderPortSettingCard` 内**早已实装**，Phase 4 只做手机使用场景的可见性增强。
+>
+> **二维码方案废弃**：原文档 §5.6 / §8 提到的 QR 生成永久不做。手动输 IP 或复制按钮已够用，引入 vendored QR 库（~20KB + 加密器代码）收益不成正比。文档中保留 §8 仅供历史参考。
 | `public/manifest.webmanifest` | **新建** | 3 | PWA manifest（manifest-only，详见 §6） |
 | `public/icon-{192,512,maskable-512}.png` + `apple-touch-icon.png` | **新建** | 3 | PWA 图标，从 logo.png 衍生 |
 | `public/index.html` | 改 | 3 | `<head>` 加 `manifest` link + 5 个 apple meta + theme-color |
@@ -688,15 +707,16 @@ export function installMobileTabbar(): void {
 2. `app-qual.js` 输入折叠 + `expandQualVisualInput()` ✅
 3. 统计卡点击下钻 / 同步进度 banner ❌ 推迟到 Phase 2.1/2.2
 
-**Phase 3 · PWA（manifest-only）**（1 次提交）
-1. 生成 4 个图标 PNG（192 / 512 / maskable-512 / apple-touch-icon）放 `web/public/`
-2. 新建 `web/public/manifest.webmanifest`
-3. `web/index.html` 加 manifest link + 5 个 apple meta + theme-color
-4. **不装** `vite-plugin-pwa`，**不写** `modules/mobile/pwa.ts`（HTTP 注册 SW 不可行，见 §6.3）
+**Phase 3 · PWA（manifest-only）（✅ 已完成 2026-05-25）**
+1. ✅ 4 个图标 PNG 落 `public/`：192/512 直接缩放、maskable-512 走 80% 安全区 + 深色画布、apple-touch-icon 180px
+2. ✅ `public/manifest.webmanifest`
+3. ✅ `public/index.html <head>` 加 manifest link + theme-color + 4 个 apple meta + apple-touch-icon
+4. ⚠️ 路径全部 `public/`（非原文档写的 `web/public/`），与 §1 一致
 
-**Phase 4 · 桌面端配套**（1 次提交）
-1. 设置页"手机访问"区块 + 二维码
-2. 端口 fallback 红字提示
+**Phase 4 · 桌面端配套（✅ 已完成 2026-05-25）**
+1. ✅ URL 列表/复制/打开/LAN 开关/端口 fallback 红字提示 —— **此前已实装**
+2. ✅ 内网行加「📱 手机版」徽章；卡片底加灰提示框（同网 Wi-Fi + 添加到主屏指引）
+3. ❌ 二维码生成 —— **不做**：手动输 IP / 复制按钮已够用，vendor QR 库（~20KB + 复杂加密器）收益不成正比
 
 **Phase 5 · 文档同步**
 按第 11 节清单全过一遍。

@@ -523,6 +523,9 @@ body.sidebar-collapsed .log-panel { left: var(--sidebar-collapsed-w); }
 .web-access-url-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 8px; border: 1px solid oklch(26% 0.012 255 / 0.42); border-radius: var(--radius-sm); background: oklch(15% 0.012 255 / 0.35); }
 .web-access-url-row span { color: var(--text-3); font-size: 12px; }
 .web-access-url-row code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent-h); font: 600 12px 'DM Mono', monospace; }
+.web-access-phone-hint { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: oklch(66% 0.20 250 / 0.18); color: var(--accent-h); font-size: 10px; font-weight: 600; }
+.web-access-phone-tip { margin-top: 10px; padding: 10px 12px; border: 1px dashed oklch(26% 0.012 255 / 0.5); border-radius: var(--radius-sm); background: oklch(17% 0.014 255 / 0.32); color: var(--text-2); font-size: 12px; line-height: 1.6; }
+.web-access-phone-tip strong { color: var(--text); margin-right: 4px; }
 .update-card .settings-actions { margin-top: 12px; }
 .version-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; color: var(--text-3); font-size: 12px; }
 .version-row span { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; border: 1px solid oklch(26% 0.012 255 / 0.42); border-radius: var(--radius-sm); background: oklch(15% 0.012 255 / 0.35); }

@@ -25,9 +25,10 @@
   - `public/manifest.webmanifest`：name/short_name=标准盒子、`start_url=/?from=pwa`、`display=standalone`、`theme_color=#0f1117`、三个 icon（192/512/maskable-512）
   - `public/icon-{192,512,maskable-512}.png` + `apple-touch-icon.png`：从 `logo.png` 衍生，maskable 走 PWA 80% 安全区 + 深色画布兜底
   - `public/index.html <head>`：加 `<link rel="manifest">` + theme-color + 4 个 `apple-mobile-web-app-*` meta + apple-touch-icon
-- 设置页「手机访问」可见性增强（Phase 4 of 手机适配，部分）：
-  - 内网 URL 行追加「📱 手机版」蓝色徽章，第一眼能看出哪条是给手机扫码用的；卡片底部新增灰提示框：同网 Wi-Fi + 「添加到主屏」指引 + HTTP 暂未启用离线缓存的说明。`public/js/app-settings.js:renderWebAccessCard()` + `public/styles.css` `.web-access-phone-{hint,tip}`
-  - 预留 `#webAccessQrSlot` 容器：vendored `qrcode-generator` 落到 `public/vendor/` 后由 Phase 4.1 接入；URL/复制/打开/`webServiceEnabled` 开关/端口 fallback 红字提示在 prior commits 已实装，本次未动
+- 设置页「手机访问」可见性增强（Phase 4 of 手机适配）：
+  - 内网 URL 行追加「📱 手机版」蓝色徽章，第一眼能看出哪条是给手机用的；卡片底部新增灰提示框：同网 Wi-Fi + 「添加到主屏」指引 + HTTP 暂未启用离线缓存的说明。`public/js/app-settings.js:renderWebAccessCard()` + `public/styles.css` `.web-access-phone-{hint,tip}`
+  - URL/复制/打开/`webServiceEnabled` 开关/端口 fallback 红字提示在 prior commits 已实装，本次未动
+  - **不做二维码**：手动输入 IP 或点复制按钮足够，避免引入 ~20KB vendored QR 库 + 复杂加密器
 
 ## [1.15.0] - 2026-05-23
 
