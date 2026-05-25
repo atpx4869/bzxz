@@ -863,15 +863,15 @@ function qualBadgeHtml(standardNumber) {
   const cnas = quals.filter(q => q.source === 'CNAS');
   const cma = quals.filter(q => q.source === 'CMA');
   let html = '<span class="qual-badges">';
+  // Badge text 只显示 source 简称（CNAS / CMA），保持两源视觉对齐；
+  // 完整证书有效期 / 机构数等明细在 hover tooltip 里给。
   if (cnas.length) {
-    const date = cnas[0].effectiveDate || '';
     const tip = buildQualTooltip(cnas, 'CNAS');
-    html += `<span class="qual-badge qual-badge-cnas"><span class="qual-dot"></span>CNAS${date ? ' ' + date : ''}<span class="qual-tooltip">${tip}</span></span>`;
+    html += `<span class="qual-badge qual-badge-cnas"><span class="qual-dot"></span>CNAS<span class="qual-tooltip">${tip}</span></span>`;
   }
   if (cma.length) {
-    const date = cma[0].effectiveDate || '';
     const tip = buildQualTooltip(cma, 'CMA');
-    html += `<span class="qual-badge qual-badge-cma"><span class="qual-dot"></span>CMA${date ? ' ' + date : ''}<span class="qual-tooltip">${tip}</span></span>`;
+    html += `<span class="qual-badge qual-badge-cma"><span class="qual-dot"></span>CMA<span class="qual-tooltip">${tip}</span></span>`;
   }
   html += '</span>';
   return html;

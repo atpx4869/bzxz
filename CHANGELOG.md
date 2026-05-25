@@ -3,6 +3,7 @@
 ## [1.15.0] - 2026-05-23
 
 ### Changed
+- 标准检索结果的资质徽章去掉日期后缀：原 CMA 徽章显示 `CMA 2026-03-12`，CNAS 徽章显示 `CNAS`（因 CNAS effectiveDate 在 DB 为空，看起来两源不对齐）。现在统一只显示纯 `CNAS` / `CMA` 三字简称，证书有效期、机构数等明细仍在 hover tooltip 里。`public/js/app-qual.js:qualBadgeHtml()` 单点改动。
 - 内置 Web 服务默认端口固定为 **5937**（原先 `preferredPort: null` 走随机端口）：局域网多用户场景需要稳定 URL 才能书签，随机端口每次启动都换地址用户体验差。`electron/main.ts:getDefaultSettings()` 默认改为 `preferredPort: DEFAULT_PREFERRED_PORT (5937)`，已有用户的 `bzxz-settings.json` 不受影响（loadSettings 的 `{...defaults, ...saved}` 合并保留用户旧值）。5937 被占用时仍走 fallback 到随机端口，tray UI 同时显示 preferredPort 与 actualPort。
 - Electron 打包路径预防：`package.json` 的 `build.asarUnpack` 加入 `dist/src/shared/pdf-merge-worker.js`，`src/shared/pdf-merge.ts:getWorkerEntry()` 自动把 `app.asar` 路径改写成 `app.asar.unpacked`。worker_threads 不能从 asar 内加载 `.js`，本地 `npm run dev` 看不出来，上 NSIS / portable 打包后才会炸——提前堵住。
 - 进程退出钩子补 PDF worker 池清理：`src/api/app.ts:shutdown()` 现在会 `closePdfMergePool()`，避免 Electron 关窗时 worker 线程悬挂导致主进程多挂几秒。
