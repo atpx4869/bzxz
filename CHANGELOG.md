@@ -11,6 +11,10 @@
 
 ### Fixed
 - 修改密码输错原密码时 `apiFetch` 将 401 误判为会话过期，把用户踢回登录页：现在 `/api/auth/*` 上的 401 统一由调用方处理，不再触发 overlay
+- 资质订阅多账号同步并发会互相 close() 掉 CnasScraper 单例浏览器实例（报 `page.evaluate: Target page, context or browser has been closed`）：
+  `QualificationService` 新增 `cnasSyncChain` Promise 串行链 + `runCnasSerially()` 包裹，`syncCnasLab` 改成入口转发，
+  实际工作放到 `_syncCnasLabImpl`。链上的失败不污染下一个任务（`.then(fn, fn)` + `.catch(()=>undefined)`）。
+  CMA 走纯 HTTP scraper，不受影响。
 - 退出登录按钮"按了没反应"：旧 `doLogout` 在 DELETE /session 后立刻 `checkAuthStatus`，免登录模式下后端会马上派一个新 guest 会话，UI 一闪即恢复，看起来像退不掉。改为停在登录页并提供「继续以访客身份使用」入口
 - 登录 overlay 在登出 / 会话过期时残留 register-mode 文案与上次输入的密码：新增 `resetAuthFormToLogin()`，每次显示 overlay 前先回到 login 默认态并清空密码框；登录/注册切换时也清空密码
 - 登录表单可双击重复提交：提交期间禁用按钮，并校验用户名/密码非空
