@@ -3,6 +3,9 @@
 ## [1.15.0] - 2026-05-23
 
 ### Changed
+- Electron 打包路径预防：`package.json` 的 `build.asarUnpack` 加入 `dist/src/shared/pdf-merge-worker.js`，`src/shared/pdf-merge.ts:getWorkerEntry()` 自动把 `app.asar` 路径改写成 `app.asar.unpacked`。worker_threads 不能从 asar 内加载 `.js`，本地 `npm run dev` 看不出来，上 NSIS / portable 打包后才会炸——提前堵住。
+- 进程退出钩子补 PDF worker 池清理：`src/api/app.ts:shutdown()` 现在会 `closePdfMergePool()`，避免 Electron 关窗时 worker 线程悬挂导致主进程多挂几秒。
+- `docs/ARCHITECTURE.md` 新增「九、并发架构」章节：CnasScraper page pool / PDF merge worker pool / Tesseract pool / undici per-origin / ddddocr 多路复用 一处汇总，含总览表。新加耗时操作前应先翻这一节。
 - BZ 标准 PDF 合成移到 worker_threads 池：原本 `embedJpg` + `addPage` + `drawImage` + `pdfDoc.save()` 全跑在 Express 主线程上，单次合成 0.5-3s 纯 CPU 会卡住其他 API。新模块 `src/shared/pdf-merge.ts` + `src/shared/pdf-merge-worker.ts` 用 2 个常驻 worker 承接所有 BZ 导出，JPEG bytes 通过 `transferList` 零拷贝转移；主线程在合成期间继续响应搜索/详情/订阅同步请求。多用户同时下载同一标准的体感卡顿基本消除。
 - GBW captcha tesseract fallback 从单 worker 串行链改成 worker pool=2：原 `tesseractChain` 让所有 OCR 请求排队等同一个 `tesseract.js` worker，在 ddddocr 不可用时多用户 GBW 搜索 captcha 阶段会逐人 +500ms-1s。pool 至少能并行处理 2 路，剩余排队走 `tesseractWaiters` FIFO。ddddocr 主路径本来就靠 UUID 多路复用支持并发，所以这层只在降级时显效。
 - `undici` Agent `connections` 16 → 32：注释补充说明 connections/pipelining 都是 *per origin* 的额度（undici 内部按 origin 维护独立 Pool），所以 16 是单源在多用户并发下的瓶颈而非全局上限。BZ 单次导出能并发 12 路下载页面，4-6 用户同时导出就吃满。32 仍远低于上游服务器限流。

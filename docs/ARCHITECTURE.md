@@ -162,3 +162,70 @@ type ApiResult<T> =
 - [ ] 用 `apiGet/apiPostJson/...` 或 `fetch + readApiResponse`
 - [ ] 起了 timer/poller？注册到 `window._tabCleanup`
 - [ ] 字段名用 camelCase
+
+
+---
+
+## 九、并发架构（多用户场景）
+
+> 服务推广到内网后会出现 N 个用户同时检索 / 下载 / 同步资质的情况。
+> 这一节记录关键资源池的设计，新加耗时操作前先看这里——别再回退成全局 mutex。
+
+### 1. CnasScraper 页面池（`src/services/cnas-scraper.ts`）
+
+**问题**：CNAS 实验室同步走 Playwright，原先用 Promise 链 mutex 串行化，N 个用户排队等。
+
+**方案**：共享 Browser + 每任务独立 Context/Page + 信号量。
+
+- `openPage()` 复用同一个 browser，每个调用方拿到独立的 `Context` + `Page`
+- 信号量 `maxConcurrent = 3`（CNAS 站点限速 + 内存占用平衡）
+- `navigateToLab(page, labInfo)` 改为接收外部 page，由 caller 负责生命周期
+
+**禁止**：在 scraper 外再加 mutex / Promise 链——会把并发吃光。
+
+### 2. PDF 合成 Worker 池（`src/shared/pdf-merge.ts` + `pdf-merge-worker.ts`）
+
+**问题**：`pdf-lib` 合成 1 个标准 ≈ 0.5–3s 纯 CPU，多人同时下载时主线程被钉死，API 响应停滞。
+
+**方案**：`worker_threads` 池，JPEG 通过 `transferList` 零拷贝传给 worker。
+
+- `POOL_SIZE = 2`（两个常驻 worker 保持热启动）
+- `mergeJpegsToPdf({ jpegBuffers, outputPath, onProgress })`——`jpegBuffers` 的 ArrayBuffer 会被 detach
+- 队列 + WeakMap 跟踪每个 slot 的 pending job
+- Worker 启动开销 ≈ 50-100ms（pdf-lib 懒加载首次）
+
+**Electron 打包注意**：worker_threads 不能从 `app.asar` 加载 `.js`。`package.json` 的 `build.asarUnpack` 拉出 `dist/src/shared/pdf-merge-worker.js`，`getWorkerEntry()` 把路径里的 `app.asar` 改写成 `app.asar.unpacked`。**改 pdf-merge 相关文件位置时必须同步这两处。**
+
+**Shutdown**：`src/api/app.ts:shutdown()` 调用 `closePdfMergePool()` 让 worker 优雅退出。
+
+### 3. Tesseract Worker 池（`src/sources/shared/captcha-ocr.ts`）
+
+**问题**：tesseract.js 的 worker 不能并发 `recognize`，原先用 mutex 全局串行。
+
+**方案**：`POOL_SIZE = 2` 池 + free 栈 + waiters FIFO 队列。
+
+- `acquireTesseract()` / `releaseTesseract()`——经典的信号量模式
+- 只在 ddddocr Python 子进程不可用时回退到 tesseract，所以 2 个 worker 够用
+
+### 4. undici HTTP 连接池（`src/shared/http.ts`）
+
+**配置**：`connections: 32, pipelining: 4`（per-origin）。
+
+- 32 是经验值：源站点（如 bz / gbw / by）单 host 不容易触发限速，但又不会暴起耗本机端口
+- pipelining=4 在 keep-alive 长连接上做请求复用——绝大多数源站 HTTP/1.1，pipelining 比建新连接便宜
+
+### 5. ddddocr 子进程多路复用（`src/sources/shared/captcha-ocr.ts`）
+
+ddddocr 是单 Python 进程，请求/响应通过 **UUID-keyed pending map** 多路复用：调用方塞一个 reqId 进 stdin，监听 stdout 收到同一 reqId 时 resolve。无锁，天然并发安全。
+
+### 总览
+
+| 资源 | 池大小 | 模式 | 触发场景 |
+|------|--------|------|----------|
+| CnasScraper Page | 3 | 共享 browser + 每任务 context | CNAS 资质同步 |
+| PDF Merge Worker | 2 | worker_threads | bz 源逐页 JPEG → PDF 合成 |
+| Tesseract Worker | 2 | tesseract.js 池 | 验证码 OCR（ddddocr 不可用时回退）|
+| undici HTTP | 32/origin | keep-alive + pipelining | 所有外网 HTTP 请求 |
+| ddddocr 子进程 | 1（多路复用）| UUID pending map | 验证码 OCR 首选 |
+
+**加新的耗时操作前**：判断它是 CPU 密集还是 IO 密集，CPU → worker_threads 池；IO → 看是否已有 client 池可复用；都不是 → 先想想是不是真的需要锁。

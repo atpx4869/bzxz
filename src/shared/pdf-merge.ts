@@ -56,7 +56,15 @@ function getWorkerEntry(): string {
   if (workerEntry) return workerEntry;
   // After tsc emit this file lives at dist/src/shared/pdf-merge.js and the worker
   // at dist/src/shared/pdf-merge-worker.js — load by sibling path.
-  workerEntry = path.join(__dirname, 'pdf-merge-worker.js');
+  // Under electron-builder, dist/ goes into app.asar but worker_threads can't
+  // load .js from inside an asar archive. package.json build.asarUnpack pulls
+  // pdf-merge-worker.js out to app.asar.unpacked/; rewrite the path so the
+  // Worker constructor finds it.
+  let entry = path.join(__dirname, 'pdf-merge-worker.js');
+  if (entry.includes(`${path.sep}app.asar${path.sep}`)) {
+    entry = entry.replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`);
+  }
+  workerEntry = entry;
   return workerEntry;
 }
 

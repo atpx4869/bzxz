@@ -239,11 +239,17 @@ export function createApp() {
     respondError(res, 500, 'INTERNAL_SERVER_ERROR', 'Unexpected server error');
   });
 
-  // Resources owned by this app instance that must be released on shutdown,
-  // notably the playwright Chromium spawned by the CNAS scraper and the
-  // sqlite handle.
+  // Resources owned by this app instance that must be released on shutdown:
+  // - playwright Chromium spawned by the CNAS scraper
+  // - sqlite handle
+  // - pdf-merge worker_threads pool (small, but worth a clean terminate so
+  //   Electron's "is anything still holding the event loop?" checks pass)
   async function shutdown(): Promise<void> {
     await qualRouter.qualificationService.close().catch(() => {});
+    try {
+      const { closePdfMergePool } = await import('../shared/pdf-merge.js');
+      await closePdfMergePool();
+    } catch { /* pool may not have been initialized */ }
     try { db.close(); } catch { /* may already be closed under test reset */ }
   }
 

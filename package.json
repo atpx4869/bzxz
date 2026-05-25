@@ -34,7 +34,9 @@
     ],
     "asarUnpack": [
       "node_modules/playwright/**/*",
-      "node_modules/playwright-core/**/*"
+      "node_modules/playwright-core/**/*",
+      "dist/src/shared/pdf-merge-worker.js",
+      "dist/src/shared/pdf-merge-worker.js.map"
     ],
     "extraResources": [
       {
