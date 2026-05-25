@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+- 标准检索结果上的资质徽章漏显（典型现象：`GB/T 3325-2024` 在「标准检索」只显示 CMA 徽章，但「资质查询」搜同一关键词显示 CMA + CNAS 双资质）：
+  - **Layer 1**：`src/services/qualification-service.ts:queryByStdCodes()` 第二阶段模糊兜底原先用 `stdCodes.filter(code => !result[code]?.length)` 筛选输入码，意图是"还没拿到结果的才走模糊匹配"。但当 CMA 表精确命中（`std_code` 干净，如 `'GB/T 3325-2024'`）、CNAS 表却因 scraper 历史写入带杂散空白（`'GB/T 3325 -2024'`）而精确匹配漏掉时，这个过滤会把该输入码整个跳过，CNAS 再也轮不到模糊兜底。改为 `stdCodes.slice()` 让每个输入码都走一次 Phase 2；下游 `addMatch` 按 `source+labNo` 去重，重复执行安全无副作用。
+  - **Layer 2**：`extractBaseCode()` 用 `/\/[A-Z]+(?=\s)/i` lookahead 剥类别标识符（`/T` / `/Z` 等），对 `'GB/T 3325-2024'`（`/T` 后面是空格 ✓）能剥掉，但对 `'GB/T 3325 -2024'` 走过 step1 剥年份后变成 `'GB/T 3325'`（`/T` 后跟空格 ✓ 能剥），看似 OK；可一旦输入是 `'GB/T3325-2024'`（无空格变体）就会漏剥。统一改成 `/\/[A-Z]+/gi`，并把年份正则末尾补 `\s*$` 容忍尾随空白。两源 `extractBaseCode` 输出现在保证等价，Phase 2 才能真正搭桥。
+  - 新增 `src/services/qualification-service.test.ts` 覆盖干净 / 杂散空白 / 尾随空白 / 不同类别标识符 / 小写 / 无标识符 等变体；`package.json` 的 `test` 与 `test:dev` 把 `src/services` 加入测试范围，CI 红绿挂得住
+  - 治本（Layer 3）留到下次：CNAS scraper 写库前规范化 `std_code`（折叠多余空白、去 dash 两侧空白）+ 一次性迁移洗历史数据
+
 ### Added
 - 手机端响应式骨架 + URL 路由（Phase 0+1 of 手机适配；详见 `docs/MOBILE_ADAPTATION.md`）：
   - **URL 路由**：`switchTab(tab)` 现在写回 `?tab=…`（保留 `?desktop=1` 等其他参数）并 dispatch `tabchange` 自定义事件；`initRouter()` 从 stub 升级到读 URL 进路由（白名单校验，缺省 `search`）；`popstate` 监听让浏览器前进/后退按 URL 进路由。可分享形如 `http://<lan-ip>:5937/?tab=qual` 的深链。`public/js/app-core.js`
@@ -14,6 +21,13 @@
   - 查询成功后输入框自动折叠成一行摘要（仅手机），点折叠态标题 → 展开回 textarea 并 focus，结果占满视野。`public/index.html` + `public/js/app-qual.js`（`expandQualVisualInput()`）
   - `qual-visual-lab-head` 改 sticky，方便长结果列表浏览；cap 行加大到 44px 触控热区
   - 推迟：统计卡点击下钻、管理员同步进度 banner —— 留到 Phase 2.1/2.2
+- PWA manifest-only（Phase 3 of 手机适配）：HTTP 内网无 SW（详见 `docs/MOBILE_ADAPTATION.md §6`），只做 manifest + 图标 + apple meta，三件套支持手机「添加到主屏」独立窗口：
+  - `public/manifest.webmanifest`：name/short_name=标准盒子、`start_url=/?from=pwa`、`display=standalone`、`theme_color=#0f1117`、三个 icon（192/512/maskable-512）
+  - `public/icon-{192,512,maskable-512}.png` + `apple-touch-icon.png`：从 `logo.png` 衍生，maskable 走 PWA 80% 安全区 + 深色画布兜底
+  - `public/index.html <head>`：加 `<link rel="manifest">` + theme-color + 4 个 `apple-mobile-web-app-*` meta + apple-touch-icon
+- 设置页「手机访问」可见性增强（Phase 4 of 手机适配，部分）：
+  - 内网 URL 行追加「📱 手机版」蓝色徽章，第一眼能看出哪条是给手机扫码用的；卡片底部新增灰提示框：同网 Wi-Fi + 「添加到主屏」指引 + HTTP 暂未启用离线缓存的说明。`public/js/app-settings.js:renderWebAccessCard()` + `public/styles.css` `.web-access-phone-{hint,tip}`
+  - 预留 `#webAccessQrSlot` 容器：vendored `qrcode-generator` 落到 `public/vendor/` 后由 Phase 4.1 接入；URL/复制/打开/`webServiceEnabled` 开关/端口 fallback 红字提示在 prior commits 已实装，本次未动
 
 ## [1.15.0] - 2026-05-23
 

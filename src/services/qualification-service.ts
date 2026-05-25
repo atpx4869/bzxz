@@ -199,7 +199,12 @@ export class QualificationService {
     // For any input codes with no results, narrow to plausible rows via SQL LIKE on
     // the leading prefix (e.g. "GB"), then apply the exact base-code comparison in JS.
     // Falls back from O(N) full-table scans to O(matching-prefix), capped by LIMIT.
-    const unmatchedInputs = stdCodes.filter(code => !result[code]?.length);
+    // Run fuzzy fallback for every input — not just ones with zero hits.
+    // A code can already hold a CMA match (clean std_code in DB) while CNAS
+    // still misses Phase 1 because its std_code has stray whitespace
+    // ('GB/T 3325 -2024'). Filtering on result[code]?.length would skip those.
+    // Downstream `addMatch` dedupes by source+labNo, so re-running is safe.
+    const unmatchedInputs = stdCodes.slice();
     if (unmatchedInputs.length > 0) {
       const FUZZY_LIMIT = 500;
       const inputBases = unmatchedInputs.map(code => ({ input: code, base: extractBaseCode(code) }));
@@ -830,11 +835,14 @@ async function runWithConcurrency<T, R>(items: T[], concurrency: number, worker:
   return results;
 }
 
-/** "GB/T 23440-2009" → "GB23440" — strip year suffix, type designator, and whitespace. */
-function extractBaseCode(code: string): string {
+/** "GB/T 23440-2009" → "GB23440" — strip year suffix, type designator, and whitespace.
+ *  Handles variants with stray whitespace: "GB/T 3325 -2024", "GB/T 3325-2024 ", etc.
+ *  All normalize to the same base ("GB3325") so Phase 2 fuzzy matching can bridge
+ *  scraper-side data inconsistencies between CNAS and CMA. */
+export function extractBaseCode(code: string): string {
   return code
-    .replace(/\s*-\s*\d{4}$/, '')
-    .replace(/\/[A-Z]+(?=\s)/i, '')
-    .replace(/[\s]/g, '')
+    .replace(/\s*-\s*\d{4}\s*$/, '')   // year suffix with surrounding whitespace
+    .replace(/\/[A-Z]+/gi, '')         // type designator anywhere — old lookahead (?=\s) missed clean variants
+    .replace(/\s+/g, '')
     .toUpperCase();
 }
