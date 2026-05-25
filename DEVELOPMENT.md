@@ -141,6 +141,8 @@ Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/standards/gbw:{id
 
 ## 前端键盘快捷键
 
+> ⚠️ `≤640px` 手机模式下整套快捷键禁用（无物理键盘 + 触控热区优先）。手机端用底部 tabbar 切换页面、长按结果行打开操作。
+
 结果列表聚焦时（点击任意结果行后自动激活）：
 
 | 键 | 作用 |
@@ -166,6 +168,18 @@ Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/standards/gbw:{id
 | `Alt + 1..6` | 切换 source pill |
 
 右键任意结果行可打开上下文菜单（复制编号、复制标题、查看详情、单条下载…）。
+
+## 手机端调试
+
+桌面端启动后，同 Wi-Fi 下手机浏览器直接访问 `http://<lan-ip>:5937/` 即可调试（默认端口固定 5937，见「设置 → 网页版启动器」内网地址）。
+
+- **断点**：`@media (max-width:640px)` 进手机布局；`?desktop=1` 或写 `localStorage['bzxz.layout']='desktop'` 逃回桌面版
+- **路由还原**：`?tab=search|qual|me` 由 `initRouter()` 还原，可直接深链分享/刷新
+- **桌面浏览器模拟**：Chrome DevTools → Toggle device toolbar → 选 iPhone/Android 预设，刷新触发 mobile-only DOM 路径（如 mobile-tabbar）
+- **PWA 验证**：`chrome://inspect` 远程调试手机；在 iOS Safari「添加到主屏」后从主屏图标启动，验证 `display: standalone` + 状态栏色
+- **不可用功能**：`≤640px` 隐藏批量下载、用户管理、订阅同步管理 —— 需要时点「我」页「切换到完整版」（写 `localStorage['bzxz.layout']='desktop'`）
+
+详细规划与边界见 [`docs/MOBILE_ADAPTATION.md`](./docs/MOBILE_ADAPTATION.md)。
 
 ## 导出文件
 

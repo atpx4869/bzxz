@@ -295,6 +295,17 @@ start.bat
 - 在线更新：启动后轻量检查 GitHub Release；设置页可手动检查、打开下载页、下载并启动 NSIS 安装包
 - 下载文件保存到 `用户目录/downloads/bzxz`
 
+## 手机访问
+
+桌面端启动后，同局域网的手机浏览器可直接访问 `http://<lan-ip>:5937/` 使用。
+
+- **入口**：桌面端「设置 → 网页版启动器」卡片，内网行带「📱 手机版」徽章；点复制按钮把地址发到手机即可
+- **URL 路由**：`?tab=search|qual|me` 等参数会被 `initRouter()` 还原，刷新/分享深链不丢 tab 状态
+- **响应式断点**：`≤640px` 进手机模式 —— 隐藏 sidebar、底部出现 mobile-tabbar（标准 / 资质 / 我），结果卡片单列、批量勾选/快捷键禁用、触控热区 ≥44×44px
+- **逃生口**：手机上访问 `?desktop=1` 或在「我」页点「切换到完整版」回到桌面布局（写 `localStorage['bzxz.layout']` 持久化）
+- **PWA**：支持 iOS Safari / Android Chrome「添加到主屏」生成独立窗口图标；HTTP 内网部署无 Service Worker，因此**无离线缓存 / 无 Web Push**（详见 [`docs/MOBILE_ADAPTATION.md §6`](./docs/MOBILE_ADAPTATION.md)）
+- **不可用功能**：批量下载、用户管理、订阅同步管理在手机端隐藏，需要时用「切换到完整版」逃生口
+
 ## 自动打包 (GitHub Actions)
 
 推送 `main` 分支自动触发 Windows 构建（便携版 + NSIS 安装包）。

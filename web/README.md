@@ -1,6 +1,8 @@
-# web/ — 前端 Vite + TypeScript 源码
+# web/ — 前端 Vite + TypeScript 源码（迁移脚手架，未上线）
 
-新的前端构建链。详细背景与下一步路线参见 [`../docs/MIGRATION.md`](../docs/MIGRATION.md)。
+> ⚠️ **当前运行时仍是 `../public/`**（原生 ESM + `public/styles.css`，由 `express.static('public/')` 直出）。
+> 包括手机适配（Phase 0–4：URL 路由、响应式断点、资质可视化、PWA manifest、设置页徽章）全部落在 `public/` 下，**不在 `web/` 里**。
+> 这个目录是 Vite + TS 重写的"计划态"，CI 跑 typecheck 但不打入产物。下一步路线参见 [`../docs/MIGRATION.md`](../docs/MIGRATION.md)。
 
 ## 快速开始
 
