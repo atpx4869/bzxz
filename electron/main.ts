@@ -43,6 +43,10 @@ interface DesktopSettings {
 // binding under 1024 quietly fails anyway).
 const MIN_USER_PORT = 1024;
 const MAX_USER_PORT = 65535;
+// Default web service port — stable across installs so LAN users can bookmark
+// the URL. If 5937 is busy at startup, startServer() falls back to a random
+// free port (and the tray UI surfaces both values).
+const DEFAULT_PREFERRED_PORT = 5937;
 
 interface UpdateAsset {
   name: string;
@@ -65,7 +69,7 @@ function getDefaultSettings(): DesktopSettings {
   return {
     downloadPath: path.join(app.getPath('desktop'), 'bzxz'),
     webServiceEnabled: true,
-    preferredPort: null,
+    preferredPort: DEFAULT_PREFERRED_PORT,
   };
 }
 
