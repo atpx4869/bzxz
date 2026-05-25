@@ -1056,6 +1056,31 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
   body:not(.force-desktop) .qual-visual-source { padding: 10px; }
   /* more 按钮加大 */
   body:not(.force-desktop) .qual-visual-more-btn { padding: 10px; font-size: 12px; min-height: 44px; }
+
+  /* 11) 标准搜索：CMA/CNAS 资质徽章另起一行 + 源 pill 自占一行 —— 标题不再被挤压 */
+  /* 标题与徽章纵向堆叠，徽章贴左不再 margin-left:10px（继承自桌面） */
+  body:not(.force-desktop) .result-card .card-title-row,
+  body:not(.force-desktop) .batch-result-card .card-title-row {
+    flex-direction: column; align-items: flex-start; gap: 4px;
+  }
+  body:not(.force-desktop) .result-card .qual-badges,
+  body:not(.force-desktop) .batch-result-card .qual-badges { margin-left: 0; }
+  /* card-body 默认两行 line-clamp 会把徽章吃掉，手机端去掉以放下徽章那一行 */
+  body:not(.force-desktop) .result-card .card-body { display: block; -webkit-line-clamp: unset; }
+
+  /* 12) 资质查询结果：CMA / CNAS 左右两栏保留，但单条结果内"标准号 / 标准名 / 项数"纵向堆叠 */
+  /* .qual-result-std 桌面端是单行 flex；手机端 wrap，让 .qual-std-name 自占第二行 */
+  body:not(.force-desktop) .qual-result-std { flex-wrap: wrap; row-gap: 2px; }
+  body:not(.force-desktop) .qual-result-std .qual-std-name {
+    flex: 1 1 100%;
+    padding-left: 22px;        /* 与 ▶ + 标准号对齐 */
+    font-size: 12px;
+    line-height: 1.4;
+    margin-top: 2px;
+  }
+  /* 两栏 grid 在窄屏继续左右分列（CMA / CNAS 不并屏即破坏可读性），但收紧 gap */
+  body:not(.force-desktop) .qual-results-grid { gap: 8px; }
+  body:not(.force-desktop) .qual-col-header { font-size: 12px; padding: 6px 8px; }
 }
 
 /* 桌面/手机通用：mobile-tabbar 默认隐藏，只有上面的 @media 块在手机模式下打开。

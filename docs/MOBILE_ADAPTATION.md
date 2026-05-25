@@ -702,6 +702,11 @@ export function installMobileTabbar(): void {
 4. legacy JS guard：`app-search.js` 全局 keydown / `app-qual.js` `switchQualTab` 入口加 `if (window.isMobile()) return;`
 5. `app-auth-admin.js` `onAuthReady` 填充 me 页用户卡 + 按角色控制行可见性
 
+**Phase 1.1 · 排版打磨（✅ 已完成 2026-05-25）**
+- 标准检索结果卡片：`.card-title-row` 在手机端改 column 方向，CMA/CNAS 资质徽章另起一行不再挤压标题
+- 资质查询结果分组头：`.qual-result-std` 加 `flex-wrap: wrap` + `.qual-std-name` 强制换行并缩进，标准号不再被折断；CMA / CNAS 左右两栏布局保留
+- 仅 CSS 改动（`public/styles.css` §11 §12），JS / DOM 零改动
+
 **Phase 2 · 资质可视化手机版（✅ 输入折叠 + 卡片重排已完成 2026-05-25）**
 1. `styles.css` ≤640px 块追加可视化样式 ✅
 2. `app-qual.js` 输入折叠 + `expandQualVisualInput()` ✅

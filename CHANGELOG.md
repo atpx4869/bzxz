@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Fixed
+- 手机端两处排版收敛：
+  - **标准检索结果卡片**：原来标题与 CMA/CNAS 资质徽章挤在同一 flex 行（`.card-title-row`），长标准名截断时徽章会被推开变形，BW/BZ/BY 源标签也会和徽章错位。手机模式（≤640px）下把 `.card-title-row` 改成 column 方向 —— 标准名独占一行，资质徽章另起一行贴左对齐，`card-body` 的 `-webkit-line-clamp:2` 在手机端解除以容纳徽章行。`public/styles.css` §11
+  - **资质查询结果分组头**：原来 `.qual-result-std` 是单行 flex（▶ + 标准号 + 标准名 + N项），手机窄屏挤不下会让标准号被强行折行（例如 `GB/T 3324-2017` 被拆成 `GB/T 3324-` / `2017`）。手机模式下加 `flex-wrap: wrap` + `.qual-std-name { flex: 1 1 100%; padding-left: 22px; }`，让标准名落到第二行与标准号对齐缩进，N项 spani 保持在第一行右侧。CMA / CNAS 左右两栏（`.qual-results-grid`）保持不变，仅 gap 收紧。`public/styles.css` §12
 - 标准检索结果上的资质徽章漏显（典型现象：`GB/T 3325-2024` 在「标准检索」只显示 CMA 徽章，但「资质查询」搜同一关键词显示 CMA + CNAS 双资质）：
   - **Layer 1**：`src/services/qualification-service.ts:queryByStdCodes()` 第二阶段模糊兜底原先用 `stdCodes.filter(code => !result[code]?.length)` 筛选输入码，意图是"还没拿到结果的才走模糊匹配"。但当 CMA 表精确命中（`std_code` 干净，如 `'GB/T 3325-2024'`）、CNAS 表却因 scraper 历史写入带杂散空白（`'GB/T 3325 -2024'`）而精确匹配漏掉时，这个过滤会把该输入码整个跳过，CNAS 再也轮不到模糊兜底。改为 `stdCodes.slice()` 让每个输入码都走一次 Phase 2；下游 `addMatch` 按 `source+labNo` 去重，重复执行安全无副作用。
   - **Layer 2**：`extractBaseCode()` 用 `/\/[A-Z]+(?=\s)/i` lookahead 剥类别标识符（`/T` / `/Z` 等），对 `'GB/T 3325-2024'`（`/T` 后面是空格 ✓）能剥掉，但对 `'GB/T 3325 -2024'` 走过 step1 剥年份后变成 `'GB/T 3325'`（`/T` 后跟空格 ✓ 能剥），看似 OK；可一旦输入是 `'GB/T3325-2024'`（无空格变体）就会漏剥。统一改成 `/\/[A-Z]+/gi`，并把年份正则末尾补 `\s*$` 容忍尾随空白。两源 `extractBaseCode` 输出现在保证等价，Phase 2 才能真正搭桥。
