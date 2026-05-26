@@ -1,8 +1,10 @@
-import { access, mkdir, readdir, stat, unlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 
-const DEFAULT_EXPORT_RETENTION_DAYS = 14;
+// Phase 2 起：标准 PDF 永久保留在 standards 库目录（resolveLibraryDir），不再走
+// data/exports/ 中转 + 14 天清理。exports/ 只剩补全功能输出的 xlsx 报表，那些也
+// 不再自动清理 —— 用户决定。
 
 export function buildFileName(standardNumber: string, title: string, ext = 'pdf'): string {
   const safeNum = standardNumber.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
@@ -26,13 +28,17 @@ export function getStaticDir(): string {
   return process.env.BZXZ_STATIC_DIR || getRootDir();
 }
 
+/**
+ * exports/ 现在只用于补全功能输出的 xlsx 报表。adapter 下载 PDF 仍然先写到这里，
+ * 然后由 standards-routes 立刻 move 进 standards 库目录（addFileToLibrary）。
+ * 文件不再有 14 天自动清理。
+ */
 export function getExportsDir(): string {
   return path.join(getRootDir(), 'data', 'exports');
 }
 
 export async function ensureDataDirs(): Promise<void> {
   await mkdir(getExportsDir(), { recursive: true });
-  await cleanupOldExportFiles();
 }
 
 export async function safeWriteExportFile(fileName: string, data: Buffer | string): Promise<string> {
@@ -66,33 +72,4 @@ async function exists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-export async function cleanupOldExportFiles(retentionDays = getExportRetentionDays()): Promise<void> {
-  const exportsDir = getExportsDir();
-  const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
-
-  let entries: string[];
-  try {
-    entries = await readdir(exportsDir);
-  } catch {
-    return;
-  }
-
-  await Promise.all(entries.map(async (name) => {
-    const filePath = path.join(exportsDir, name);
-    try {
-      const info = await stat(filePath);
-      if (info.isFile() && info.mtimeMs < cutoff) {
-        await unlink(filePath);
-      }
-    } catch {
-      // Ignore cleanup races; downloads should not fail because old files could not be removed.
-    }
-  }));
-}
-
-function getExportRetentionDays(): number {
-  const raw = Number(process.env.BZXZ_EXPORT_RETENTION_DAYS ?? DEFAULT_EXPORT_RETENTION_DAYS);
-  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_EXPORT_RETENTION_DAYS;
 }

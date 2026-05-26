@@ -735,7 +735,30 @@ function renderLibraryStatus() {
       '<span class="library-row-value">' + (Number(lib.indexCount) || 0) + ' 个 PDF · 最近 ' + escapeHtml(indexed) + '</span></div>' +
     '<div class="library-row"><span class="library-row-label">源优先级</span>' +
       '<span class="library-row-value">' + escapeHtml(prio) + '</span>' +
-      '<span class="library-hint">（多源同号时按此顺序选择本地命中）</span></div>';
+      '<span class="library-hint">（多源同号时按此顺序选择本地命中）</span></div>' +
+    '<div class="library-row"><span class="library-row-label">文件夹监听</span>' +
+      '<label class="library-toggle"><input type="checkbox" id="libraryWatcherEnabledChk"' +
+        (s.libraryWatcherEnabled === false ? '' : ' checked') +
+        ' onchange="saveLibraryWatcherEnabled(this.checked)"> 启用</label>' +
+      '<span class="library-hint">（用户手动拖 PDF 到库目录自动入索引；OneDrive/NAS 抖动可关）</span></div>';
+}
+
+async function saveLibraryWatcherEnabled(enabled) {
+  try {
+    var res = await apiFetch('/api/admin/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ libraryWatcherEnabled: !!enabled }),
+    });
+    var data = await readApiResponse(res);
+    libraryState.data = data;
+    showToast(enabled ? '已开启文件夹监听' : '已关闭文件夹监听');
+  } catch (e) {
+    showToast((e && e.message) || '保存失败', 'fail');
+    // 失败时把 UI 状态恢复
+    var chk = document.getElementById('libraryWatcherEnabledChk');
+    if (chk) chk.checked = !enabled;
+  }
 }
 
 async function saveLibraryDir() {

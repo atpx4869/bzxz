@@ -647,10 +647,62 @@ document.getElementById('results').addEventListener('click', e => {
   else if (btn.dataset.action === 'save') toggleSavedStandard(id);
 });
 
-// ── PDF 预览（Phase 1）──
-// 流程：POST /api/preview/request → 命中 → iframe 加载 /api/preview/file/:id
-// 未命中 → 提示用户先下载（不自动触发下载，Phase 2 才接入）
+// ── PDF 预览（Phase 2）──
+// 流程：POST /api/preview/request →
+//   ready    → iframe 加载 /api/preview/file/:id
+//   downloading → 后端已起任务，前端 poll /api/preview/task/:id 直到 ready / failed
+//                 → ready 切 iframe；failed 提示用户重试
 let _previewCurrent = null; // { fileId, url, fileName }
+let _previewPollAbort = null; // 取消正在进行的 poll（用户关弹窗或换标准时）
+
+async function pollPreviewTask(taskId, stdCode) {
+  // 用 AbortController 让"关闭预览"能立刻停掉。
+  const ctrl = new AbortController();
+  _previewPollAbort = ctrl;
+  const deadline = Date.now() + 3 * 60 * 1000; // 最长 3 分钟
+  let attempt = 0;
+  while (Date.now() < deadline) {
+    if (ctrl.signal.aborted) return;
+    attempt++;
+    setPreviewBody(`<div class="preview-loading">正在自动下载…（${attempt}）<br><span class="preview-empty-hint">首次入库可能 5~30 秒，受源站速度影响</span></div>`);
+    await new Promise(r => setTimeout(r, 1500));
+    if (ctrl.signal.aborted) return;
+    let data;
+    try {
+      const res = await fetch(`${API}/api/preview/task/${encodeURIComponent(taskId)}`, { signal: ctrl.signal });
+      data = await readApiResponse(res);
+    } catch (e) {
+      if (ctrl.signal.aborted) return;
+      // 轮询接口短暂抖动 → 继续重试，直到超时
+      continue;
+    }
+    if (data.status === 'ready') {
+      _previewCurrent = { fileId: data.fileId, url: data.url, fileName: stdCode };
+      const safeUrl = data.url + (data.url.includes('?') ? '&' : '?') + 't=' + Date.now();
+      setPreviewBody(`<iframe class="preview-iframe" src="${escapeHtml(safeUrl)}" title="预览 ${escapeHtml(stdCode)}"></iframe>`);
+      return;
+    }
+    if (data.status === 'failed') {
+      setPreviewBody(`
+        <div class="preview-empty">
+          <div class="preview-empty-title">自动下载失败</div>
+          <div class="preview-empty-hint">${escapeHtml(data.error || '所有源都未能下载到此标准。')}</div>
+          <div class="preview-empty-actions">
+            <button class="btn btn-ghost" id="previewCloseFailedBtn">关闭</button>
+          </div>
+        </div>`);
+      const cls = document.getElementById('previewCloseFailedBtn');
+      if (cls) cls.addEventListener('click', closePreviewOverlay);
+      return;
+    }
+    // pending / downloading → 继续循环
+  }
+  setPreviewBody(`
+    <div class="preview-empty">
+      <div class="preview-empty-title">自动下载超时</div>
+      <div class="preview-empty-hint">3 分钟仍未拿到 PDF。可关闭重试或手动点"下载"。</div>
+    </div>`);
+}
 async function previewStandard(id) {
   const r = findResultByAnyId ? findResultByAnyId(id) : results.find(x => x.id === id);
   if (!r) { showToast('未找到该标准', 'fail'); return; }
@@ -672,7 +724,12 @@ async function previewStandard(id) {
       _previewCurrent = { fileId: data.fileId, url: data.url, fileName: stdCode };
       const safeUrl = data.url + (data.url.includes('?') ? '&' : '?') + 't=' + Date.now();
       setPreviewBody(`<iframe class="preview-iframe" src="${escapeHtml(safeUrl)}" title="预览 ${escapeHtml(stdCode)}"></iframe>`);
+    } else if (data.status === 'downloading' && data.taskId) {
+      // Phase 2：后端已经在后台拉，前端 poll 状态到 ready / failed
+      _previewCurrent = null;
+      await pollPreviewTask(data.taskId, stdCode);
     } else if (data.status === 'not_in_library') {
+      // 旧 Phase 1 兜底分支（理论上 Phase 2 后端不再返回这个 status）
       _previewCurrent = null;
       setPreviewBody(`
         <div class="preview-empty">
@@ -714,6 +771,11 @@ function closePreviewOverlay() {
   overlay.setAttribute('aria-hidden', 'true');
   setPreviewBody(''); // 卸载 iframe，停止后台流式下载
   _previewCurrent = null;
+  // Phase 2：用户主动关闭 → 取消 poll，避免后台继续抢请求
+  if (_previewPollAbort) {
+    try { _previewPollAbort.abort(); } catch { /* ignore */ }
+    _previewPollAbort = null;
+  }
 }
 function setPreviewBody(html) {
   const body = document.getElementById('previewBody');

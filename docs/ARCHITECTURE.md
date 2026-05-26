@@ -267,13 +267,17 @@ standard_files
 - 启动时增量扫描一次（fire-and-forget）
 - 管理员手动 POST `/admin/library/rescan` 全量重扫
 - 增量靠 `(mtime, size)` 双比对；都没变即跳过 parse
-- **不递归子目录**：Phase 1 保持库结构扁平，便于用户在文件管理器里直接浏览
-- **不上 fs.watch**：Windows + OneDrive 场景里 watcher 太不稳定，启动扫描 + 手动重扫覆盖 95% 场景
+- **不递归子目录**：保持库结构扁平，便于用户在文件管理器里直接浏览
+- **chokidar 监听**（Phase 2，默认开）：`startLibraryWatcher` 在启动时根据 `library_watcher_enabled='1'` 起，监听 `depth: 0` 顶层 PDF；`awaitWriteFinish: { stabilityThreshold: 1500ms, pollInterval: 200ms }` 防大文件写一半就入库。OneDrive / SMB 抖动场景下 admin 可在设置里关
 
 ### 查询优先级 (`lookupFile`)
 
 请求级 `sources` > settings `library_source_priority` > 默认 `['gbw','bz','by']`。多源同号时按数组顺序选第一个本地有的；fs.access 失败的行即时清掉，避免返回 404 fileId。
 
-### Phase 2 预告（未实现）
+### Phase 2 实现（已完成）
 
-下载流改造：现在下载完写 `data/exports/`（14 天清理）；Phase 2 改成"按文件名模板写进 standards/" + 完成时 INSERT `standard_files`；预览端点的 `not_in_library` 分支接通自动下载，下完即跳预览。当前 Phase 1 已为这个流程预留 settings `library_filename_pattern` 字段。
+**下载即入库**：adapter 把 PDF 写到临时 `data/exports/`，`services/download-to-library.ts` 立即 `fs.rename` 到 `standards/`，按 `library_filename_pattern` 模板（`{stdCode} {source} {year} {title}`）命名 UPSERT `standard_files`。跨卷 `EXDEV/EPERM/EACCES` 时退化为 copy+unlink。**已无 14 天清理**，标准永久保留。`data/exports/` 只剩补全功能的 xlsx 报表。
+
+**预览自动下载流**：`POST /api/preview/request` 未命中 → `services/preview-task-store.ts` 建 task → 后台按 source 优先级遍历 `searchStandards` → `autoDownload`/`exportStandard` → `moveDownloadToLibrary` → task.ready(fileId)。前端 `GET /api/preview/task/:taskId` 轮询 1.5s/次直到 ready 切 iframe，3 分钟超时上限。任务存在内存 Map（重启即丢）+ 10 分钟 TTL GC。
+
+**模板引擎**：`services/library-naming.ts` `renderLibraryFilename`。空值占位符 + 相邻分隔符（空格/`-`/`_`/`·`/`—`）被吞掉，避免"GB 3324-2024 -.pdf"悬空尾。非法路径字符 `\/:*?"<>|` 清成空格；总长截到 200 字符防 Windows 260 字符路径上限。admin zod schema 强制模板含 `{stdCode}`。

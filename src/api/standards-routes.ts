@@ -16,6 +16,7 @@ import { parseStandardId, VALID_SOURCES } from '../shared/id';
 import type { SourceName } from '../domain/standard';
 import { respond } from '../shared/response';
 import { toCamelCase } from '../shared/case';
+import { moveDownloadToLibrary } from '../services/download-to-library';
 
 const SOURCES = [...VALID_SOURCES] as SourceName[];
 const sourceEnum = z.enum(SOURCES as [string, ...string[]]);
@@ -65,6 +66,8 @@ interface StandardsRoutesDeps {
   requireAuth: RequestHandler;
   baseDir: string;
 }
+
+// moveDownloadToLibrary 移到 services/download-to-library.ts，preview-routes 也要用
 
 export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, requireAuth, baseDir }: StandardsRoutesDeps) {
   const router = Router();
@@ -307,7 +310,17 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
 
       const result = await adapter.autoDownload(id, req.user!.id, 3);
       trackEvent(db, req.user!.id, 'download', parsed.source, id);
-      respond(res, toCamelCase(result));
+      // 成功落盘 → 立刻 move 到 library；失败也不影响响应
+      const moved = result.filePath
+        ? await moveDownloadToLibrary(db, sourceRegistry, parsed.source, id, {
+            filePath: result.filePath, fileName: result.fileName, fileSize: result.fileSize,
+          })
+        : {};
+      respond(res, toCamelCase({
+        ...result,
+        ...(moved.fileName ? { fileName: moved.fileName, filePath: moved.absPath } : {}),
+        ...(moved.libraryUrl ? { downloadUrl: moved.libraryUrl, fileId: moved.fileId } : {}),
+      }));
     } catch (error) {
       next(normalizeError(error));
     }
@@ -333,7 +346,17 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
             const result = await adapter.autoDownload(standardId, req.user!.id, 3);
             if (result.status === 'downloaded') {
               trackEvent(db, req.user!.id, 'download', src, standardId);
-              respond(res, toCamelCase({ ...result, source: src }));
+              const moved = result.filePath
+                ? await moveDownloadToLibrary(db, sourceRegistry, src as SourceName, standardId, {
+                    filePath: result.filePath, fileName: result.fileName, fileSize: result.fileSize,
+                  })
+                : {};
+              respond(res, toCamelCase({
+                ...result,
+                source: src,
+                ...(moved.fileName ? { fileName: moved.fileName, filePath: moved.absPath } : {}),
+                ...(moved.libraryUrl ? { downloadUrl: moved.libraryUrl, fileId: moved.fileId } : {}),
+              }));
               return;
             }
             errors[src] = result.status;
@@ -341,7 +364,16 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
             // Async adapter (bz, by) — use export and wait
             const exportResult = await adapter.exportStandard(standardId);
             trackEvent(db, req.user!.id, 'download', src, standardId);
-            respond(res, { source: src, status: 'downloaded', fileName: exportResult.fileName, fileSize: exportResult.fileSize });
+            const moved = await moveDownloadToLibrary(db, sourceRegistry, src as SourceName, standardId, {
+              filePath: exportResult.filePath, fileName: exportResult.fileName, fileSize: exportResult.fileSize,
+            });
+            respond(res, {
+              source: src,
+              status: 'downloaded',
+              fileName: moved.fileName || exportResult.fileName,
+              fileSize: exportResult.fileSize,
+              ...(moved.libraryUrl ? { downloadUrl: moved.libraryUrl, fileId: moved.fileId } : {}),
+            });
             return;
           } else {
             errors[src] = '不支持下载';

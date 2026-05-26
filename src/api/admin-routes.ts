@@ -7,7 +7,7 @@ import { normalizeError } from '../shared/errors';
 import { respond, respondError } from '../shared/response';
 import { toCamelCase } from '../shared/case';
 import { resolveLibraryDir, setLibraryDir } from '../shared/library-paths';
-import { scanLibrary, getIndexStats } from '../services/library-index';
+import { scanLibrary, getIndexStats, startLibraryWatcher, stopLibraryWatcher } from '../services/library-index';
 
 const sourceEnum = z.enum(['gbw', 'bz', 'by']);
 const DEFAULT_SOURCE_PRIORITY = ['gbw', 'bz', 'by'] as const;
@@ -70,6 +70,7 @@ function readAdminSettings(db: Database.Database) {
     librarySourcePriority: parseSourcePriority(
       getSetting(db, 'library_source_priority', JSON.stringify(DEFAULT_SOURCE_PRIORITY)),
     ),
+    libraryWatcherEnabled: getSetting(db, 'library_watcher_enabled', '1') === '1',
   };
 }
 
@@ -124,6 +125,9 @@ export function createAdminRoutes(db: Database.Database) {
           { message: '文件名模板必须包含 {stdCode} 占位符' },
         ).optional(),
         librarySourcePriority: z.array(sourceEnum).min(1).max(3).optional(),
+        // chokidar 监听：用户把 PDF 拖到库目录后自动入索引。
+        // 默认开启，少数 OneDrive/NAS/网盘场景手抖才需要关。
+        libraryWatcherEnabled: z.boolean().optional(),
       });
       const updates = schema.parse(req.body);
       if (updates.registrationEnabled !== undefined) {
@@ -146,6 +150,15 @@ export function createAdminRoutes(db: Database.Database) {
         const dedup = Array.from(new Set(updates.librarySourcePriority));
         setSetting(db, 'library_source_priority', JSON.stringify(dedup));
       }
+      if (updates.libraryWatcherEnabled !== undefined) {
+        setSetting(db, 'library_watcher_enabled', updates.libraryWatcherEnabled ? '1' : '0');
+        // 切换 watcher 状态：先 stop（幂等），开启时再 start。
+        // start 内部已会 resolveLibraryDir，路径变化也能跟上。
+        await stopLibraryWatcher();
+        if (updates.libraryWatcherEnabled) {
+          startLibraryWatcher(db).catch(e => console.error('[admin] startLibraryWatcher 失败:', e));
+        }
+      }
       // 路径放最后处理：写完才触发 setLibraryDir + 重扫，
       // 其它配置失败时不至于先把路径改了再 rollback。
       if (updates.standardsLibraryDir !== undefined) {
@@ -157,6 +170,11 @@ export function createAdminRoutes(db: Database.Database) {
         }
         // 路径变更后异步全量重扫；不阻塞响应，前端通过下次 GET settings 查看 indexCount
         scanLibrary(db, { full: true }).catch(() => { /* 扫描失败容忍：用户可再点重扫 */ });
+        // 同步重启 watcher 让它跟上新路径
+        if (getSetting(db, 'library_watcher_enabled', '1') === '1') {
+          await stopLibraryWatcher();
+          startLibraryWatcher(db).catch(e => console.error('[admin] startLibraryWatcher 失败:', e));
+        }
       }
       respond(res, await readAdminSettingsWithLibrary(db));
     } catch (error) {
@@ -170,6 +188,11 @@ export function createAdminRoutes(db: Database.Database) {
       const schema = z.object({ full: z.boolean().optional() });
       const { full } = schema.parse(req.body || {});
       const result = await scanLibrary(db, { full: full !== false });
+      // 重扫往往因为用户手动改了库内容，watcher 也最好重建一次（dir 变了的边缘情况）
+      if (getSetting(db, 'library_watcher_enabled', '1') === '1') {
+        await stopLibraryWatcher();
+        startLibraryWatcher(db).catch(e => console.error('[admin] startLibraryWatcher 失败:', e));
+      }
       const stats = getIndexStats(db);
       respond(res, { ok: true, result, stats });
     } catch (error) {

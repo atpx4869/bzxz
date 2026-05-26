@@ -22,6 +22,11 @@ import { respond, respondError } from '../shared/response';
 import { normalizeError } from '../shared/errors';
 import { getSetting } from '../services/db';
 import type { SourceName } from '../domain/standard';
+import type { SourceRegistry } from '../services/source-registry';
+import { moveDownloadToLibrary } from '../services/download-to-library';
+import { createTask, updateTask, getTask } from '../services/preview-task-store';
+import { trackEvent } from '../services/usage-tracker';
+import { StandardService } from '../services/standard-service';
 
 const sourceEnum = z.enum(['gbw', 'bz', 'by']);
 const DEFAULT_SOURCE_PRIORITY: SourceName[] = ['gbw', 'bz', 'by'];
@@ -47,8 +52,63 @@ function getConfiguredSourcePriority(db: Database.Database): SourceName[] {
 export function createPreviewRoutes(
   db: Database.Database,
   requireAuth: (req: Request, res: Response, next: NextFunction) => void,
+  sourceRegistry: SourceRegistry,
 ) {
   const router = Router();
+
+  /**
+   * 后台跑下载 + 入库（Phase 2 自动下载预览流）。
+   *
+   * 入参：preview/request 已经算好的 sources 优先级 + stdCode + 可选 year。
+   * 行为：按优先级顺序找匹配 → adapter.autoDownload / exportStandard → moveDownloadToLibrary。
+   * 任一源成功 → 任务标 ready，带 fileId。所有源都失败 → 任务标 failed，前端提示。
+   *
+   * 不阻塞 HTTP 响应：preview/request 立刻返回 taskId，前端去打 /api/preview/task/:taskId 轮询。
+   * 这是单进程内存任务（preview-task-store），重启即丢失（用户重点预览即可）。
+   */
+  async function runAutoDownload(taskId: string, userId: number, stdCode: string, year: string | undefined, sources: SourceName[]): Promise<void> {
+    updateTask(taskId, { status: 'downloading' });
+    for (const src of sources) {
+      try {
+        const adapter = sourceRegistry.get(src);
+        // 1) 用标准号搜索这个源 → 拿到对应 ID
+        const service = new StandardService(adapter);
+        const searchResults = await service.searchStandards({ query: stdCode });
+        const norm = (s: string) => s.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+        const wanted = norm(stdCode);
+        const match = searchResults.find(item => {
+          if (norm(item.standardNumber) !== wanted) return false;
+          if (year && item.year && item.year !== year) return false;
+          return true;
+        }) || searchResults.find(item => norm(item.standardNumber) === wanted);
+        if (!match) continue;
+
+        // 2) 下载（autoDownload 优先；不支持时用 exportStandard 兜底）
+        let result: { filePath?: string; fileName?: string; fileSize?: number; status?: string } | null = null;
+        if (adapter.autoDownload) {
+          const r = await adapter.autoDownload(match.id, userId, 3);
+          if (r.status === 'downloaded') result = r;
+        } else if (adapter.exportStandard) {
+          const r = await adapter.exportStandard(match.id);
+          result = { ...r, status: 'downloaded' };
+        }
+        if (!result || !result.filePath) continue;
+
+        trackEvent(db, userId, 'download', src, match.id, { autoTriggeredBy: 'preview' });
+
+        // 3) 入库
+        const moved = await moveDownloadToLibrary(db, sourceRegistry, src, match.id, result);
+        if (moved.fileId) {
+          updateTask(taskId, { status: 'ready', fileId: moved.fileId, source: src });
+          return;
+        }
+      } catch (e: any) {
+        console.error(`[preview-task] ${src} 下载失败:`, e?.message || e);
+        // 继续试下一个源
+      }
+    }
+    updateTask(taskId, { status: 'failed', error: '所有源都未能下载到此标准' });
+  }
 
   router.post('/api/preview/request', requireAuth, async (req, res, next) => {
     try {
@@ -69,11 +129,20 @@ export function createPreviewRoutes(
       });
 
       if (!file) {
+        // Phase 2：未命中 → 后台触发自动下载 + 入库，前端 poll /api/preview/task/:id
+        const taskId = createTask();
+        const userId = (req as any).user?.id as number;
+        // fire-and-forget：runAutoDownload 内部把状态推进 store
+        runAutoDownload(taskId, userId, stdCode, year, effectiveSources).catch((e) => {
+          console.error('[preview-task] runAutoDownload threw:', e);
+          updateTask(taskId, { status: 'failed', error: e?.message || '下载启动失败' });
+        });
         respond(res, {
-          status: 'not_in_library',
+          status: 'downloading',
           stdCode,
           year: year ?? null,
           tried: effectiveSources,
+          taskId,
         });
         return;
       }
@@ -89,6 +158,31 @@ export function createPreviewRoutes(
     } catch (error) {
       next(normalizeError(error));
     }
+  });
+
+  /**
+   * 轮询自动下载任务状态。
+   * - pending / downloading：前端继续轮询（建议 1500ms 间隔，下载常 5~30s）
+   * - ready：响应里带 fileId，前端切到 /api/preview/file/:id 渲染 iframe
+   * - failed：响应里带 error，前端提示用户失败 / 让其手动重试
+   */
+  router.get('/api/preview/task/:taskId', requireAuth, (req, res) => {
+    const taskId = String(req.params.taskId || '');
+    const status = getTask(taskId);
+    if (!status) {
+      respondError(res, 404, 'NOT_FOUND', '任务不存在或已过期');
+      return;
+    }
+    if (status.status === 'ready') {
+      respond(res, {
+        status: 'ready',
+        fileId: status.fileId,
+        source: status.source,
+        url: `/api/preview/file/${status.fileId}`,
+      });
+      return;
+    }
+    respond(res, status);
   });
 
   router.get('/api/preview/file/:id', requireAuth, async (req, res, next) => {

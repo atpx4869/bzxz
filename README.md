@@ -238,7 +238,8 @@ start.bat
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/preview/request` | 查本地库；命中返回 `{status:'ready', fileId, url}`，未命中返回 `{status:'not_in_library', tried}` |
+| POST | `/api/preview/request` | 查本地库；命中返回 `{status:'ready', fileId, url}`；未命中后台触发自动下载并返回 `{status:'downloading', taskId, tried}` |
+| GET | `/api/preview/task/:taskId` | 轮询自动下载任务：`pending`/`downloading`/`ready{fileId,url}`/`failed{error}` |
 | GET | `/api/preview/file/:id` | 流式回 PDF（HTTP Range + ETag + 304；`?attachment=1` 强制另存） |
 
 ### 统计（需登录）
@@ -253,7 +254,7 @@ start.bat
 
 ## 前端功能
 
-- **标准 PDF 预览**：搜索结果卡片「预览」按钮 → 命中本地库即时打开内嵌 iframe PDF 阅读器（支持 Range + ETag）；未命中提示先下载（Phase 2 接自动下载）。库目录默认 `<exe同级>/standards/`，Windows Program Files 安装时探针失败会回退到 `userData/standards` 并在管理员设置页打 banner。多源同号通过 `{stdCode} - {SOURCE}.pdf` 文件名共存，按管理员配置的源优先级选择本地命中
+- **标准 PDF 预览（Phase 2）**：搜索结果卡片「预览」按钮 → 命中本地库即时打开内嵌 iframe PDF 阅读器（支持 Range + ETag）；**未命中后台自动按源优先级下载并入库，前端 1.5s 轮询任务直到 ready 切 iframe**（3 分钟超时上限）。库目录默认 `<exe同级>/standards/`，Windows Program Files 安装时探针失败会回退到 `userData/standards` 并在管理员设置页打 banner。所有下载（搜索卡片「下载」/ 预览自动下载 / 批量多源）现在统一 `fs.rename` 进库目录，按 admin 模板（默认 `{stdCode} - {SOURCE}.pdf`，支持 `{stdCode} {source} {year} {title}` 占位符）命名 UPSERT 索引；多源同号通过 source 后缀文件名共存。可选 chokidar 监听（默认开），用户手动拖 PDF 进库目录立刻入索引
 - 现代深色毛玻璃主题（oklch 色彩空间 + backdrop-filter）
 - 免登录模式（默认开启，无需注册即可使用）
 - 多源并行搜索 + 去重 + 状态排序

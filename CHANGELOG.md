@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added
+- **标准 PDF 预览 Phase 2：自动下载 + 入库 + 文件夹监听**。
+  - **下载即入库（单路径）**：以前下载先落 `data/exports/` 然后 14 天清理；现在直接 `fs.rename` 进 `standards_library_dir`，按 admin 模板（`{stdCode} - {SOURCE}.pdf` 之类）命名并 UPSERT 索引。`data/exports/` 已不再放 PDF，仅留补全功能输出的 xlsx 报表，**不再有 14 天自动清理**（标准永久保留）。`src/shared/fs.ts` 删除 `cleanupOldExportFiles` 和 `DEFAULT_EXPORT_RETENTION_DAYS`。
+  - **入库 hook 抽出**：`src/services/download-to-library.ts` 暴露 `moveDownloadToLibrary(db, sourceRegistry, source, standardId, result)`，给 `auto-download` / `multi-download` / preview 自动下载共用。`addFileToLibrary` 改用 `fs.rename`（跨卷 EXDEV/EPERM/EACCES 时 copy+unlink 兜底）+ 文件名冲突 `(1)`、`(2)` 后缀去重。
+  - **文件名模板引擎**：`src/services/library-naming.ts` 提供 `renderLibraryFilename(pattern, ctx)`，支持 `{stdCode} {source} {year} {title}` 占位符。空值与相邻分隔符（空格/`-`/`_`/`·`/`—`）会被吞掉，结尾不会留下"GB 3324-2024 -.pdf"这种悬空连字符；非法路径字符 `\/:*?"<>|` 一律清成空格；总长截到 200 字符避免触发 Windows 260 字符路径上限。`admin-routes` zod schema 强制模板必须包含 `{stdCode}`，否则不同标准会落同一个文件名互相覆盖。
+  - **/api/downloads 兼容 library**：`GET /api/downloads` 现在 union exports（xlsx）+ library（PDF）两类条目，library 条目带 `fileId` / `previewUrl` / `downloadUrl: /api/preview/file/:id?attachment=1` / `kind:'library'`；`GET /api/downloads/:filename` 走 exports 找不到时回退按 basename 查 standard_files 索引，旧前端 `triggerDownload(fileName)` 不必同步改。
+  - **chokidar 文件夹监听**（默认开）：用户把 PDF 拖到库目录立刻入索引，无需重扫。`startLibraryWatcher` 在 `app.ts` 启动时根据 `library_watcher_enabled='1'` 自动起；admin 设置页加「文件夹监听 ☑ 启用」开关（OneDrive/NAS 抖动场景可关）；切换 watcher / 改库目录 / 触发重扫都会重启 watcher 跟上新路径。`awaitWriteFinish: { stabilityThreshold: 1500ms, pollInterval: 200ms }` 防大文件写一半就入库。
+  - **预览自动下载 + poll**：`POST /api/preview/request` 未命中本地库时不再直接报 `not_in_library`，而是后台触发自动下载（按 admin 配置的 source 优先级依次尝试）+ 入库，立即返回 `{ status: 'downloading', taskId }`；新增 `GET /api/preview/task/:taskId` 让前端轮询（1500ms 间隔，3 分钟超时上限）。任务跑完返回 `{ status: 'ready', fileId, url }`，前端切 iframe 加载。所有源都失败 → `{ status: 'failed', error }`，弹"自动下载失败"提示。
+  - **数据库默认值**：`src/services/db.ts` qualDefaults 新增 `library_watcher_enabled='1'`、`library_filename_pattern='{stdCode} - {source}'`、`library_source_priority='["gbw","bz","by"]'`。
 - **标准 PDF 预览（Phase 1）**：搜索结果卡片新增「预览」按钮，命中本地库时即时打开内嵌 PDF 阅读器；未命中时弹"先下载再预览"提示，**不自动触发下载**（自动下载留到 Phase 2）。
   - 新表 `standard_files (id, std_code_norm, year, source, abs_path, size, mtime, mime, indexed_at)` + 唯一约束 `(std_code_norm, year, source)`；多源同号通过 source 后缀文件名（`GB_T 3324-2024 - BW.pdf`）共存，索引唯一键避免相互覆盖。`src/services/db.ts`
   - 新模块 `src/shared/library-paths.ts`：库路径解析 + 写入探针 + 回退。默认 `<exe同级>/standards/`，**刻意不放 C 盘 userData**（避免长期占用 C 盘）；用户装在 Program Files 时探针失败 → 回退 `userData/standards` 并在管理员设置页打"⚠ 已临时回退"banner。Electron 主进程 `electron/main.ts` 新增 `BZXZ_EXE_DIR` / `BZXZ_USER_DATA_DIR` 环境变量喂给后端。

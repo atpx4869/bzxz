@@ -14,7 +14,8 @@ import { createStatsRoutes } from './stats-routes';
 import { createQualificationRoutes } from './cnas-routes';
 import { createStandardsRoutes } from './standards-routes';
 import { createPreviewRoutes } from './preview-routes';
-import { scanLibrary } from '../services/library-index';
+import { scanLibrary, startLibraryWatcher } from '../services/library-index';
+import { getSetting } from '../services/db';
 import { AppError } from '../shared/errors';
 import { respond, respondError } from '../shared/response';
 import { getOcrStatus } from '../sources/shared/captcha-ocr';
@@ -91,7 +92,14 @@ export function createApp() {
     return base;
   }
 
-  // Serve exported files for browser download
+  /**
+   * 文件下载兜底（Phase 2 改造）：
+   * 1. 先看 exports/（xlsx 报表、旧 PDF 残留）
+   * 2. 再按 basename 查 standard_files 索引（PDF 标准入库后只在 library/ 里）
+   *
+   * 这样旧前端代码 `triggerDownload(fileName)` → `/api/downloads/${fileName}`
+   * 仍然能解析，迁移期前后端不必同步改。
+   */
   app.get('/api/downloads/:filename', requireAuth, (req, res) => {
     const filename = safeExportName(String(req.params.filename));
     if (!filename) {
@@ -99,50 +107,80 @@ export function createApp() {
       return;
     }
     const exportsDir = path.resolve(baseDir, 'data', 'exports');
-    const filePath = path.resolve(exportsDir, filename);
-    if (!filePath.startsWith(exportsDir + path.sep)) {
-      respondError(res, 400, 'BAD_REQUEST', 'Invalid filename');
+    const exportsPath = path.resolve(exportsDir, filename);
+    if (exportsPath.startsWith(exportsDir + path.sep) && existsSync(exportsPath)) {
+      if (req.query.inline === '1') res.sendFile(exportsPath);
+      else res.download(exportsPath);
       return;
     }
-    if (!existsSync(filePath)) {
-      respondError(res, 404, 'NOT_FOUND', 'File not found');
+    // Fallback：从 library 索引按 basename 找。SQL 用 LIKE 锚定 basename 防止
+    // 不同库根之间误命中（标准化以 path.sep 为界）。
+    const candidates = db.prepare(
+      `SELECT id, abs_path FROM standard_files WHERE abs_path LIKE ? ESCAPE '\\'`
+    ).all('%' + filename.replace(/[\\%_]/g, m => '\\' + m)) as Array<{ id: number; abs_path: string }>;
+    const match = candidates.find(r => path.basename(r.abs_path) === filename);
+    if (match) {
+      if (req.query.inline === '1') res.sendFile(match.abs_path);
+      else res.download(match.abs_path);
       return;
     }
-    if (req.query.inline === '1') {
-      res.sendFile(filePath);
-    } else {
-      res.download(filePath);
-    }
+    respondError(res, 404, 'NOT_FOUND', 'File not found');
   });
 
+  /**
+   * 下载列表（Phase 2 改造）：union exports/ 里的 xlsx 报表 + library 里的 PDF 标准。
+   * PDF 标准走 fileId 作为 downloadUrl —— 命中预览端点既能内联看，也能 attachment=1 另存。
+   * xlsx 报表 originatingExports，仍走 /api/downloads/:filename。
+   */
   app.get('/api/downloads', requireAuth, async (_req, res, next) => {
     try {
       const exportsDir = path.resolve(baseDir, 'data', 'exports');
-      if (!existsSync(exportsDir)) {
-        respond(res, { items: [] });
-        return;
+      const exportItems: any[] = [];
+      if (existsSync(exportsDir)) {
+        const names = await readdir(exportsDir);
+        const fromExports = await Promise.all(names
+          .filter(name => FILENAME_ALLOWED.test(name))
+          .map(async name => {
+            const filePath = path.resolve(exportsDir, name);
+            if (!filePath.startsWith(exportsDir + path.sep)) return null;
+            const s = await stat(filePath);
+            if (!s.isFile()) return null;
+            const standardNumber = name.match(/((?:GB|GB\/T|YY\/T|YY|JJG|DB\d+\/T|ISO)[\w./ -]*?\d{1,5}(?:[-—]\d{4})?)/i)?.[1]?.trim() ?? '';
+            const source = name.match(/_(gbw|by|bz)_/i)?.[1] ?? '';
+            return {
+              fileName: name,
+              size: s.size,
+              mtime: s.mtime.toISOString(),
+              standardNumber,
+              source,
+              path: filePath,
+              downloadUrl: `/api/downloads/${encodeURIComponent(name)}`,
+              kind: 'export' as const,
+            };
+          }));
+        for (const it of fromExports) if (it) exportItems.push(it);
       }
-      const names = await readdir(exportsDir);
-      const items = await Promise.all(names
-        .filter(name => FILENAME_ALLOWED.test(name))
-        .map(async name => {
-          const filePath = path.resolve(exportsDir, name);
-          if (!filePath.startsWith(exportsDir + path.sep)) return null;
-          const s = await stat(filePath);
-          if (!s.isFile()) return null;
-          const standardNumber = name.match(/((?:GB|GB\/T|YY\/T|YY|JJG|DB\d+\/T|ISO)[\w./ -]*?\d{1,5}(?:[-—]\d{4})?)/i)?.[1]?.trim() ?? '';
-          const source = name.match(/_(gbw|by|bz)_/i)?.[1] ?? '';
-          return {
-            fileName: name,
-            size: s.size,
-            mtime: s.mtime.toISOString(),
-            standardNumber,
-            source,
-            path: filePath,
-            downloadUrl: `/api/downloads/${encodeURIComponent(name)}`,
-          };
-        }));
-      respond(res, { items: items.filter(Boolean).sort((a: any, b: any) => String(b.mtime).localeCompare(String(a.mtime))) });
+      // Library PDF 索引
+      const libraryRows = db.prepare(
+        `SELECT id, std_code_norm, year, source, abs_path, size, mtime, indexed_at
+         FROM standard_files ORDER BY indexed_at DESC`
+      ).all() as Array<{ id: number; std_code_norm: string; year: string; source: string; abs_path: string; size: number; mtime: number; indexed_at: string }>;
+      const libraryItems = libraryRows.map(r => ({
+        fileName: path.basename(r.abs_path),
+        size: r.size,
+        mtime: new Date(r.mtime).toISOString(),
+        standardNumber: r.std_code_norm + (r.year ? `-${r.year}` : ''),
+        source: r.source,
+        path: r.abs_path,
+        // 预览端点既支持 inline（默认）也支持 attachment=1，前端按需拼参数
+        downloadUrl: `/api/preview/file/${r.id}?attachment=1`,
+        previewUrl: `/api/preview/file/${r.id}`,
+        kind: 'library' as const,
+        fileId: r.id,
+      }));
+      const items = [...libraryItems, ...exportItems].sort((a, b) =>
+        String(b.mtime).localeCompare(String(a.mtime)));
+      respond(res, { items });
     } catch (error) {
       next(error);
     }
@@ -178,7 +216,7 @@ export function createApp() {
   const qualRouter = createQualificationRoutes(db, requireAuth);
   app.use(qualRouter);
   // 预览：requireAuth 在路由内部应用，挂在根上即可（端点路径里已带 /api/preview 前缀）。
-  app.use(createPreviewRoutes(db, requireAuth));
+  app.use(createPreviewRoutes(db, requireAuth, sourceRegistry));
 
   app.get('/api/health', (_req, res) => {
     const version = process.env.npm_package_version || process.env.BZXZ_APP_VERSION || '';
@@ -228,6 +266,15 @@ export function createApp() {
   scanLibrary(db, { full: false }).catch((e) => {
     console.error('[library] startup scan failed:', e);
   });
+
+  // chokidar 监听：用户拖文件进库目录自动入索引。默认开（库 PDF 是主流入口），
+  // 用户可在 admin 设置里关掉（OneDrive / SMB 抖动场景）。fire-and-forget：
+  // start 内部解析库路径 + 建监听器，慢盘别拖启动主路径。
+  if (getSetting(db, 'library_watcher_enabled', '1') === '1') {
+    startLibraryWatcher(db).catch((e) => {
+      console.error('[library] startup watcher failed:', e);
+    });
+  }
 
   app.use(createStandardsRoutes({ db, sourceRegistry, exportTaskStore, requireAuth, baseDir }));
 
