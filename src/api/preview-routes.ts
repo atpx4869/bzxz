@@ -76,21 +76,35 @@ export function createPreviewRoutes(
         const searchResults = await service.searchStandards({ query: stdCode });
         const norm = (s: string) => s.replace(/[^A-Z0-9]/gi, '').toUpperCase();
         const wanted = norm(stdCode);
+        // StandardSummary 没有独立 year 字段，从 standardNumber 末尾抽（"GB 3324-2024"）
+        const extractYear = (sn: string): string | undefined => sn.match(/-\s*(\d{4})\s*$/)?.[1];
         const match = searchResults.find(item => {
           if (norm(item.standardNumber) !== wanted) return false;
-          if (year && item.year && item.year !== year) return false;
+          if (year) {
+            const itemYear = extractYear(item.standardNumber);
+            if (itemYear && itemYear !== year) return false;
+          }
           return true;
         }) || searchResults.find(item => norm(item.standardNumber) === wanted);
         if (!match) continue;
 
         // 2) 下载（autoDownload 优先；不支持时用 exportStandard 兜底）
-        let result: { filePath?: string; fileName?: string; fileSize?: number; status?: string } | null = null;
+        // autoDownload 返回 DownloadSessionInfo（filePath/fileName/fileSize 在 meta 里），
+        // exportStandard 返回 ExportResult（顶层就有 filePath 等）。统一拍扁成下面这个形状。
+        let result: { filePath?: string; fileName?: string; fileSize?: number } | null = null;
         if (adapter.autoDownload) {
           const r = await adapter.autoDownload(match.id, userId, 3);
-          if (r.status === 'downloaded') result = r;
+          if (r.status === 'downloaded') {
+            const meta = r.meta || {};
+            result = {
+              filePath: typeof meta.filePath === 'string' ? meta.filePath : undefined,
+              fileName: typeof meta.fileName === 'string' ? meta.fileName : undefined,
+              fileSize: typeof meta.fileSize === 'number' ? meta.fileSize : undefined,
+            };
+          }
         } else if (adapter.exportStandard) {
           const r = await adapter.exportStandard(match.id);
-          result = { ...r, status: 'downloaded' };
+          result = { filePath: r.filePath, fileName: r.fileName, fileSize: r.fileSize };
         }
         if (!result || !result.filePath) continue;
 

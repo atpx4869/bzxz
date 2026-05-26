@@ -310,10 +310,12 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
 
       const result = await adapter.autoDownload(id, req.user!.id, 3);
       trackEvent(db, req.user!.id, 'download', parsed.source, id);
-      // 成功落盘 → 立刻 move 到 library；失败也不影响响应
-      const moved = result.filePath
+      // 成功落盘 → 立刻 move 到 library；失败也不影响响应。
+      // DownloadSessionInfo 的 filePath/fileName/fileSize 落在 meta 里（gbw 适配器的约定）。
+      const meta = (result.meta || {}) as { filePath?: string; fileName?: string; fileSize?: number };
+      const moved = meta.filePath
         ? await moveDownloadToLibrary(db, sourceRegistry, parsed.source, id, {
-            filePath: result.filePath, fileName: result.fileName, fileSize: result.fileSize,
+            filePath: meta.filePath, fileName: meta.fileName, fileSize: meta.fileSize,
           })
         : {};
       respond(res, toCamelCase({
@@ -346,9 +348,10 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
             const result = await adapter.autoDownload(standardId, req.user!.id, 3);
             if (result.status === 'downloaded') {
               trackEvent(db, req.user!.id, 'download', src, standardId);
-              const moved = result.filePath
+              const meta = (result.meta || {}) as { filePath?: string; fileName?: string; fileSize?: number };
+              const moved = meta.filePath
                 ? await moveDownloadToLibrary(db, sourceRegistry, src as SourceName, standardId, {
-                    filePath: result.filePath, fileName: result.fileName, fileSize: result.fileSize,
+                    filePath: meta.filePath, fileName: meta.fileName, fileSize: meta.fileSize,
                   })
                 : {};
               respond(res, toCamelCase({
