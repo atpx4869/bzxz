@@ -12,10 +12,9 @@ function switchQualTab(tab) {
     setTimeout(() => switchQualSettingsTab(tab === 'logs' ? 'logs' : 'labs'), 0);
     return;
   }
-  // 手机模式：搜索子标签 UI 隐藏（见 styles.css），强制走可视化页。
-  if (typeof window.isMobile === 'function' && window.isMobile()) {
-    tab = 'visual';
-  }
+  // 手机端两个子标签都可用（搜索 + 可视化）。早期版本曾强制重定向到可视化，
+  // 但用户能看到「搜索」按钮却点不动反而更糟。窄屏下若搜索页有局部排版问题，
+  // 应在 CSS 单点修，不要禁掉整个功能。
   document.querySelectorAll('.qual-tab').forEach(t => {
     const active = t.dataset.qualTab === tab;
     t.classList.toggle('active', active);

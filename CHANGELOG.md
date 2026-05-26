@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+- 手机端「资质查询 → 搜索」子标签点不动：`app-qual.js:switchQualTab()` 第 16 行原先有 `if (isMobile()) tab = 'visual'` 的硬重定向，按钮在 DOM 里、click handler 触发了，但被函数顶部强制改写成 visual，外观上像"点了没反应"。注释还写"搜索子标签 UI 隐藏（见 styles.css）"但 CSS 里实际上根本没藏。去掉重定向，两个子标签现在都可用。初版"手机端只保留可视化"的规划同步修订到 `docs/MOBILE_ADAPTATION.md §5.5`。
 - 手机端两处排版收敛：
   - **标准检索结果卡片**：原来标题与 CMA/CNAS 资质徽章挤在同一 flex 行（`.card-title-row`），长标准名截断时徽章会被推开变形，BW/BZ/BY 源标签也会和徽章错位。手机模式（≤640px）下把 `.card-title-row` 改成 column 方向 —— 标准名独占一行，资质徽章另起一行贴左对齐，`card-body` 的 `-webkit-line-clamp:2` 在手机端解除以容纳徽章行。`public/styles.css` §11
   - **资质查询结果分组头**：原来 `.qual-result-std` 是单行 flex（▶ + 标准号 + 标准名 + N项），手机窄屏挤不下会让标准号被强行折行（例如 `GB/T 3324-2017` 被拆成 `GB/T 3324-` / `2017`）。手机模式下加 `flex-wrap: wrap` + `.qual-std-name { flex: 1 1 100%; padding-left: 22px; }`，让标准名落到第二行与标准号对齐缩进，N项 spani 保持在第一行右侧。CMA / CNAS 左右两栏（`.qual-results-grid`）保持不变，仅 gap 收紧。`public/styles.css` §12

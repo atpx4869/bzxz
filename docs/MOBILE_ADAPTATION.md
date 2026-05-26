@@ -302,17 +302,20 @@ CSS：
 - 单条下载：卡片就地 spinner（沿用 `result-card.css` 的 `.btn-spinner`）+ 成功/失败闪烁
 - 完成后：现有 `showToast` 在底部 tab 上方弹出（要给 toast 加 `bottom: calc(56px + env(safe-area-inset-bottom) + 12px);` 的手机覆盖）
 
-### 5.5 资质查询手机版（**只保留可视化**）
+### 5.5 资质查询手机版（**搜索 + 可视化 双子标签可用**）
 
-#### 5.5.1 子标签隐藏
+> ⚠️ 与初版规划不同：初版要"只保留可视化"，实操发现按钮还在却不响应反而坑用户，
+> 已在 1.0.139 改回两个子标签都可用（`app-qual.js:switchQualTab` 去掉强制重定向）。
+> 订阅管理 / 同步日志 仍在「系统设置」（已迁移完成）。
 
-桌面 `qualifications.css` 渲染 4 子标签（搜索 / 可视化 / 订阅管理 / 同步日志）。
+#### 5.5.1 子标签布局
+
+桌面 `qualifications.css` 渲染 2 子标签（搜索 / 可视化），订阅管理 / 同步日志 移至系统设置。
 
 手机 ≤640px：
-- 隐藏 `.qual-subtabs`（或对应子标签容器）
-- 隐藏 `.qual-search-pane`、`.qual-subs-pane`、`.qual-logs-pane`
-- 始终显示 `.qual-visual-pane`
-- 取消子标签切换时手机端的 active 类切换（在 `app-qual.js` 顶部加 `if (isMobile()) return;`）
+- 两个子标签都点得动（`switchQualTab('search')` / `switchQualTab('visual')`）
+- 默认进入「搜索」，可视化作为可选视图
+- 子标签栏不再有"订阅管理与同步日志已移至系统设置"提示（已删，提示完成历史使命）
 
 #### 5.5.2 输入区折叠
 
