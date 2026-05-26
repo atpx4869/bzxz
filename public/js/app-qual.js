@@ -101,31 +101,46 @@ function renderQualVisual(queries, data) {
   const stats = document.getElementById('qualVisualStats');
   const out = document.getElementById('qualVisualResults');
   const now = beijingDate();
-  const visibleLabNames = new Set();
 
-  let covered = 0, cnas = 0, cma = 0, expired = 0;
+  // ── 全局统计：跨 query 跨 source 算总数；机构名也提到顶部 ──
+  const allLabNames = new Set();
+  let covered = 0, cnasCnt = 0, cmaCnt = 0, expiredCnt = 0;
   for (const query of queries) {
     const items = data[query] || [];
     if (items.length) covered++;
     for (const it of items) {
-      visibleLabNames.add(it.linkedLabName || it.labName || it.labNo || '未知机构');
-      if (it.source === 'CNAS') cnas++;
-      if (it.source === 'CMA') cma++;
-      if (it.expiryDate && it.expiryDate < now) expired++;
+      allLabNames.add(it.linkedLabName || it.labName || it.labNo || '未知机构');
+      if (it.source === 'CNAS') cnasCnt++;
+      if (it.source === 'CMA') cmaCnt++;
+      if (it.expiryDate && it.expiryDate < now) expiredCnt++;
     }
   }
+  const labLabel = allLabNames.size === 0 ? '' :
+    allLabNames.size === 1 ? [...allLabNames][0] : `${allLabNames.size} 家机构`;
 
+  // stats 栏：原 4 个统计卡 + 顶部右侧机构标签（统一显示一次，所有卡片不再重复）
   stats.innerHTML = `
     <div><strong>${covered}/${queries.length}</strong><span>关键词命中</span></div>
-    <div><strong>${cnas}</strong><span>CNAS 能力</span></div>
-    <div><strong>${cma}</strong><span>CMA 能力</span></div>
-    <div class="${expired ? 'warn' : ''}"><strong>${expired}</strong><span>已过期记录</span></div>`;
+    <div><strong>${cnasCnt}</strong><span>CNAS 能力</span></div>
+    <div><strong>${cmaCnt}</strong><span>CMA 能力</span></div>
+    <div class="${expiredCnt ? 'warn' : ''}"><strong>${expiredCnt}</strong><span>已过期记录</span></div>
+    ${labLabel ? `<div class="qv2-lab-pill" title="${escapeHtml([...allLabNames].join(' / '))}"><strong>${escapeHtml(labLabel)}</strong><span>检验机构</span></div>` : ''}`;
 
   if (!queries.some(query => (data[query] || []).length)) {
     out.innerHTML = '<div class="qual-visual-result empty">本地缓存暂无匹配资质。请先在「系统设置 → 资质订阅」中订阅机构并同步能力。</div>';
     return;
   }
 
+  // 从用户搜的 query 里抠出年份（如 'GB/T 3325-2024' → '2024'），用于和命中 stdCode 的
+  // 年份对比，跨年时给 std-card 头打 ⚠ —— 跟搜索结果徽章的 ⚠ 标记设计一致
+  function extractYear(s) {
+    if (!s) return '';
+    const norm = String(s).replace(/[‐-―－]/g, '-');
+    const m = norm.match(/-\s*(\d{4}[A-Za-z]?)\s*$/);
+    return m ? m[1] : '';
+  }
+
+  // 标准名里把标准号自身去掉（CNAS std_name 偶发把编号也带进来导致重复）
   function cleanStdName(code, name) {
     if (!name) return '';
     const escaped = String(code || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -134,97 +149,119 @@ function renderQualVisual(queries, data) {
       : name;
   }
 
-  function renderSourceColumn(title, sourceClass, items) {
-    // Outer card already groups by stdCode, so flatten — show capabilities directly.
-    if (!items.length) {
-      return `<div class="qual-visual-source ${sourceClass} empty">
-        <div class="qual-visual-source-head"><strong>${title}</strong><span>无匹配</span></div>
-        <div class="qual-visual-empty-col">— 无本地缓存匹配 —</div>
-      </div>`;
+  // 一条能力的元信息（category · limit 截断 · 生效~到期）
+  function renderCapMeta(it) {
+    const parts = [];
+    if (it.category) parts.push(`<span class="qv2-cap-cat">${escapeHtml(it.category)}</span>`);
+    if (it.limitDesc && it.limitDesc !== '/' && it.limitDesc !== '—') {
+      const limitTxt = it.limitDesc.length > 24 ? it.limitDesc.slice(0, 24) + '…' : it.limitDesc;
+      parts.push(`<span class="qv2-cap-limit" title="${escapeHtml(it.limitDesc)}">限 ${escapeHtml(limitTxt)}</span>`);
     }
+    const expired = it.expiryDate && it.expiryDate < now;
+    if (it.effectiveDate || it.expiryDate) {
+      const dateTxt = `${it.effectiveDate || '?'} ~ ${it.expiryDate || '?'}`;
+      parts.push(`<span class="qv2-cap-date${expired ? ' expired' : ''}">${escapeHtml(dateTxt)}</span>`);
+    }
+    return parts.length ? `<div class="qv2-cap-meta">${parts.join('')}</div>` : '';
+  }
+
+  // 一行能力：[源徽章] [主文本] / [元信息一行]
+  function renderCap(it) {
+    const expired = it.expiryDate && it.expiryDate < now;
+    const main = it.testItem || it.testStandard || it.stdName || '能力记录';
+    const sourceLower = it.source === 'CNAS' ? 'cnas' : 'cma';
+    return `<div class="qv2-cap${expired ? ' expired' : ''}">
+      <span class="qv2-cap-badge qv2-cap-badge-${sourceLower}"><span class="qv2-dot"></span>${it.source}</span>
+      <div class="qv2-cap-body">
+        <div class="qv2-cap-main">${escapeHtml(main)}</div>
+        ${renderCapMeta(it)}
+      </div>
+    </div>`;
+  }
+
+  // 同一个 stdCode 内部能力排序：未过期 > 过期；CMA > CNAS（用户更常依赖 CMA）；按 testItem 字母序
+  function sortCaps(a, b) {
+    const aExp = a.expiryDate && a.expiryDate < now ? 1 : 0;
+    const bExp = b.expiryDate && b.expiryDate < now ? 1 : 0;
+    if (aExp !== bExp) return aExp - bExp;
+    if (a.source !== b.source) return a.source === 'CMA' ? -1 : 1;
+    return String(a.testItem || '').localeCompare(String(b.testItem || ''));
+  }
+
+  // 一张 std-card：[stdCode 大字 + 年份徽章] / [std-name] / [能力列表]
+  function renderStdCard(group, inputYear) {
+    const stdYear = extractYear(group.stdCode);
+    const crossYear = inputYear && stdYear && inputYear !== stdYear;
+    const yearChip = crossYear
+      ? `<span class="qv2-year-chip qv2-year-cross" title="用户搜的是 ${escapeHtml(inputYear)} 版">⚠ ${escapeHtml(stdYear)} 版</span>`
+      : (stdYear ? `<span class="qv2-year-chip">${escapeHtml(stdYear)} 版</span>` : '');
+
+    const sorted = group.caps.slice().sort(sortCaps);
     const INITIAL = 5;
-    const gid = `qv_${sourceClass}_${Math.random().toString(36).slice(2)}`;
-    const renderRow = (it) => {
-      const expiredCls = it.expiryDate && it.expiryDate < now ? ' expired' : '';
-      const chips = [
-        it.category ? `<span>${escapeHtml(it.category)}</span>` : '',
-        it.matchedQuery ? `<span>命中 ${escapeHtml(it.matchedQuery)}</span>` : '',
-      ].filter(Boolean).join('');
-      return `<div class="qual-visual-cap${expiredCls}">
-        <div class="qual-visual-cap-main">${escapeHtml(it.testItem || it.testStandard || it.stdName || '能力记录')}</div>
-        ${chips ? `<div class="qual-visual-cap-chips">${chips}</div>` : ''}
-        ${it.testStandard ? `<div class="qual-visual-cap-std">${escapeHtml(it.testStandard)}</div>` : ''}
-        ${it.limitDesc && it.limitDesc !== '/' && it.limitDesc !== '—' ? `<div class="qual-visual-cap-limit">限制: ${escapeHtml(it.limitDesc)}</div>` : ''}
-        ${(it.effectiveDate || it.expiryDate) ? `<div class="qual-visual-cap-date">${it.effectiveDate ? '生效 ' + escapeHtml(it.effectiveDate) : ''}${it.expiryDate ? ' · 到期 ' + escapeHtml(it.expiryDate) : ''}</div>` : ''}
-      </div>`;
-    };
-    const visibleRows = items.slice(0, INITIAL).map(renderRow).join('');
-    const hiddenRows = items.length > INITIAL
-      ? `<div class="qual-visual-more-wrap" id="${gid}_more" style="display:none">${items.slice(INITIAL).map(renderRow).join('')}</div>
-         <button class="qual-visual-more-btn" id="${gid}_btn" onclick="toggleQualVisualMore('${gid}')">展开剩余 ${items.length - INITIAL} 条 ▼</button>`
+    const gid = `qv2_${Math.random().toString(36).slice(2)}`;
+    const visibleRows = sorted.slice(0, INITIAL).map(renderCap).join('');
+    const hiddenRows = sorted.length > INITIAL
+      ? `<div class="qv2-more-wrap" id="${gid}_more" style="display:none">${sorted.slice(INITIAL).map(renderCap).join('')}</div>
+         <button class="qv2-more-btn" id="${gid}_btn" onclick="toggleQualVisualMore('${gid}')">展开剩余 ${sorted.length - INITIAL} 条 ▼</button>`
       : '';
-    return `<div class="qual-visual-source ${sourceClass}">
-      <div class="qual-visual-source-head"><strong>${title}</strong><span>${items.length} 条</span></div>
-      <div class="qual-visual-cap-list">${visibleRows}${hiddenRows}</div>
-    </div>`;
-  }
 
-  const singleLab = visibleLabNames.size <= 1;
-  function buildResultCard(group) {
-    const total = group.cnas.length + group.cma.length;
-    const labNamesArr = [...group.labNames];
-    const labInfo = labNamesArr.length > 1 ? labNamesArr.map(n => escapeHtml(n)).join(' / ') : (labNamesArr[0] ? escapeHtml(labNamesArr[0]) : '');
-    return `<div class="qual-visual-lab-card">
-      <div class="qual-visual-lab-head" onclick="toggleQualVisualCard(this.parentElement)" style="cursor:pointer">
-        <div>
-          ${labInfo && !singleLab ? `<h4>${labInfo}</h4>` : ''}
-          ${labInfo && singleLab ? `<span class="qual-visual-lab-muted">${escapeHtml(labInfo)}</span>` : ''}
-          <div><span>${escapeHtml(group.stdCode || '未列标准号')}</span><span>${total} 条匹配能力</span></div>
-          ${group.stdName ? `<p>${escapeHtml(group.stdName)}</p>` : ''}
+    return `<div class="qv2-std-card${crossYear ? ' qv2-cross-year' : ''}">
+      <div class="qv2-std-head" onclick="toggleQualVisualCard(this.parentElement)">
+        <div class="qv2-std-title">
+          <code class="qv2-std-code">${escapeHtml(group.stdCode || '未列标准号')}</code>
+          ${yearChip}
         </div>
-        <span class="qual-visual-lab-arrow" aria-hidden="true">▾</span>
+        <div class="qv2-std-meta">
+          <span class="qv2-std-count">${sorted.length} 条</span>
+          <span class="qv2-std-arrow" aria-hidden="true">▾</span>
+        </div>
       </div>
-      <div class="qual-visual-lab-body">
-        <div class="qual-visual-source-grid">
-          ${renderSourceColumn('CMA', 'cma', group.cma)}
-          ${renderSourceColumn('CNAS', 'cnas', group.cnas)}
-        </div>
+      ${group.stdName ? `<div class="qv2-std-name">${escapeHtml(group.stdName)}</div>` : ''}
+      <div class="qv2-std-body">
+        <div class="qv2-cap-list">${visibleRows}${hiddenRows}</div>
       </div>
     </div>`;
   }
 
+  // ── 按 query 分 section，section 内按 stdCode 聚合 ──
   const sections = queries.map(query => {
     const sourceItems = data[query] || [];
+    const inputYear = extractYear(query);
     const itemSeen = new Set();
-    const groups = new Map();
+    const groups = new Map();  // stdCode → { stdCode, stdName, caps[] }
+
     for (const raw of sourceItems) {
-      const it = { ...raw, matchedQuery: query };
-      const dedupeKey = [it.source, it.labNo, it.stdCode, it.stdName, it.category, it.testItem, it.testStandard, it.limitDesc].join('|');
+      const dedupeKey = [raw.source, raw.labNo, raw.stdCode, raw.testItem, raw.testStandard, raw.category, raw.limitDesc].join('|');
       if (itemSeen.has(dedupeKey)) continue;
       itemSeen.add(dedupeKey);
-      const stdCode = it.stdCode || '未列标准号';
-      // Group by stdCode only so CMA/CNAS for the same standard appear together
+      const stdCode = raw.stdCode || '未列标准号';
       if (!groups.has(stdCode)) groups.set(stdCode, {
-        labNames: new Set(),
         stdCode,
-        stdName: cleanStdName(stdCode, it.stdName || it.testStandard || ''),
-        cnas: [],
-        cma: [],
+        stdName: cleanStdName(stdCode, raw.stdName || raw.testStandard || ''),
+        caps: [],
       });
-      const g = groups.get(stdCode);
-      g[it.source === 'CNAS' ? 'cnas' : 'cma'].push(it);
-      g.labNames.add(it.linkedLabName || it.labName || it.labNo || '未知机构');
+      groups.get(stdCode).caps.push(raw);
     }
+
+    // 同 query 内 std-card 排序：与输入同年优先 → 能力多优先 → stdCode 字母序
     const cards = [...groups.values()].sort((a, b) => {
-      const scoreA = (a.cma.length ? 1000 : 0) + (a.cnas.length ? 500 : 0) + a.cma.length + a.cnas.length;
-      const scoreB = (b.cma.length ? 1000 : 0) + (b.cnas.length ? 500 : 0) + b.cma.length + b.cnas.length;
-      return scoreB - scoreA;
-    }).map(buildResultCard).join('');
+      const ay = extractYear(a.stdCode);
+      const by = extractYear(b.stdCode);
+      const aSame = inputYear && ay === inputYear ? 1 : 0;
+      const bSame = inputYear && by === inputYear ? 1 : 0;
+      if (aSame !== bSame) return bSame - aSame;
+      if (a.caps.length !== b.caps.length) return b.caps.length - a.caps.length;
+      return String(a.stdCode).localeCompare(String(b.stdCode));
+    }).map(g => renderStdCard(g, inputYear)).join('');
+
     const sectionId = `qvs_${Math.random().toString(36).slice(2)}`;
-    return `<section class="qual-visual-query-section" id="${sectionId}">
-      <div class="qual-visual-query-head">
-        <div><strong>${escapeHtml(query)}</strong><span>${groups.size ? groups.size + ' 条结果' : '无结果'}</span></div>
-        <div class="qual-visual-query-actions">
+    return `<section class="qual-visual-query-section qv2-section" id="${sectionId}">
+      <div class="qv2-section-head">
+        <div class="qv2-section-title">
+          <strong>${escapeHtml(query)}</strong>
+          <span>${groups.size ? groups.size + ' 个标准号 · ' + sourceItems.length + ' 条能力' : '无结果'}</span>
+        </div>
+        <div class="qv2-section-actions">
           <button onclick="toggleQualVisualSection('${sectionId}', true)">全部展开</button>
           <button onclick="toggleQualVisualSection('${sectionId}', false)">全部折叠</button>
         </div>
@@ -233,7 +270,7 @@ function renderQualVisual(queries, data) {
     </section>`;
   }).join('');
 
-  out.innerHTML = `<div class="qual-visual-results">${sections}</div>`;
+  out.innerHTML = `<div class="qual-visual-results qv2-results">${sections}</div>`;
 }
 
 function toggleQualVisualMore(gid) {
@@ -247,7 +284,9 @@ function toggleQualVisualMore(gid) {
     : `展开剩余 ${wrap.children.length} 条 ▼`;
 }
 
-function toggleQualVisualCard(card) {
+function toggleQualVisualCard(head) {
+  // head 元素的父节点是 std-card（新版）或 lab-card（旧版兜底，保留以防 markup 切换不彻底）
+  const card = head?.parentElement;
   if (!card) return;
   card.classList.toggle('collapsed');
 }
@@ -255,21 +294,17 @@ function toggleQualVisualCard(card) {
 function toggleQualVisualSection(sectionId, expand) {
   const section = document.getElementById(sectionId);
   if (!section) return;
-  // 折叠/展开整张卡片（lab-body 通过 .collapsed 隐藏）
-  section.querySelectorAll('.qual-visual-lab-card').forEach(card => {
+  // 折叠/展开整张卡片（std-card / lab-card 通过 .collapsed 隐藏 body）
+  section.querySelectorAll('.qv2-std-card, .qual-visual-lab-card').forEach(card => {
     card.classList.toggle('collapsed', !expand);
   });
   // 展开时同步把每张卡片里的"展开剩余 N 条"也打开；折叠时不动溢出区
-  // （反正卡片本体已隐藏，溢出区状态在用户下次展开卡片时再生效）
   if (expand) {
-    section.querySelectorAll('.qual-visual-more-wrap').forEach(wrap => {
+    section.querySelectorAll('.qv2-more-wrap, .qual-visual-more-wrap').forEach(wrap => {
       wrap.style.display = '';
     });
-    section.querySelectorAll('.qual-visual-more-btn').forEach(btn => {
-      const wrap = btn.previousElementSibling;
-      const cnt = wrap ? wrap.children.length : 0;
+    section.querySelectorAll('.qv2-more-btn, .qual-visual-more-btn').forEach(btn => {
       btn.innerHTML = '收起 ▲';
-      if (cnt === 0) btn.style.display = 'none';
     });
   }
 }

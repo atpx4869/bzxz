@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added
+- **资质可视化 tab 重设计**（Step 7）：解决"机构名重复占位 + CMA/CNAS 分两列被截 + 标准号埋在卡头不显眼"三个 UX 痛点。
+  - **机构名提到顶部 stats 栏**：所有结果卡片不再重复显示机构名。stats 栏从 4 列网格扩到 6 列（用 `:has(.qv2-lab-pill)` 选择器），右侧加一格"检验机构"卡片，单机构显示全名、多机构显示数量 + hover 全名 tooltip。
+  - **标准号成为视觉主体**：每个 stdCode 一张独立卡片，stdCode 用 `DM Mono 16px 700` 大字显示，右侧贴年份徽章。当用户搜的关键词带年份且与 stdCode 年份不一致时，徽章变橙色 ⚠ + 卡片边框虚线半透明（视觉提示"这是跨年兜底命中"）。
+  - **CMA/CNAS 改为能力行头徽章**：不再分两列。同 stdCode 下所有能力扁平列出，每行最前面一个圆点 + 源名小徽章。能力排序：未过期 > 过期 → CMA > CNAS → testItem 字母序。同 query 内 stdCard 排序：与输入同年优先 → 能力多优先 → stdCode 字母序。
+  - **能力行紧凑两行**：第一行 testItem（主信息），第二行 `category · limit 截断到 24 字 · 生效~到期`。限制超长鼠标 hover 看全文 tooltip。过期记录整行 0.62 透明 + 日期红色。
+  - **类名 `.qv2-*` 与旧 `.qual-visual-*` 隔离**：旧 CSS 完全保留，新 markup 不命中老选择器；回滚只需把 `renderQualVisual` 函数体换回，CSS 留着不用清。
+  - **新增 23 条 oklch declaration**，全部走 sRGB hex / rgba fallback；`npm run oklch:check` 797/797 通过。
+
 - **资质匹配 Step 6 — 抓取侧清洗 + 搜索归一化 LIKE + 旧数据 fixup**：解决"资质查询页搜片段 `3325-` 匹不上 CNAS 脏空格变体"的问题，把 Step 1-5 没覆盖的最后一类场景闭掉。
   - **抓取入库清洗**：`src/shared/std-code.ts` 加 `cleanStdCode(raw)`，只折叠"年份连字符附近的多空格"，不动前缀大小写和 `/T`。`syncCnasLab` / `syncCmaLab` INSERT 前调一次，CNAS 写出的 `'GB/T 3325 -2024'` 一进 DB 就变成 `'GB/T 3325-2024'`。
   - **搜索归一化 LIKE 兜底**：`searchQualifications` WHERE 增加 `std_code_norm LIKE ? OR std_code_base LIKE ?` 两条分支，query 也跑一遍 extractFullCode/extractBaseCode 后做子串。用户搜 `'3325-'` → extractFullCode 算成 `'3325-'`，`'GB3325-2024'` 含 `'3325-'` 命中 ✓。彻底闭掉"片段查询遇上脏空格"的盲区。
