@@ -1,25 +1,44 @@
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
+  /* Win7 Chrome 109 / 老浏览器兜底：oklch() 要 Chrome 111+（2023-03）才支持。
+     双声明套路：先写 sRGB hex / rgba 兜底，再写 oklch；旧浏览器解析 oklch 失败
+     会丢弃这条 declaration、保留上一条 hex；新浏览器两条都解析、后者赢。
+     色值是 oklch 在 sRGB 空间的近似映射，不要求像素级一致。 */
+  --bg:        #0e1118;
   --bg:        oklch(14% 0.018 255);
+  --surface:   #161a22;
   --surface:   oklch(19% 0.014 255);
+  --surface-h: #1d212c;
   --surface-h: oklch(23% 0.018 255);
+  --border:    #252934;
   --border:    oklch(27% 0.012 255);
+  --text:      #e4e6ea;
   --text:      oklch(92% 0.005 255);
+  --text-2:    #a5a9b3;
   --text-2:    oklch(72% 0.012 255);
+  --text-3:    #696d77;
   --text-3:    oklch(50% 0.015 255);
+  --accent:    #4f6df0;
   --accent:    oklch(66% 0.20 250);
+  --accent-h:  #6a85ff;
   --accent-h:  oklch(72% 0.22 250);
+  --accent-g:  #7585b8;
   --accent-g:  oklch(66% 0.10 250);
+  --success:   #36b988;
   --success:   oklch(70% 0.16 158);
+  --danger:    #d75541;
   --danger:    oklch(60% 0.20 25);
+  --warning:   #cba03e;
   --warning:   oklch(70% 0.14 85);
   --radius-sm: 8px;
   --radius:    12px;
   --radius-lg: 18px;
   --ease-out:  cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --glass-bg:    rgba(20, 24, 32, 0.72);
   --glass-bg:    oklch(17% 0.016 255 / 0.72);
+  --glass-border: rgba(70, 76, 87, 0.45);
   --glass-border: oklch(32% 0.014 255 / 0.45);
   --sidebar-w: 240px;
   --sidebar-collapsed-w: 60px;

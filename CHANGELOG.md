@@ -28,6 +28,10 @@
   - 前端：`public/index.html` 加 `#lanGuestAllowedToggle` + `public/js/app-auth-admin.js` 加 populate 与 `toggleLanGuestAllowed()` confirm 流程
 
 ### Fixed
+- 老浏览器（Win7 Chrome ≤109、Win7 Edge、老版 Safari）打开 Web 端整个 UI 变白底黑字、按钮没颜色没边框：根因是 `:root` 里 13 个核心 CSS 变量（`--bg / --surface / --text / --accent / --success / --danger / --warning / --glass-bg` 等）全部用 `oklch()` 定义，而 oklch 颜色空间要 **Chrome 111（2023-03）/ Firefox 113 / Safari 15.4** 起才支持，Win7 上 Chrome 官方最高只到 109 装不上 111+，整条 declaration 失效 → 变量回退到 initial → 主题崩溃。
+  - **修**：双声明套路，每个变量先写 sRGB hex / rgba 兜底，再写 oklch。旧浏览器解析 oklch 失败丢弃这条声明、保留 hex；新浏览器两条都解析、后者赢。色值是 oklch 在 sRGB 空间的近似映射（`--accent: #4f6df0` ≈ `oklch(66% 0.20 250)` 等），不要求像素级一致 —— 主题观感保留、按钮可见、文字可读
+  - **范围**：`public/styles.css` `:root` 块 + `web/src/styles/base.css` 同步。散布在选择器里直接写 `oklch(...)` 的硬编码（阴影、半透明边框等次要色）不动 —— 老浏览器丢失它们退化成无阴影 / 无 hover 高亮，能接受
+  - **验证**：F12 Console 跑 `CSS.supports('color', 'oklch(50% 0 0)')` 在 Win7 Chrome 上返 `false`，在新版返 `true`；computed style 上 `--accent` 在两边分别拿到 `#4f6df0` 和 `oklch(...)`
 - 手机端标准搜索结果筛选条默认折叠：原来 `.filter-bar` 包含源 chips + 状态 chips + 3 个 toggle + 排序下拉，手机窄屏折行后能占 4–5 行，用户每次搜完都要先滑过这一坨才能看到结果。
   - JS：`public/js/app-search.js:renderFilterBar()` 把原内容包进 `<div class="filter-bar-body">`，前面加一个 `<button class="filter-collapse">筛选 ▾ <count></button>` 折叠按钮；按钮上的徽章实时显示激活筛选项数（source/status 各算 1 + 三个 toggle 任一开各 1）；新增 click handler 切 `.filter-bar.open`，`aria-expanded` 同步给屏幕阅读器
   - CSS：桌面默认 `.filter-collapse { display:none }`、`.filter-bar-body { display:contents }`（子项继续直接参与 `.filter-bar` 的 flex 排版，桌面视觉零回归）；手机 ≤640px 块反过来：按钮 `display:inline-flex`、body 默认 `display:none`、`.open` 时 `display:flex` flex-wrap。`public/styles.css` + `web/src/styles/components/filter-bar.css` + `web/src/styles/responsive.css` 三处同步
