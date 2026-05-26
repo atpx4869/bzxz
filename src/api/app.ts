@@ -22,6 +22,7 @@ import { getOcrStatus } from '../sources/shared/captcha-ocr';
 import { getRecentLogs } from '../shared/log-buffer';
 import { getEnvironmentReport, runEnvironmentCheck } from '../services/environment-check';
 import { getHostStats } from '../shared/http';
+import { getSourceSemaphoreStats } from '../shared/source-semaphore';
 
 /**
  * Legacy → canonical route rewrites. Express matches by url, so we just patch req.url
@@ -254,6 +255,11 @@ export function createApp() {
   });
   app.get('/api/diagnostics/hosts', requireAuth, (_req, res) => {
     respond(res, { hosts: getHostStats() });
+  });
+  // 源级并发信号量诊断：admin 看到 active / limit / waiting 三个数；
+  // waiting > 0 长期不归零 ⇒ 源端瓶颈（考虑升 limit 或检查源是否变慢）
+  app.get('/api/diagnostics/sources', requireAuth, (_req, res) => {
+    respond(res, { sources: getSourceSemaphoreStats() });
   });
 
   // Kick off the self-check at server boot. Fire-and-forget — the check runs

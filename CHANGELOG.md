@@ -2,7 +2,16 @@
 
 ## [Unreleased]
 
-### Added
+### Added / Changed
+- **下载架构：多用户并发适配（A+B+C 组合）** —— 把单机部署 + 多用户共享出口 IP 这个物理约束闭环掉。
+  - **A: 跨用户下载去重**：`ExportTask` 加 `subscribers: number[]`，`ExportTaskStore` 加 `activeByStandard: Map<standardId, taskId>` 索引。两个用户同时点同标准下载 → 第二个调用 `createTask` 时把 userId 追加到 subscribers 拿现有 task 的 SSE 进度流，**底层 adapter.exportStandard 只跑一次**。task 进入终态（success/failed）时摘除活跃索引，下次同标准下载能起新任务。owner 校验从 `userId ===` 改成 `isSubscriber(taskId, userId)`，两个用户都能读同 task。
+  - **B: 删除竞速模式**：`downloadMode = 'race'` 全链路移除（`app-core.js` / `app-download.js` / `app-settings.js` / `web/src/main.ts` / 设置页 UI）。理由：竞速假设源独立，但实际整个系统是同一个出口 IP，对源站是一个客户，3 源同时打反而放大频控触发概率。`doRaceDownload` / `setDownloadMode` 留 thin wrapper 防旧 onclick / localStorage 报错。
+  - **C: 源级并发信号量**：`src/shared/semaphore.ts` 新建（FIFO 计数信号量，含 `run()` 自动 acquire/release、`setLimit()` 运行时可调）。`src/shared/source-semaphore.ts` 注册三源全局默认：`bz=2 / gbw=4 / by=4`。`BzAdapter.exportStandard` / `ByAdapter.exportStandard` / `GbwAdapter.autoDownload` 入口包 `getSourceSemaphore(src).run(...)`。前端 `downloadConcurrency` 多用户叠加也不会让真实出口超额。
+  - **诊断接口**：`GET /api/diagnostics/sources` 返回 `{ bz, gbw, by }` 各源的 `{ active, limit, waiting }`，`waiting > 0` 长期不归零 ⇒ 源端瓶颈。
+  - **测试**：`semaphore.test.ts` 7 个用例（限额 / FIFO / run() / 异常 release / setLimit grow / 输入校验）。
+  - **删 60 行 + 加 250 行净 +190**：竞速删 80 行 + 信号量 + 跨用户索引 + 测试。
+  - **风险评估**：A 的去重逻辑跟 preview-task-store 已验证模式同源；B 是纯删除；C 是加层 try/finally，最坏情况下未持有 release 会立刻抛错（带 paired-call 单测覆盖）。CI 跑 build / test 验证全链路。
+
 - **资质可视化 tab 改用搜索页同款布局**（Step 8 — 推翻 Step 7 的 .qv2-* 设计）：用户反馈 Step 7 的"stdCode 大字 + 行头徽章"过于花哨。改回与「资质查询-搜索」**完全同款**：两列 CMA/CNAS、标准号分组默认收起、机构名行内（多机构时）。
   - **buildQualColumn 提到模块级**：从 `renderQualSearchResults` 内部抽出，可视化页 `renderQualVisual` 直接复用。两个 tab 视觉/交互完全一致，未来改一处生效两处。多 query 时按 query 分 section，每 section 内调一次 `buildQualColumn` 渲染 CMA/CNAS 两列。`gidPrefix` 参数让两 tab 的 group id 不冲突。
   - **section head 用 `.qv-section-title`**：黄绿 strong + 灰色 "N 条"，配「全部展开/全部收起」按钮。`toggleQualVisualSection` 简化为遍历 `[id$="_body"]` + 旋转 arrow（与搜索页 `toggleAllQualGroups` 同行为）。

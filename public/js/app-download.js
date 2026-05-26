@@ -123,10 +123,9 @@ function getOrderedDownloadSourcesForResult(r) {
 }
 
 async function downloadByCurrentMode(rowId, sources, label, onProgress) {
-  if (downloadMode === 'race') {
-    return Promise.any(sources.map(s => raceSource(rowId, s, label, onProgress)));
-  }
-
+  // 级联模式：按优先级逐源尝试，第一个成功返回；全部失败抛 AggregateError。
+  // 早期版本支持 race（同时发起多源），实践证明在多用户共享出口 IP 场景下放大频控
+  // 风险，且竞速"赢家"取决于源速度差异，跟"省时"诉求并不对齐。已删除。
   const errors = [];
   for (const source of sources) {
     if (downloadAborted || batchAborted) throw new Error('已中止');
@@ -154,14 +153,12 @@ async function downloadOne(id, btn) {
   const sources = getOrderedDownloadSourcesForResult(r);
   if (!sources.length) { addLog(`${r.standardNumber} 无可用下载源`, 'fail'); return; }
   setRowDownloadState(r.id, 'downloading');
-  const modeText = downloadMode === 'race' ? '竞速' : '级联';
-  const joiner = downloadMode === 'race' ? '+' : ' → ';
-  const logId = addLog(`${r.standardNumber} ${modeText} [${sources.map(s => srcLabel(s)).join(joiner)}]`, 'pending');
+  const logId = addLog(`${r.standardNumber} 下载 [${sources.map(s => srcLabel(s)).join(' → ')}]`, 'pending');
   const taskId = createDownloadTask({
     standardId: r.id,
     label: r.standardNumber,
     sources,
-    mode: modeText,
+    mode: '级联',
     retry: () => downloadOne(id),
   });
   try {
@@ -316,14 +313,12 @@ document.getElementById('downloadSelected').addEventListener('click', async () =
       const sources = getOrderedDownloadSourcesForResult(item);
       if (!sources.length) { completed++; failed++; updateProgress(); continue; }
       setRowDownloadState(item.id, 'downloading');
-      const modeText = downloadMode === 'race' ? '竞速' : '级联';
-      const joiner = downloadMode === 'race' ? '+' : ' → ';
-      const logId = addLog(`${item.standardNumber} ${modeText} [${sources.map(s => srcLabel(s)).join(joiner)}]`, 'pending');
+      const logId = addLog(`${item.standardNumber} 下载 [${sources.map(s => srcLabel(s)).join(' → ')}]`, 'pending');
       const taskId = createDownloadTask({
         standardId: item.id,
         label: item.standardNumber,
         sources,
-        mode: modeText,
+        mode: '级联',
         retry: () => downloadOne(item.id),
       });
       try {
@@ -365,11 +360,7 @@ function updateBatchSourceHint() {
   const sources = downloadPriority.filter(s => downloadSources.includes(s));
   const labels = { gbw: 'BW', by: 'BY', bz: 'BZ' };
   const el = document.getElementById('batchSourceHint');
-  if (downloadMode === 'race') {
-    if (el) el.textContent = `竞速模式：${sources.map(s => labels[s]||s).join(' + ')} 同时发起（超时 ${downloadTimeout}s）`;
-  } else {
-    if (el) el.textContent = `级联顺序：${sources.map(s => labels[s]||s).join(' → ')}（超时 ${downloadTimeout}s）`;
-  }
+  if (el) el.textContent = `级联顺序：${sources.map(s => labels[s]||s).join(' → ')}（超时 ${downloadTimeout}s）`;
 }
 
 async function doBatchResolve() {
@@ -421,7 +412,7 @@ function renderBatchResults() {
   const toolbar = batchResolved.length > 0 ? `
     <div class="batch-toolbar">
       <span class="badge-count" id="batchSelectedCount">已选 ${batchResolved.length}</span>
-      <button class="btn btn-sm btn-primary" id="batchDownloadBtn" onclick="doBatchDownload()">${downloadMode === 'race' ? '竞速下载选中' : '级联下载选中'}</button>
+      <button class="btn btn-sm btn-primary" id="batchDownloadBtn" onclick="doBatchDownload()">下载选中</button>
       <button class="btn btn-sm btn-ghost" id="batchStopBtn" onclick="stopBatchDownload()" style="display:none;color:var(--danger);border-color:var(--danger)">停止</button>
       <button class="btn btn-sm btn-ghost" onclick="toggleBatchSelect()">全选/取消</button>
     </div>` : '';
@@ -443,7 +434,6 @@ function updateBatchToolbar() {
 }
 
 async function doBatchDownload() {
-  if (downloadMode === 'race') return doRaceDownload();
   return doCascadeDownload();
 }
 
@@ -533,73 +523,21 @@ async function doCascadeDownload() {
 }
 
 async function doRaceDownload() {
-  if (batchDownloading) return;
-  batchDownloading = true; batchAborted = false;
-  const checks = document.querySelectorAll('#batchResults input[type="checkbox"]:checked');
-  const items = []; checks.forEach(c => { items.push(batchResolved[Number(c.dataset.batchIndex)]); });
-  if (!items.length) { batchDownloading = false; return; }
-  document.getElementById('batchDownloadBtn').disabled = true;
-  document.getElementById('batchStopBtn').style.display = 'inline-block';
-  document.getElementById('batchProgressWrap').classList.add('visible');
-  const fill = document.getElementById('batchProgressFill'); fill.style.width = '0%';
-  const progressText = document.getElementById('batchProgressText');
-  const sources = downloadPriority.filter(s => downloadSources.includes(s));
-  const total = items.length; let completed = 0, success = 0; const successItems = [], allFailedItems = [], wins = {};
-  const t0 = Date.now();
-  function updateProgress() {
-    const elapsed = ((Date.now() - t0) / 1000).toFixed(0);
-    fill.style.width = `${Math.round((completed / total) * 100)}%`;
-    progressText.textContent = `${completed}/${total} · ${downloadConcurrency}并发 · ${elapsed}s`;
-  }
-  const queue = [...items];
-  async function worker() {
-    while (queue.length > 0 && !batchAborted) {
-      const item = queue.shift();
-      setRowDownloadState(item.standardId, 'downloading');
-      const sourceList = (sources.length > 0 ? sources : ['gbw']).filter(s => downloadSources.includes(s));
-      const logId = addLog(`${item.standardNumber} 竞速 [${sourceList.map(s => srcLabel(s)).join('+')}]`, 'pending');
-      const taskId = createDownloadTask({
-        standardId: item.standardId,
-        label: item.standardNumber,
-        sources: sourceList,
-        mode: '批量竞速',
-        retry: () => retryBatchItem(item),
-      });
-      try {
-        const winner = await Promise.any(sourceList.map(s => raceSourceWithTimeout(item.standardId, s, item.standardNumber, downloadTimeout * 1000, (msg) => {
-          updateLog(logId, msg, 'pending');
-          updateDownloadTask(taskId, { progress: msg });
-        })));
-        success++; successItems.push(item); wins[winner.source] = (wins[winner.source] || 0) + 1;
-        const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
-        updateLog(logId, `${item.standardNumber} ✅ ${srcLabel(winner.source)}胜出 ${winner.fileName}${sizeStr}`, 'success');
-        setRowDownloadState(item.standardId, 'success');
-        if (winner.fileName) { triggerDownload(winner.fileName); recordDownload(winner.source, winner.fileName, item.standardNumber); }
-        completeDownloadTask(taskId, 'success', { source: winner.source, fileName: winner.fileName, fileSize: winner.fileSize, progress: `${srcLabel(winner.source)} 下载完成` });
-      } catch (e) {
-        const msgs = e instanceof AggregateError ? [...new Set(e.errors.map(err => err.message))].slice(0, 3).join('; ') : (e.message || '未知错误');
-        allFailedItems.push({ ...item, _failReason: msgs });
-        updateLog(logId, `${item.standardNumber} ❌ ${msgs}`, 'fail');
-        setRowDownloadState(item.standardId, 'fail');
-        completeDownloadTask(taskId, 'fail', { error: msgs, progress: msgs });
-      }
-      completed++; updateProgress();
-    }
-  }
-  const workers = Array.from({ length: downloadConcurrency }, () => worker());
-  await Promise.all(workers);
-  const finalFailed = items.filter(it => !successItems.some(s => s.standardId === it.standardId));
-  const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-  const winSummary = Object.entries(wins).map(([k, v]) => `${srcLabel(k)}:${v}`).join(' ');
-  addLog(`━━ 竞速完成: ${success}/${total} 成功 [${winSummary}] (${elapsed}s)`, 'success');
-  if (success > 0) showToast(`竞速完成 ${success}/${total} · ${elapsed}s`);
-  showBatchResultModal(successItems, allFailedItems, finalFailed, elapsed);
-  batchDownloading = false;
-  document.getElementById('batchDownloadBtn').disabled = false;
-  document.getElementById('batchStopBtn').style.display = 'none';
+  // 竞速模式已废弃（多用户共享出口 IP 时放大频控风险，且 race 赢家随源速度差异不稳定）。
+  // 保留函数名导出以兼容旧 onclick / localStorage 状态，实际转发到级联实现。
+  return doCascadeDownload();
 }
 
 function stopBatchDownload() { batchAborted = true; addLog('⏹ 中止批量下载', 'fail'); }
+
+function raceSourceWithTimeout(standardId, source, label, timeoutMs, onProgress) {
+  // 见 doRaceDownload 注释。raceSource 已经在 fetch 里通过 fetchWithTimeoutAndRetry 走超时，
+  // 这里包一层 setTimeout 的逻辑跟竞速绑定，废弃后保留 thin wrapper 防止内部其它调用断链。
+  return Promise.race([
+    raceSource(standardId, source, label, onProgress),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs)),
+  ]);
+}
 
 function retryBatchItem(item) {
   const idx = batchResolved.findIndex(r => r.standardId === item.standardId);

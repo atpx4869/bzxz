@@ -157,7 +157,7 @@ Object.defineProperty(w, 'currentUser', {
 });
 
 // 兼容旧代码直接读写 settings 字段（downloadSources / downloadConcurrency / …）
-for (const k of ['downloadSources', 'downloadConcurrency', 'downloadPriority', 'downloadTimeout', 'downloadMode', 'resultDensity'] as const) {
+for (const k of ['downloadSources', 'downloadConcurrency', 'downloadPriority', 'downloadTimeout', 'resultDensity'] as const) {
   Object.defineProperty(w, k, {
     get: () => (settings as any)[k],
     set: (v) => { (settings as any)[k] = v; },

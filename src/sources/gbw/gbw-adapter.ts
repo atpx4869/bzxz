@@ -15,6 +15,7 @@ import { buildFileName, getExportsDir } from '../../shared/fs';
 import { createStandardId, parseStandardId } from '../../shared/id';
 import { pooledFetch } from '../../shared/http';
 import { searchCache } from '../../shared/cache';
+import { getSourceSemaphore } from '../../shared/source-semaphore';
 import {
   getCachedHcno,
   getCachedTextAvailability,
@@ -460,6 +461,12 @@ export class GbwAdapter implements SourceAdapter {
   }
 
   async autoDownload(id: string, userId: number, maxRetries: number = 3): Promise<DownloadSessionInfo> {
+    // 源级并发限流：GBW autoDownload 含 OCR 识别 + 多次 HTTP 重试，多用户同时跑会
+    // 把 OCR worker 队列堆死。4 并发的依据详见 src/shared/source-semaphore.ts
+    return getSourceSemaphore('gbw').run(() => this.autoDownloadInner(id, userId, maxRetries));
+  }
+
+  private async autoDownloadInner(id: string, userId: number, maxRetries: number): Promise<DownloadSessionInfo> {
     const attempts: OcrAttemptLog[] = [];
     // First round creates the session (fetches cookie + captcha image). Subsequent
     // rounds reuse the cookie and only fetch a new captcha image, saving one HTTP

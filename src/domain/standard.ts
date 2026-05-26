@@ -45,7 +45,10 @@ export interface ExportResult {
 
 export interface ExportTask {
   id: string;
-  userId: number;
+  userId: number;             // 创建者（最早发起本次导出的人）
+  subscribers: number[];      // 共享该 task 的所有用户 id（含创建者）。跨用户下载去重：
+                              //   两个用户同时点同标准 → 第二个把 userId 加进 subscribers 直接拿
+                              //   现有 task 的进度/结果，不重复跑底层导出。
   standardId: string;
   status: 'queued' | 'running' | 'success' | 'failed';
   filePath?: string;

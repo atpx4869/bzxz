@@ -14,6 +14,7 @@ import { buildFileName, getExportsDir } from '../../shared/fs';
 import { createStandardId, parseStandardId } from '../../shared/id';
 import { searchCache } from '../../shared/cache';
 import { pooledFetch } from '../../shared/http';
+import { getSourceSemaphore } from '../../shared/source-semaphore';
 
 // BY 内网系统配置（仅在 172.16.0.0/12 内网可达；默认账号为部门共用账号，仅该账号有文本下载权限）
 const BY_BASE = 'http://172.16.100.72:8080';
@@ -131,7 +132,13 @@ export class ByAdapter implements SourceAdapter {
     };
   }
 
-  async exportStandard(id: string, _onProgress?: (current: number, total: number) => void): Promise<ExportResult> {
+  async exportStandard(id: string, onProgress?: (current: number, total: number) => void): Promise<ExportResult> {
+    // 源级并发限流：BY 内网直 PDF，4 并发上限避免单台机器对内网 IIS 过度施压（详见
+    // src/shared/source-semaphore.ts）
+    return getSourceSemaphore('by').run(() => this.exportStandardInner(id, onProgress));
+  }
+
+  private async exportStandardInner(id: string, _onProgress?: (current: number, total: number) => void): Promise<ExportResult> {
     if (!(await this.ensureLogin())) {
       throw new UpstreamError('BY login failed');
     }

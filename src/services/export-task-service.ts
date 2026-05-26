@@ -11,8 +11,13 @@ export class ExportTaskService {
 
   createTask(standardId: string, userId: number): ExportTask {
     const task = this.store.create(standardId, userId);
-
-    void this.runTask(task.id, standardId);
+    // 仅 'queued' 才是真正新建：复用活跃任务时 store 返回的是已存在的 task（status
+    // 可能是 queued 或 running）。这里如果对复用 task 也跑 runTask，会重复调 adapter，
+    // 整个去重就废了 —— 用 createdAt === updatedAt && status === 'queued' 也行，
+    // 但 subscribers 检查更简洁：新建时 subscribers.length === 1，复用时 ≥ 2。
+    if (task.subscribers.length === 1 && task.status === 'queued') {
+      void this.runTask(task.id, standardId);
+    }
 
     return task;
   }

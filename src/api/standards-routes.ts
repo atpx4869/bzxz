@@ -610,11 +610,13 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
 
   router.get('/api/tasks/:taskId', requireAuth, async (req, res, next) => {
     try {
-      const task = exportTaskStore.get(req.params.taskId as string);
+      const taskId = req.params.taskId as string;
+      const task = exportTaskStore.get(taskId);
       // Return NOT_FOUND on cross-user access so the existence of someone
       // else's task isn't leaked through a distinct 403 response.
-      if (!task || task.userId !== req.user!.id) {
-        throw new NotFoundError(`Export task not found: ${req.params.taskId as string}`);
+      // 用 isSubscriber 替代 userId === —— 跨用户去重时多个用户共享同一 taskId
+      if (!task || !exportTaskStore.isSubscriber(taskId, req.user!.id)) {
+        throw new NotFoundError(`Export task not found: ${taskId}`);
       }
       respond(res, toCamelCase(task));
     } catch (error) {
@@ -629,8 +631,9 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
     const taskId = req.params.taskId as string;
     // Verify ownership before opening the SSE stream so foreign callers receive
     // a plain 404 rather than a long-lived event stream they could harvest from.
+    // 跨用户去重：多个 subscriber 共享同 taskId，都能开 stream 拿进度
     const initial = exportTaskStore.get(taskId);
-    if (!initial || initial.userId !== req.user!.id) {
+    if (!initial || !exportTaskStore.isSubscriber(taskId, req.user!.id)) {
       res.status(404).json({ data: null, error: { code: 'NOT_FOUND', message: 'Task not found' } });
       return;
     }
@@ -646,7 +649,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
     // which truncated any export that legitimately ran longer.
     const interval = setInterval(() => {
       const task = exportTaskStore.get(taskId);
-      if (task && task.userId === req.user!.id) {
+      if (task && exportTaskStore.isSubscriber(taskId, req.user!.id)) {
         res.write(`data: ${JSON.stringify({ data: toCamelCase(task), error: null })}\n\n`);
         if (task.status === 'success' || task.status === 'failed') {
           clearInterval(interval);

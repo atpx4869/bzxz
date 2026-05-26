@@ -652,7 +652,7 @@ var TAB_ITEMS = [
   { key: 'history', label: '下载历史', desc: '查看下载记录' },
   { key: 'qual', label: '资质查询', desc: 'CNAS/CMA 资质' },
   { key: 'stats', label: '使用统计', desc: '查看使用数据' },
-  { key: 'settings', label: '系统设置', desc: '下载模式和参数' },
+  { key: 'settings', label: '系统设置', desc: '下载参数和源' },
 ];
 
 function showUserPerms(userId) {

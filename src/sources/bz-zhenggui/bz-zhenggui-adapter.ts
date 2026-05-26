@@ -13,6 +13,7 @@ import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/erro
 import { buildFileName, getExportsDir } from '../../shared/fs';
 import { parseStandardId } from '../../shared/id';
 import { pooledFetch } from '../../shared/http';
+import { getSourceSemaphore } from '../../shared/source-semaphore';
 import { mergeJpegsToPdf } from '../../shared/pdf-merge';
 import { getCachedPageCount, setCachedPageCount } from '../../shared/page-cache';
 import { searchCache } from '../../shared/cache';
@@ -140,6 +141,12 @@ export class BzZhengguiAdapter implements SourceAdapter {
   }
 
   async exportStandard(id: string, onProgress?: (current: number, total: number) => void): Promise<ExportResult> {
+    // 源级并发限流：BZ 单次导出涉及 12 路 JPEG + pdf-lib worker 拼装，多用户并发时
+    // 排队让出口稳定（详见 src/shared/source-semaphore.ts）
+    return getSourceSemaphore('bz').run(() => this.exportStandardInner(id, onProgress));
+  }
+
+  private async exportStandardInner(id: string, onProgress?: (current: number, total: number) => void): Promise<ExportResult> {
     const detail = await this.getStandardDetail(id);
     const hasPdf = detail.moreInfo?.hasPdf === true || detail.moreInfo?.isPdf === '1';
     if (!hasPdf || !detail.standardNumber) {

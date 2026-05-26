@@ -608,22 +608,6 @@ function renderSettings() {
 
   document.getElementById('settingsBody').innerHTML = `
     <div class="settings-grid">
-      <div class="settings-card wide">
-        <div class="settings-card-header">
-          <div>
-            <div class="settings-kicker">下载模式</div>
-            <div class="settings-value">${downloadMode === 'cascade' ? '顺序模式' : '竞速模式'}</div>
-          </div>
-        </div>
-        <div class="setting-choice-grid">
-          <button class="setting-choice ${downloadMode === 'cascade' ? 'active' : ''}" onclick="setDownloadMode('cascade');renderSettings()">
-            <span>省资源</span><strong>顺序模式</strong><em>按优先级逐源下载，失败后回退。</em>
-          </button>
-          <button class="setting-choice ${downloadMode === 'race' ? 'active' : ''}" onclick="setDownloadMode('race');renderSettings()">
-            <span>更快</span><strong>竞速模式</strong><em>多源同时请求，采用最快结果。</em>
-          </button>
-        </div>
-      </div>
       <div class="settings-card">
         <div class="settings-kicker">并发数</div>
         <div class="settings-value">${downloadConcurrency}</div>
@@ -904,7 +888,7 @@ function toggleDownloadSource(source, enabled) {
 }
 function setConcurrency(n) { downloadConcurrency = n; saveSettings(); }
 function setTimeoutVal(n) { downloadTimeout = n; saveSettings(); }
-function setDownloadMode(mode) { downloadMode = mode; saveSettings(); }
+function setDownloadMode(_mode) { /* 下载模式选项已废弃，函数保留防止旧 onclick 调用报错 */ }
 
 // ── Diagnostics: environment self-check + OCR engine status + recent server logs ──
 
@@ -1070,7 +1054,7 @@ function resetSettings() {
   downloadSources = [...DEFAULT_DOWNLOAD_SOURCES];
   downloadConcurrency = DEFAULT_CONCURRENCY;
   downloadPriority = ['gbw', 'by', 'bz'];
-  downloadTimeout = 15; downloadMode = 'cascade';
+  downloadTimeout = 15;
   saveSettings();
 }
 
