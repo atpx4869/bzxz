@@ -8,6 +8,7 @@ import { respond, respondError } from '../shared/response';
 import { toCamelCase } from '../shared/case';
 import { resolveLibraryDir, setLibraryDir } from '../shared/library-paths';
 import { scanLibrary, getIndexStats, startLibraryWatcher, stopLibraryWatcher } from '../services/library-index';
+import { extractBaseCode, buildFuzzyLikePattern } from '../services/qualification-service';
 
 const sourceEnum = z.enum(['gbw', 'bz', 'by']);
 const DEFAULT_SOURCE_PRIORITY = ['gbw', 'bz', 'by'] as const;
@@ -195,6 +196,73 @@ export function createAdminRoutes(db: Database.Database) {
       }
       const stats = getIndexStats(db);
       respond(res, { ok: true, result, stats });
+    } catch (error) {
+      next(normalizeError(error));
+    }
+  });
+
+  // GET /api/admin/qual/diagnose?code=GB/T 3325-2024
+  //
+  // 资质匹配漏命中诊断专用：给一个标准号或片段，把 DB 里所有相关 std_code 全捞回来，
+  // 同时算出每行的 extractBaseCode 结果 + 与输入 base 是否相等 + Phase 1 / Phase 2
+  // 命中状态，一目了然到底是哪条路径漏了。临时排查工具，定位完根因后可保留作回归
+  // 用（不公开到 UI，仅 admin 通过 URL 直接拿）。
+  router.get('/qual/diagnose', (req, res, next) => {
+    try {
+      const schema = z.object({ code: z.string().min(1).max(100) });
+      const { code } = schema.parse({ code: req.query.code });
+
+      const inputBase = extractBaseCode(code);
+      const inputPattern = buildFuzzyLikePattern(inputBase);
+
+      // 粗筛：所有 std_code 含 code 任意子串、或 std_code 走当前 fuzzy pattern。
+      // 同时输出 raw bytes（hex 头 20 字节）方便排查全角 / 不可见字符。
+      const broadLike = `%${code.replace(/[%_]/g, '')}%`;
+      const cnasRows = db.prepare(`
+        SELECT std_code, lab_no, COUNT(*) AS n
+        FROM cnas_qualifications
+        WHERE std_code LIKE ? ${inputPattern ? 'OR std_code LIKE ?' : ''}
+        GROUP BY std_code, lab_no
+        ORDER BY std_code
+        LIMIT 200
+      `).all(...(inputPattern ? [broadLike, inputPattern] : [broadLike])) as Array<{ std_code: string; lab_no: string; n: number }>;
+
+      const cmaRows = db.prepare(`
+        SELECT std_code, cert_number, COUNT(*) AS n
+        FROM cma_qualifications
+        WHERE std_code LIKE ? ${inputPattern ? 'OR std_code LIKE ?' : ''}
+        GROUP BY std_code, cert_number
+        ORDER BY std_code
+        LIMIT 200
+      `).all(...(inputPattern ? [broadLike, inputPattern] : [broadLike])) as Array<{ std_code: string; cert_number: string; n: number }>;
+
+      const annotate = (rows: Array<{ std_code: string; n: number; lab_no?: string; cert_number?: string }>) =>
+        rows.map(r => {
+          const rowBase = extractBaseCode(r.std_code);
+          // raw bytes 头 20 字符的 hex，揪全角 / 不可见
+          const hex = Array.from(r.std_code).slice(0, 20)
+            .map(ch => ch.charCodeAt(0).toString(16).padStart(4, '0')).join(' ');
+          return {
+            stdCode: r.std_code,
+            stdCodeHex: hex,
+            owner: r.lab_no ?? r.cert_number ?? '',
+            rowCount: r.n,
+            rowBase,
+            baseEqualsInput: rowBase === inputBase,
+            phase1ExactMatch: r.std_code === code,
+            phase2LikeMatch: inputPattern
+              ? new RegExp('^' + inputPattern.replace(/%/g, '.*') + '$', 'i').test(r.std_code)
+              : false,
+          };
+        });
+
+      respond(res, {
+        input: code,
+        inputBase,
+        inputPattern,
+        cnas: { totalRows: cnasRows.length, rows: annotate(cnasRows) },
+        cma: { totalRows: cmaRows.length, rows: annotate(cmaRows) },
+      });
     } catch (error) {
       next(normalizeError(error));
     }
