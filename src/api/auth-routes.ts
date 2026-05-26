@@ -82,11 +82,11 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
 
     const registrationEnabled = getSetting(db, 'registration_enabled', '1') === '1';
     const loginRequired = getSetting(db, 'login_required', '0') === '1';
-    // Guest fallback is restricted to the loopback interface — see auth-middleware
-    // for the rationale. We report `loginRequired: true` to LAN clients in this
-    // mode so the frontend prompts for a login instead of silently impersonating
-    // the guest user.
-    const effectiveLoginRequired = loginRequired || !isLoopbackRequest(req);
+    // Guest fallback 默认仅 loopback — 见 auth-middleware §isLoopbackRequest。
+    // 管理员可在「用户管理」开「允许局域网游客」，此时 LAN 客户端也视为 loopback。
+    // 风险由管理员承担（任何扫到端口的人都能匿名访问），UI 上有红字警告。
+    const lanGuestAllowed = getSetting(db, 'lan_guest_allowed', '0') === '1';
+    const effectiveLoginRequired = loginRequired || (!isLoopbackRequest(req) && !lanGuestAllowed);
     if (!user && !effectiveLoginRequired) {
       user = getGuestAuthUser(db);
     }

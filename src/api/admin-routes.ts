@@ -44,6 +44,9 @@ function readAdminSettings(db: Database.Database) {
   return {
     registrationEnabled: getSetting(db, 'registration_enabled', '1') === '1',
     loginRequired: getSetting(db, 'login_required', '0') === '1',
+    // 默认 '0' = 仅 loopback 可获 guest 回退；'1' = LAN 客户端（手机/同事 PC）也可。
+    // 开启即"任何人扫到 5937 端口都能用"，账号体系失效，仅在内网完全可信场景启用。
+    lanGuestAllowed: getSetting(db, 'lan_guest_allowed', '0') === '1',
     defaultAllowedTabs: resolveDefaultAllowedTabs(db),
   };
 }
@@ -62,6 +65,7 @@ export function createAdminRoutes(db: Database.Database) {
       const schema = z.object({
         registrationEnabled: z.boolean().optional(),
         loginRequired: z.boolean().optional(),
+        lanGuestAllowed: z.boolean().optional(),
         defaultAllowedTabs: z.array(z.enum(['search', 'batch', 'complete', 'history', 'qual', 'stats', 'settings'])).nullable().optional(),
       });
       const updates = schema.parse(req.body);
@@ -70,6 +74,9 @@ export function createAdminRoutes(db: Database.Database) {
       }
       if (updates.loginRequired !== undefined) {
         setSetting(db, 'login_required', updates.loginRequired ? '1' : '0');
+      }
+      if (updates.lanGuestAllowed !== undefined) {
+        setSetting(db, 'lan_guest_allowed', updates.lanGuestAllowed ? '1' : '0');
       }
       if (updates.defaultAllowedTabs !== undefined) {
         setSetting(db, 'default_allowed_tabs', updates.defaultAllowedTabs ? JSON.stringify(updates.defaultAllowedTabs) : '');

@@ -105,7 +105,10 @@ export function createAuthMiddleware(db: Database.Database) {
           return;
         }
       }
-      if (isLoopbackRequest(req)) {
+      // loopback 永远放行 guest；管理员开「允许局域网游客」后 LAN 也放行。
+      // 此项默认关闭，开启风险见 admin-routes.ts:readAdminSettings。
+      const lanGuestAllowed = getSetting(db, 'lan_guest_allowed', '0') === '1';
+      if (isLoopbackRequest(req) || lanGuestAllowed) {
         req.user = getGuestAuthUser(db);
         next();
         return;

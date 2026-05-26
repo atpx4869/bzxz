@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+- 用户管理新增「允许局域网游客」开关（默认关）：原先 `loginRequired=0`「开放桌面模式」下，guest 回退只对 loopback 客户端（`127.0.0.1` / `::1`）放行，LAN 上的手机和同事 PC 仍被 `auth-middleware.ts:requireAuth` / `auth-routes.ts:/status` 强制要求登录 —— 这是安全默认值，防止"随手关了需要登录"后整个 Wi-Fi 的人都匿名进来。新开关给"完全可信内网"场景一个逃生口：开启后 LAN 客户端也获 guest 回退，账号体系对 LAN 失效。UI 在「用户管理 → 顶部工具条」第三个 checkbox，开启时弹 confirm 弹框显式确认风险（橙色 toast）。
+  - 后端：`src/api/admin-routes.ts`（settings GET/PUT 加 `lanGuestAllowed`）+ `src/api/auth-routes.ts:89`（`effectiveLoginRequired` 公式纳入新设置）+ `src/api/auth-middleware.ts:108`（`requireAuth` 卡口纳入）
+  - 前端：`public/index.html` 加 `#lanGuestAllowedToggle` + `public/js/app-auth-admin.js` 加 populate 与 `toggleLanGuestAllowed()` confirm 流程
+
 ### Fixed
 - 手机端「资质查询 → 搜索」子标签点不动：`app-qual.js:switchQualTab()` 第 16 行原先有 `if (isMobile()) tab = 'visual'` 的硬重定向，按钮在 DOM 里、click handler 触发了，但被函数顶部强制改写成 visual，外观上像"点了没反应"。注释还写"搜索子标签 UI 隐藏（见 styles.css）"但 CSS 里实际上根本没藏。去掉重定向，两个子标签现在都可用。初版"手机端只保留可视化"的规划同步修订到 `docs/MOBILE_ADAPTATION.md §5.5`。
 - 手机端两处排版收敛：

@@ -305,6 +305,7 @@ start.bat
 - **逃生口**：手机上访问 `?desktop=1` 或在「我」页点「切换到完整版」回到桌面布局（写 `localStorage['bzxz.layout']` 持久化）
 - **PWA**：支持 iOS Safari / Android Chrome「添加到主屏」生成独立窗口图标；HTTP 内网部署无 Service Worker，因此**无离线缓存 / 无 Web Push**（详见 [`docs/MOBILE_ADAPTATION.md §6`](./docs/MOBILE_ADAPTATION.md)）
 - **不可用功能**：批量下载、用户管理、订阅同步管理在手机端隐藏，需要时用「切换到完整版」逃生口
+- **登录策略**：默认即使关掉「需要登录」，LAN 客户端仍要登录（开放桌面模式只对本机 loopback 生效，防 Wi-Fi 上的人匿名进入）。完全可信内网想让手机也直接进，去「用户管理」勾「允许局域网游客 ⚠」（开启时有弹框警告）
 
 ## 自动打包 (GitHub Actions)
 

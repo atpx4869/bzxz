@@ -333,6 +333,9 @@
       <label style="font-size:13px;color:var(--text-2);cursor:pointer;display:inline-flex;align-items:center;gap:6px">
         <input type="checkbox" id="loginRequiredToggle" onchange="toggleLoginRequired(this.checked)"> 需要登录
       </label>
+      <label id="lanGuestLabel" style="font-size:13px;color:var(--text-2);cursor:pointer;display:inline-flex;align-items:center;gap:6px" title="开启后局域网客户端（手机/同事 PC）也能匿名以访客身份访问。仅在内网完全可信场景启用。">
+        <input type="checkbox" id="lanGuestAllowedToggle" onchange="toggleLanGuestAllowed(this.checked)"> 允许局域网游客 <span style="font-size:11px;color:var(--danger)">⚠</span>
+      </label>
       <span id="usersBatchBar" style="display:none;margin-left:auto;align-items:center;gap:8px;font-size:13px;color:var(--text-2)">
         已选 <strong id="usersSelectedCount" style="color:var(--text)">0</strong> 人
         <button class="btn btn-sm btn-ghost" onclick="batchSetActive(1)">启用</button>

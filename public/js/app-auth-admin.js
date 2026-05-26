@@ -401,6 +401,8 @@ async function loadUsers() {
     ]);
     document.getElementById('regEnabledToggle').checked = settingsRes.registrationEnabled;
     document.getElementById('loginRequiredToggle').checked = settingsRes.loginRequired;
+    var lgEl = document.getElementById('lanGuestAllowedToggle');
+    if (lgEl) lgEl.checked = !!settingsRes.lanGuestAllowed;
     usersById = new Map(usersRes.users.map(u => [u.id, u]));
     let html = '';
     for (const u of usersRes.users) {
@@ -592,6 +594,33 @@ function toggleLoginRequired(enabled) {
     body: JSON.stringify({ loginRequired: enabled }),
   }).then(r => readApiResponse(r)).then(d => {
     document.getElementById('loginRequiredToggle').checked = d.loginRequired;
+  });
+}
+
+// 「允许局域网游客」——默认关。开启意味着任何 Wi-Fi 内能访问到 5937 端口的客户端
+// 都能以访客身份匿名使用（绕过登录页），等价于把账号体系关掉。仅在「家用/小团队
+// + 内网完全可信」时启用。开启时弹 confirm 让管理员显式确认风险。
+function toggleLanGuestAllowed(enabled) {
+  var el = document.getElementById('lanGuestAllowedToggle');
+  if (enabled) {
+    var ok = window.confirm(
+      '⚠ 开启「允许局域网游客」后，任何能访问本机 5937 端口的设备（同 Wi-Fi 手机、同事电脑等）都可以匿名以访客身份使用，绕过登录页。\n\n' +
+      '账号系统、权限、审计将对 LAN 客户端失效。请仅在内网完全可信的场景启用。\n\n' +
+      '确认开启？'
+    );
+    if (!ok) { if (el) el.checked = false; return; }
+  }
+  apiFetch('/api/admin/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lanGuestAllowed: enabled }),
+  }).then(r => readApiResponse(r)).then(d => {
+    if (el) el.checked = !!d.lanGuestAllowed;
+    if (typeof showToast === 'function') {
+      showToast(d.lanGuestAllowed ? '局域网游客已开启' : '局域网游客已关闭', d.lanGuestAllowed ? 'warn' : 'success');
+    }
+  }).catch(function () {
+    if (el) el.checked = !enabled; // 回滚
   });
 }
 
