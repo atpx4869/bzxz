@@ -203,6 +203,10 @@ body.sidebar-collapsed .env-warning { left: var(--sidebar-collapsed-w); }
 .result-card .card-meta-item { font-size: 12px; color: var(--text-2); white-space: nowrap; padding: 2px 0; }
 .result-card .card-meta-label { color: var(--text-3); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; margin-right: 4px; }
 .result-card .card-actions { flex: 0 0 auto; display: flex; gap: 6px; justify-content: flex-end; }
+/* .card-meta-line 是手机紧凑行（state+text+源+资质徽章合并），桌面端不显示，
+   手机 ≤640px 媒体块里 display:flex 打开 */
+.result-card .card-meta-line,
+.batch-result-card .card-meta-line { display: none; }
 .result-card .card-actions button { padding: 7px 13px; border-radius: var(--radius-sm); font-size: 12px; cursor: pointer; border: 1px solid transparent; background: oklch(23% 0.016 255 / 0.6); color: var(--text-2); transition: all 0.12s var(--ease-out); font-weight: 600; }
 .result-card .card-actions button:hover { background: var(--surface-h); color: var(--text); }
 .result-card .card-actions button[data-action="download"] { background: var(--accent); color: #fff; box-shadow: 0 2px 8px oklch(66% 0.20 250 / 0.18); }
@@ -1068,16 +1072,53 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
   /* more 按钮加大 */
   body:not(.force-desktop) .qual-visual-more-btn { padding: 10px; font-size: 12px; min-height: 44px; }
 
-  /* 11) 标准搜索：CMA/CNAS 资质徽章另起一行 + 源 pill 自占一行 —— 标题不再被挤压 */
-  /* 标题与徽章纵向堆叠，徽章贴左不再 margin-left:10px（继承自桌面） */
+  /* 11) 标准搜索结果卡片手机紧凑版（5 行结构）：
+     - 标准号一行 / 标准名一行 / 标识合并行 / 时间一行 / 按钮一行
+     - 复选框、推荐性、标题行内徽章、独立的 state/source-line 全隐藏
+     - 用 JS 渲染时新加的 .card-meta-line 把 state + text + 源 + 资质徽章一行 flex-wrap
+     - 资质徽章在桌面端原位（标题行内）渲一次，手机端 meta-line 又渲一次；
+       靠 display:none 切换，避免维护双套 template */
+
+  /* 隐藏：复选框、推荐性副标题、标题行内的资质徽章、独立 state 行、独立 source 行 */
+  body:not(.force-desktop) .result-card .check-col,
+  body:not(.force-desktop) .batch-result-card .check-col { display: none; }
+  body:not(.force-desktop) .result-card .card-subtitle,
+  body:not(.force-desktop) .batch-result-card .card-subtitle { display: none; }
+  body:not(.force-desktop) .result-card .card-title-row .qual-badges,
+  body:not(.force-desktop) .batch-result-card .card-title-row .qual-badges { display: none; }
+  body:not(.force-desktop) .result-card .card-state,
+  body:not(.force-desktop) .batch-result-card .card-state,
+  body:not(.force-desktop) .result-card .card-source-line,
+  body:not(.force-desktop) .batch-result-card .card-source-line { display: none; }
+
+  /* 标题行手机端回到默认 row（之前为了腾出徽章行加过 column，现在徽章去了别处不需要了） */
   body:not(.force-desktop) .result-card .card-title-row,
   body:not(.force-desktop) .batch-result-card .card-title-row {
-    flex-direction: column; align-items: flex-start; gap: 4px;
+    flex-direction: row; align-items: center; gap: 0;
   }
-  body:not(.force-desktop) .result-card .qual-badges,
-  body:not(.force-desktop) .batch-result-card .qual-badges { margin-left: 0; }
-  /* card-body 默认两行 line-clamp 会把徽章吃掉，手机端去掉以放下徽章那一行 */
+  /* card-body 默认两行 line-clamp 在手机端松开，让长标题完整显示一行 */
   body:not(.force-desktop) .result-card .card-body { display: block; -webkit-line-clamp: unset; }
+
+  /* 合并行：state 徽章 + text 徽章 + 源 pill + 资质徽章 同一行 flex-wrap，窄屏自然折行 */
+  body:not(.force-desktop) .result-card .card-meta-line,
+  body:not(.force-desktop) .batch-result-card .card-meta-line {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    margin-top: 2px;
+  }
+  /* meta-line 内徽章去掉外边距，靠容器 gap 统一间距 */
+  body:not(.force-desktop) .card-meta-line .qual-badges { margin-left: 0; }
+
+  /* 按钮行 4 个平铺等宽，触控热区 44px */
+  body:not(.force-desktop) .result-card .card-actions,
+  body:not(.force-desktop) .batch-result-card .card-actions {
+    display: flex; gap: 6px; flex-wrap: nowrap; justify-content: stretch;
+  }
+  body:not(.force-desktop) .result-card .card-actions .btn,
+  body:not(.force-desktop) .result-card .card-actions button,
+  body:not(.force-desktop) .batch-result-card .card-actions .btn,
+  body:not(.force-desktop) .batch-result-card .card-actions button {
+    flex: 1 1 0; min-width: 0; min-height: 44px; padding: 8px 4px; font-size: 13px;
+  }
 
   /* 12) 资质查询结果：CMA / CNAS 左右两栏保留，但单条结果内"标准号 / 标准名 / 项数"纵向堆叠 */
   /* .qual-result-std 桌面端是单行 flex；手机端 wrap，让 .qual-std-name 自占第二行 */

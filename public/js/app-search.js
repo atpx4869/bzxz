@@ -425,6 +425,14 @@ function buildResultCardHtml(r, i) {
         ${textBadge}
       </div>
       <div class="card-source-line">${srcBadges}</div>
+      <!-- 手机端合并行：桌面 display:none，手机显示，把 state / source / 资质徽章揉成一行 flex-wrap。
+           资质徽章在标题行里已经有一份（桌面用），手机端这里再渲一份；标题行那份在手机端 hide -->
+      <div class="card-meta-line">
+        ${statusBadge || ''}
+        ${textBadge}
+        ${srcBadges}
+        ${qualBadgeHtml(r.standardNumber)}
+      </div>
       <div class="card-date">
         <span><b>发布</b>${r.publishDate || '—'}</span>
         <span><b>实施</b>${r.implementDate || '—'}</span>

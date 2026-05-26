@@ -20,6 +20,10 @@
   - 前端：`public/index.html` 加 `#lanGuestAllowedToggle` + `public/js/app-auth-admin.js` 加 populate 与 `toggleLanGuestAllowed()` confirm 流程
 
 ### Fixed
+- 手机端标准搜索结果卡片不够紧凑（原来 9 行：复选框 / 标准号 / 标题 / 推荐性 / state / source / 资质徽章 / 时间 / 按钮）：用户反馈"复选框单独占用一行"。重构成 5 行：标准号 / 标准名 / **标识合并行（state + 文本状态 + 源 + CMA/CNAS 资质徽章 同行 flex-wrap）** / 时间 / 4 按钮等宽平铺。
+  - JS：`public/js/app-search.js` 渲染时在 `.card-source-line` 后新增 `.card-meta-line` div，把 statusBadge / textBadge / srcBadges / `qualBadgeHtml()` 揉成一行；资质徽章在桌面端原位（`.card-title-row` 内）仍渲一份，手机端靠 `display:none` 切换 —— 双 template 维护成本最低
+  - CSS：`public/styles.css` + `web/src/styles/components/result-card.css`（桌面默认 `.card-meta-line { display:none }`）；`public/styles.css` §11 + `web/src/styles/responsive.css` ≤640px 块（手机端隐藏 `.check-col` / `.card-subtitle`（推荐性标签）/ `.card-title-row .qual-badges` / `.card-state` / `.card-source-line`，显示 `.card-meta-line`，把 `.card-title-row` 回到 row 方向，`.card-body` 解除 `-webkit-line-clamp:2`）
+  - 按钮行：`.card-actions` 在手机端 `display:flex; gap:6px; flex-wrap:nowrap`，4 个按钮（收藏/详情/预览/下载）`flex: 1 1 0; min-width:0; min-height:44px; padding:8px 4px; font-size:13px` —— 等宽平铺撑满卡片宽度，触控热区 44px 达标
 - 设置页「内置 Web 服务」URL 行 label 列对齐问题：本机行只有"本机"两字（一行），内网行是"内网 📱 手机版"（带圆角徽章，宽度远超 42px），但 `.web-access-url-row` 的 `grid-template-columns: 42px ...` 把 label 列硬钉在 42px，徽章塞不下被强制换行 → "内网"一行 + "📱手机版"徽章另起一行 → 本机行高 1 行、内网行高 2 行，URL 跟左侧 label 视觉错位。修：第 1 列改为 `auto`（grid 自动取整列最大宽，所有行 label 列等宽），同时给 `.web-access-url-row > span` 和 `.web-access-phone-hint` 加 `white-space: nowrap` 防内部"📱"和"手机版"在窄屏被拆。`public/styles.css` + `web/src/styles/components/toggle-switch.css` 双栈同步
 - 手机端标准检索结果卡片"从中间开始、左边像分列了却空着"（同一列表里有些卡片显示正常、有些异常）：
   - **根因**：`public/styles.css` 行 902-910（≤900px 块）把 `.result-card` 定成 `grid-template-columns: 24px minmax(0, 1fr)` 二列网格，并把 `.card-id` / `.card-body` / `.card-state` / `.card-source-line` / `.card-date` / `.card-actions` 全部钉死 `grid-column: 2`；行 1004-1005（≤640px 手机块）又把网格改回 `grid-template-columns: 1fr` 单列，但**没有同步重置子项的 `grid-column: 2`**。单列网格里子项要求位于第 2 列 → 浏览器创建隐式列轨道把内容放到右边，显式 `1fr` 列空着 → 视觉上"左边像有列却空着"。

@@ -122,4 +122,41 @@
 
   /* filter-bar.css */
   .filter-sort { flex: 1 1 100%; margin-left: 0; }
+
+  /* result-card.css —— 标准搜索结果卡片手机紧凑版（5 行结构）：
+     标准号 / 标准名 / 标识合并行（state + text + 源 + 资质徽章） / 时间 / 4 按钮等宽
+     - 复选框、推荐性副标题、标题行内徽章、独立 state/source-line 全隐藏
+     - JS 渲染时新加的 .card-meta-line 把 state + text + 源 + 资质徽章 flex-wrap 同一行
+     - 资质徽章在桌面端原位（标题行内）渲一次，手机端 meta-line 又渲一次；
+       靠 display:none 切换，避免维护双套 template */
+  body:not(.force-desktop) .result-card .check-col,
+  body:not(.force-desktop) .batch-result-card .check-col { display: none; }
+  body:not(.force-desktop) .result-card .card-subtitle,
+  body:not(.force-desktop) .batch-result-card .card-subtitle { display: none; }
+  body:not(.force-desktop) .result-card .card-title-row .qual-badges,
+  body:not(.force-desktop) .batch-result-card .card-title-row .qual-badges { display: none; }
+  body:not(.force-desktop) .result-card .card-state,
+  body:not(.force-desktop) .batch-result-card .card-state,
+  body:not(.force-desktop) .result-card .card-source-line,
+  body:not(.force-desktop) .batch-result-card .card-source-line { display: none; }
+  body:not(.force-desktop) .result-card .card-title-row,
+  body:not(.force-desktop) .batch-result-card .card-title-row {
+    flex-direction: row; align-items: center; gap: 0;
+  }
+  body:not(.force-desktop) .result-card .card-body { display: block; -webkit-line-clamp: unset; }
+  body:not(.force-desktop) .result-card .card-meta-line,
+  body:not(.force-desktop) .batch-result-card .card-meta-line {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 2px;
+  }
+  body:not(.force-desktop) .card-meta-line .qual-badges { margin-left: 0; }
+  body:not(.force-desktop) .result-card .card-actions,
+  body:not(.force-desktop) .batch-result-card .card-actions {
+    display: flex; gap: 6px; flex-wrap: nowrap; justify-content: stretch;
+  }
+  body:not(.force-desktop) .result-card .card-actions .btn,
+  body:not(.force-desktop) .result-card .card-actions button,
+  body:not(.force-desktop) .batch-result-card .card-actions .btn,
+  body:not(.force-desktop) .batch-result-card .card-actions button {
+    flex: 1 1 0; min-width: 0; min-height: 44px; padding: 8px 4px; font-size: 13px;
+  }
 }
