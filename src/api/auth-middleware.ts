@@ -3,6 +3,7 @@ import type Database from 'better-sqlite3';
 import { parseCookie } from '../shared/errors';
 import { getSetting, GUEST_USERNAME } from '../services/db';
 import { respondError } from '../shared/response';
+import { SESSION_MAX_AGE_MS, SESSION_RENEW_THRESHOLD_MS, cookieOpts } from './session-cookie';
 
 export interface AuthUser {
   id: number;
@@ -64,8 +65,21 @@ export function isLoopbackRequest(req: Request): boolean {
 }
 
 export function createAuthMiddleware(db: Database.Database) {
-  const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
   const cleanExpiredSessions = db.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')");
+
+  // 滑窗续期：DB + Cookie 同步刷新。
+  // Why: 之前续期只更新 DB，Cookie 自己到了 30 天后过期，用户被踢出登录即使
+  // 一直在用。同步刷 Cookie 才能真正实现"只要访问就续命"。
+  function maybeRenewSession(res: Response, token: string, currentExpiresAt: string): void {
+    const remaining = new Date(currentExpiresAt).getTime() - Date.now();
+    if (remaining < SESSION_RENEW_THRESHOLD_MS) {
+      const newExpiry = new Date(Date.now() + SESSION_MAX_AGE_MS).toISOString();
+      db.prepare('UPDATE sessions SET expires_at = ? WHERE token = ?').run(newExpiry, token);
+      // 不覆盖已有 Set-Cookie（例如登出场景），用 append 也行；但中间件这里
+      // 没人会同时写 Set-Cookie，直接 setHeader 即可。
+      res.setHeader('Set-Cookie', cookieOpts(token));
+    }
+  }
 
   // Run expired-session cleanup on a timer instead of piggy-backing on the
   // request that happens to be #100 — that path had to do a synchronous DELETE
@@ -100,6 +114,9 @@ export function createAuthMiddleware(db: Database.Database) {
         } | undefined;
 
         if (row && row.expires_at >= now && row.is_active) {
+          // 即使在「开放桌面」模式下，已登录用户也应该续命；
+          // 否则桌面常驻这条路径的用户 30 天后会无声被踢。
+          maybeRenewSession(res, token, row.expires_at);
           req.user = toAuthUser(row);
           next();
           return;
@@ -145,11 +162,7 @@ export function createAuthMiddleware(db: Database.Database) {
       return;
     }
 
-    const expiresAt = new Date(row.expires_at).getTime();
-    if (expiresAt - Date.now() < 60 * 60 * 1000) {
-      const newExpiry = new Date(Date.now() + SESSION_MAX_AGE_MS).toISOString();
-      db.prepare('UPDATE sessions SET expires_at = ? WHERE token = ?').run(newExpiry, token);
-    }
+    maybeRenewSession(res, token, row.expires_at);
 
     req.user = toAuthUser(row);
 

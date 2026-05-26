@@ -8,6 +8,16 @@
   - 前端：`public/index.html` 加 `#lanGuestAllowedToggle` + `public/js/app-auth-admin.js` 加 populate 与 `toggleLanGuestAllowed()` confirm 流程
 
 ### Fixed
+- 手机端标准检索结果卡片"从中间开始、左边像分列了却空着"（同一列表里有些卡片显示正常、有些异常）：
+  - **根因**：`public/styles.css` 行 902-910（≤900px 块）把 `.result-card` 定成 `grid-template-columns: 24px minmax(0, 1fr)` 二列网格，并把 `.card-id` / `.card-body` / `.card-state` / `.card-source-line` / `.card-date` / `.card-actions` 全部钉死 `grid-column: 2`；行 1004-1005（≤640px 手机块）又把网格改回 `grid-template-columns: 1fr` 单列，但**没有同步重置子项的 `grid-column: 2`**。单列网格里子项要求位于第 2 列 → 浏览器创建隐式列轨道把内容放到右边，显式 `1fr` 列空着 → 视觉上"左边像有列却空着"。
+  - **为什么时好时坏**：每个卡片渲染哪些子项不一样（有的有 `card-state`、有的没有 `card-actions`），隐式列的宽度由内容撑出来，因此同一列表里会出现"宽窄不一、偏移程度不同"的混合现象 —— 视觉上像 bug 只命中部分卡片。
+  - **修**：在 ≤640px 块加 `body:not(.force-desktop) .result-card > *, .batch-result-card > * { grid-column: auto; }`，让所有子项回到显式单列的自然流。`public/styles.css` §7
+  - web 端 (`web/src/styles/responsive.css`) 的 ≤640px 块没有 `.result-card` 1fr 重写规则（沿用 ≤900px 的二列网格 + checkbox 占第一列），所以 web 端不受影响。如果以后 web 也加 ≤640px 单列重写，记得同步带上 `grid-column: auto` 重置。
+- 登录会话很快被踢出（桌面 / Web / 手机三端通病）：表面看 `SESSION_MAX_AGE_MS` 已经是 **30 天**，但有两个隐藏 bug 让有效时长远小于 30 天。
+  - **Bug 1（关键）：续期只刷 DB，不重发 Cookie。** 原 `auth-middleware.ts:148-152` 滑窗逻辑只 `UPDATE sessions SET expires_at = ?`，浏览器侧 Cookie 仍按首次登录时的 30 天 `Max-Age` 倒计时，到点自己删 —— 用户体感是"明明天天用，怎么 30 天后就让我重登"。修复：续期时同步 `res.setHeader('Set-Cookie', cookieOpts(token))`，DB 和 Cookie 一起滑窗。
+  - **Bug 2：续期只在「需要登录」分支跑。** 「开放桌面模式」分支（`!isLoginRequired()`）原本压根不续期，桌面端一旦设置了"无需登录"且 LAN 客户端登录，30 天后被踢。修复：两条分支都调用同一个 `maybeRenewSession()`。
+  - **Bug 3：续期阈值过苛。** 原本"剩余 < 1 小时"才触发续期，意味着 29 天 23 小时内的所有访问都不续。改为"剩余 < SESSION_MAX_AGE_MS / 2"（半个周期），即只要每 15 天上线一次就永不掉线。新增 `SESSION_RENEW_THRESHOLD_MS` 常量。
+  - **重构副产物**：`SESSION_MAX_AGE_MS` 和 `cookieOpts()` / `clearCookieHeader()` 抽到新文件 `src/api/session-cookie.ts`，消除 `auth-routes.ts:16` 与 `auth-middleware.ts:67` 两份硬编码，避免今后再被偷偷改成不一致的值。`auth-routes.ts` 现在从共享文件 import。
 - 手机端「资质查询 → 搜索」子标签点不动：`app-qual.js:switchQualTab()` 第 16 行原先有 `if (isMobile()) tab = 'visual'` 的硬重定向，按钮在 DOM 里、click handler 触发了，但被函数顶部强制改写成 visual，外观上像"点了没反应"。注释还写"搜索子标签 UI 隐藏（见 styles.css）"但 CSS 里实际上根本没藏。去掉重定向，两个子标签现在都可用。初版"手机端只保留可视化"的规划同步修订到 `docs/MOBILE_ADAPTATION.md §5.5`。
 - 手机端两处排版收敛：
   - **标准检索结果卡片**：原来标题与 CMA/CNAS 资质徽章挤在同一 flex 行（`.card-title-row`），长标准名截断时徽章会被推开变形，BW/BZ/BY 源标签也会和徽章错位。手机模式（≤640px）下把 `.card-title-row` 改成 column 方向 —— 标准名独占一行，资质徽章另起一行贴左对齐，`card-body` 的 `-webkit-line-clamp:2` 在手机端解除以容纳徽章行。`public/styles.css` §11

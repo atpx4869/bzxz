@@ -12,24 +12,8 @@ import { normalizeError, parseCookie } from '../shared/errors';
 import { respond, respondError } from '../shared/response';
 import { toCamelCase } from '../shared/case';
 import { createRateLimiter, clientIp } from '../shared/rate-limit';
+import { SESSION_MAX_AGE_MS, cookieOpts, clearCookieHeader } from './session-cookie';
 
-const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
-// SameSite=Strict blocks the cookie from being sent on cross-site navigations
-// (mitigating CSRF on state-changing endpoints). `Secure` would prevent the
-// cookie from being sent over plain HTTP, which is the normal LAN deployment
-// mode for this app — gate it behind an env opt-in for HTTPS deployments.
-const COOKIE_SECURE = process.env.BZXZ_COOKIE_SECURE === '1';
-function cookieOpts(token: string): string {
-  const expires = new Date(Date.now() + SESSION_MAX_AGE_MS).toUTCString();
-  const flags = ['HttpOnly', 'SameSite=Strict', 'Path=/', `Max-Age=${SESSION_MAX_AGE_MS / 1000}`, `Expires=${expires}`];
-  if (COOKIE_SECURE) flags.push('Secure');
-  return `bzxz_session=${token}; ${flags.join('; ')}`;
-}
-function clearCookieHeader(): string {
-  const flags = ['HttpOnly', 'SameSite=Strict', 'Path=/', 'Max-Age=0'];
-  if (COOKIE_SECURE) flags.push('Secure');
-  return `bzxz_session=; ${flags.join('; ')}`;
-}
 const SALT_ROUNDS = 10;
 
 export function createAuthRoutes(db: Database.Database, requireAuth: (req: Request, res: Response, next: NextFunction) => void) {
