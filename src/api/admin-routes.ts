@@ -6,6 +6,23 @@ import { getSetting, setSetting, GUEST_USERNAME } from '../services/db';
 import { normalizeError } from '../shared/errors';
 import { respond, respondError } from '../shared/response';
 import { toCamelCase } from '../shared/case';
+import { resolveLibraryDir, setLibraryDir } from '../shared/library-paths';
+import { scanLibrary, getIndexStats } from '../services/library-index';
+
+const sourceEnum = z.enum(['gbw', 'bz', 'by']);
+const DEFAULT_SOURCE_PRIORITY = ['gbw', 'bz', 'by'] as const;
+
+function parseSourcePriority(raw: string): Array<'gbw' | 'bz' | 'by'> {
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [...DEFAULT_SOURCE_PRIORITY];
+    const filtered = parsed.filter((s): s is 'gbw' | 'bz' | 'by' =>
+      s === 'gbw' || s === 'bz' || s === 'by');
+    return filtered.length > 0 ? filtered : [...DEFAULT_SOURCE_PRIORITY];
+  } catch {
+    return [...DEFAULT_SOURCE_PRIORITY];
+  }
+}
 
 const SALT_ROUNDS = 10;
 
@@ -48,6 +65,34 @@ function readAdminSettings(db: Database.Database) {
     // 开启即"任何人扫到 5937 端口都能用"，账号体系失效，仅在内网完全可信场景启用。
     lanGuestAllowed: getSetting(db, 'lan_guest_allowed', '0') === '1',
     defaultAllowedTabs: resolveDefaultAllowedTabs(db),
+    standardsLibraryDir: getSetting(db, 'standards_library_dir', ''),
+    libraryFilenamePattern: getSetting(db, 'library_filename_pattern', '{stdCode} - {source}'),
+    librarySourcePriority: parseSourcePriority(
+      getSetting(db, 'library_source_priority', JSON.stringify(DEFAULT_SOURCE_PRIORITY)),
+    ),
+  };
+}
+
+/**
+ * 把库实时状态附到 settings：每次 GET 都跑一次 resolveLibraryDir（带缓存）
+ * 与一次 getIndexStats（一条 SQL）。不缓存到 readAdminSettings 是因为
+ * fallbackUsed / writable 受用户挪文件夹影响，需要每请求都是最新。
+ */
+async function readAdminSettingsWithLibrary(db: Database.Database) {
+  const base = readAdminSettings(db);
+  const libStatus = await resolveLibraryDir(db);
+  const stats = getIndexStats(db);
+  return {
+    ...base,
+    library: {
+      dir: libStatus.dir,
+      writable: libStatus.writable,
+      fallbackUsed: libStatus.fallbackUsed,
+      fallbackReason: libStatus.fallbackReason,
+      configuredDir: libStatus.configuredDir,
+      indexCount: stats.count,
+      lastIndexedAt: stats.lastIndexedAt,
+    },
   };
 }
 
@@ -55,18 +100,30 @@ export function createAdminRoutes(db: Database.Database) {
   const router = Router();
 
   // GET /api/admin/settings
-  router.get('/settings', (_req, res) => {
-    respond(res, readAdminSettings(db));
+  router.get('/settings', async (_req, res, next) => {
+    try {
+      respond(res, await readAdminSettingsWithLibrary(db));
+    } catch (error) {
+      next(normalizeError(error));
+    }
   });
 
   // PUT /api/admin/settings
-  router.put('/settings', (req, res, next) => {
+  router.put('/settings', async (req, res, next) => {
     try {
       const schema = z.object({
         registrationEnabled: z.boolean().optional(),
         loginRequired: z.boolean().optional(),
         lanGuestAllowed: z.boolean().optional(),
         defaultAllowedTabs: z.array(z.enum(['search', 'batch', 'complete', 'history', 'qual', 'stats', 'settings'])).nullable().optional(),
+        standardsLibraryDir: z.string().max(500).optional(),
+        // 模板必须含 {stdCode}，否则不同标准会落同一个文件名互相覆盖。
+        // {source} 也建议要求（多源同号场景），但只软提示——少数用户单源场景可以省略。
+        libraryFilenamePattern: z.string().trim().min(1).max(200).refine(
+          (v) => v.includes('{stdCode}'),
+          { message: '文件名模板必须包含 {stdCode} 占位符' },
+        ).optional(),
+        librarySourcePriority: z.array(sourceEnum).min(1).max(3).optional(),
       });
       const updates = schema.parse(req.body);
       if (updates.registrationEnabled !== undefined) {
@@ -81,7 +138,40 @@ export function createAdminRoutes(db: Database.Database) {
       if (updates.defaultAllowedTabs !== undefined) {
         setSetting(db, 'default_allowed_tabs', updates.defaultAllowedTabs ? JSON.stringify(updates.defaultAllowedTabs) : '');
       }
-      respond(res, readAdminSettings(db));
+      if (updates.libraryFilenamePattern !== undefined) {
+        setSetting(db, 'library_filename_pattern', updates.libraryFilenamePattern);
+      }
+      if (updates.librarySourcePriority !== undefined) {
+        // 去重保序：用户传 ['bz','gbw','bz'] 时退化为 ['bz','gbw']
+        const dedup = Array.from(new Set(updates.librarySourcePriority));
+        setSetting(db, 'library_source_priority', JSON.stringify(dedup));
+      }
+      // 路径放最后处理：写完才触发 setLibraryDir + 重扫，
+      // 其它配置失败时不至于先把路径改了再 rollback。
+      if (updates.standardsLibraryDir !== undefined) {
+        try {
+          await setLibraryDir(db, updates.standardsLibraryDir);
+        } catch (e: any) {
+          respondError(res, 400, 'BAD_REQUEST', e?.message || '设置库目录失败');
+          return;
+        }
+        // 路径变更后异步全量重扫；不阻塞响应，前端通过下次 GET settings 查看 indexCount
+        scanLibrary(db, { full: true }).catch(() => { /* 扫描失败容忍：用户可再点重扫 */ });
+      }
+      respond(res, await readAdminSettingsWithLibrary(db));
+    } catch (error) {
+      next(normalizeError(error));
+    }
+  });
+
+  // POST /api/admin/library/rescan — 强制全量重扫，返回扫描计数
+  router.post('/library/rescan', async (req, res, next) => {
+    try {
+      const schema = z.object({ full: z.boolean().optional() });
+      const { full } = schema.parse(req.body || {});
+      const result = await scanLibrary(db, { full: full !== false });
+      const stats = getIndexStats(db);
+      respond(res, { ok: true, result, stats });
     } catch (error) {
       next(normalizeError(error));
     }

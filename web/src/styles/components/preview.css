@@ -1,0 +1,87 @@
+/* 预览覆盖层 + 标准库设置（Phase 1 of 预览功能）
+ *
+ * 镜像 public/styles.css 1369 行起的新增段落（搜 "PDF 预览覆盖层"）。
+ * Legacy 入口废弃后，public/styles.css 这两节会删掉，本文件成为唯一来源。
+ */
+
+/* ── PDF 预览覆盖层 ──
+   独立于 .modal-overlay：预览经常占满高度，且 iframe 内部有自己的滚动条，
+   复用 modal 反而要打破 padding/overflow 才能贴边。单独一套层级最稳。 */
+.preview-overlay {
+  position: fixed; inset: 0; z-index: 420; background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  display: none; align-items: center; justify-content: center;
+}
+.preview-overlay.open { display: flex; }
+.preview-panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  width: min(1180px, calc(100vw - 32px));
+  height: min(900px, calc(100vh - 32px));
+  display: flex; flex-direction: column; position: relative;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+  animation: panelIn 0.22s var(--ease-spring);
+  overflow: hidden;
+}
+.preview-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: oklch(17% 0.014 255 / 0.6);
+}
+.preview-title {
+  flex: 1; min-width: 0;
+  font-size: 14px; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.preview-actions { display: flex; align-items: center; gap: 8px; }
+.preview-actions .modal-close { position: static; }
+.preview-body {
+  flex: 1; min-height: 0; background: #1a1a1a;
+  display: flex; align-items: stretch; justify-content: stretch;
+}
+.preview-iframe { width: 100%; height: 100%; border: 0; background: #1a1a1a; }
+.preview-loading { margin: auto; color: var(--text-3); font-size: 13px; }
+.preview-empty {
+  margin: auto; max-width: 460px; padding: 24px;
+  text-align: center; color: var(--text-2);
+}
+.preview-empty-title { font-size: 16px; color: var(--text); margin-bottom: 8px; }
+.preview-empty-hint { font-size: 13px; line-height: 1.6; color: var(--text-3); margin-bottom: 16px; }
+.preview-empty-actions { display: flex; gap: 8px; justify-content: center; }
+
+/* 手机端：占满屏幕，去掉圆角和外间距，让 PDF 阅读区最大化 */
+body:not(.force-desktop) .preview-panel {
+  width: 100vw; height: 100vh; border-radius: 0; border: 0;
+}
+body:not(.force-desktop) .preview-head { padding: 10px 12px; }
+body:not(.force-desktop) .preview-title { font-size: 13px; }
+
+/* ── 标准库设置卡片 ── */
+.library-status-box { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.library-banner {
+  padding: 10px 12px; border-radius: 8px;
+  font-size: 13px; line-height: 1.5;
+}
+.library-banner.warn { background: rgba(245, 158, 11, 0.12); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.35); }
+.library-banner.err  { background: rgba(239, 68, 68, 0.12);  color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.35); }
+.library-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 0; border-bottom: 1px solid oklch(26% 0.012 255 / 0.32);
+}
+.library-row:last-child { border-bottom: 0; }
+.library-row-label {
+  flex: 0 0 84px; font-size: 12px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em;
+}
+.library-row-value { color: var(--text); font-size: 13px; overflow-wrap: anywhere; }
+.library-row code.library-row-value {
+  background: oklch(17% 0.014 255 / 0.5); padding: 4px 8px; border-radius: 6px;
+  font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.library-input {
+  flex: 1; min-width: 240px; padding: 6px 10px;
+  background: oklch(17% 0.014 255 / 0.5); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.library-hint { font-size: 11px; color: var(--text-3); }

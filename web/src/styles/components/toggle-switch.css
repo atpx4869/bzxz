@@ -46,9 +46,12 @@
 .desktop-setting-status.danger { color: var(--danger); }
 .web-access-card .settings-card-header { margin-bottom: 10px; }
 .web-access-url-list { display: grid; gap: 8px; }
-.web-access-url-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 8px; border: 1px solid oklch(26% 0.012 255 / 0.42); border-radius: var(--radius-sm); background: oklch(15% 0.012 255 / 0.35); }
-.web-access-url-row span { color: var(--text-3); font-size: 12px; }
+/* 第 1 列 auto 让 grid 取所有行 label 列的最大宽度，对齐"内网 📱 手机版"行
+   与"本机"行；nowrap 防 label/徽章被拆行换行 */
+.web-access-url-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 8px; border: 1px solid oklch(26% 0.012 255 / 0.42); border-radius: var(--radius-sm); background: oklch(15% 0.012 255 / 0.35); }
+.web-access-url-row > span { color: var(--text-3); font-size: 12px; white-space: nowrap; }
 .web-access-url-row code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent-h); font: 600 12px 'DM Mono', monospace; }
+.web-access-phone-hint { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: oklch(66% 0.20 250 / 0.18); color: var(--accent-h); font-size: 10px; font-weight: 600; white-space: nowrap; }
 .update-card .settings-actions { margin-top: 12px; }
 .version-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; color: var(--text-3); font-size: 12px; }
 .version-row span { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; border: 1px solid oklch(26% 0.012 255 / 0.42); border-radius: var(--radius-sm); background: oklch(15% 0.012 255 / 0.35); }

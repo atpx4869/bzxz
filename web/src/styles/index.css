@@ -54,6 +54,9 @@
 @import './components/batch-card.css';
 @import './components/user-dropdown.css';
 @import './components/result-card.css';
+/* preview.css 在 modal 之后（复用 @keyframes panelIn）。
+ * 同文件还含 .library-status-box 等标准库设置卡片样式 —— 设置页 admin-only section。 */
+@import './components/preview.css';
 
 /* pages —— 单页面 scope，加载顺序无 keyframe 依赖。
  * announcement.css 与 admin.css 是亮色调色板，独立于全局暗色主题，互不冲突。 */

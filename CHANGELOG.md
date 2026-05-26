@@ -3,11 +3,24 @@
 ## [Unreleased]
 
 ### Added
+- **标准 PDF 预览（Phase 1）**：搜索结果卡片新增「预览」按钮，命中本地库时即时打开内嵌 PDF 阅读器；未命中时弹"先下载再预览"提示，**不自动触发下载**（自动下载留到 Phase 2）。
+  - 新表 `standard_files (id, std_code_norm, year, source, abs_path, size, mtime, mime, indexed_at)` + 唯一约束 `(std_code_norm, year, source)`；多源同号通过 source 后缀文件名（`GB_T 3324-2024 - BW.pdf`）共存，索引唯一键避免相互覆盖。`src/services/db.ts`
+  - 新模块 `src/shared/library-paths.ts`：库路径解析 + 写入探针 + 回退。默认 `<exe同级>/standards/`，**刻意不放 C 盘 userData**（避免长期占用 C 盘）；用户装在 Program Files 时探针失败 → 回退 `userData/standards` 并在管理员设置页打"⚠ 已临时回退"banner。Electron 主进程 `electron/main.ts` 新增 `BZXZ_EXE_DIR` / `BZXZ_USER_DATA_DIR` 环境变量喂给后端。
+  - 新模块 `src/services/library-index.ts`：扫描 + 增量索引（按 mtime+size 比对，未变即跳）+ 命中清理（fs.access 失败的行即时删）+ source-priority 查询。文件名规则 `{stdCode} - {SOURCE}.pdf`，源后缀**永远写入**（决策见 docs/ARCHITECTURE）。
+  - 新路由 `src/api/preview-routes.ts`：
+    - `POST /api/preview/request`：查本地库，命中返回 `{status: 'ready', fileId, url}`；未命中返回 `{status: 'not_in_library', tried}`。源优先级支持请求级 override，缺省读 settings.library_source_priority。
+    - `GET /api/preview/file/:id`：流式回 PDF，**完整 HTTP Range 支持**（含 suffix range `bytes=-N`）+ ETag（`W/"{size_hex}-{mtime_hex}"`，避免每次跑 hash）+ 304 / 416 / 410（库根改了之后旧索引行残留指向库外的 410 GONE）。Content-Disposition 走 RFC 5987 让中文名直接显示，`?attachment=1` 强制另存。
+  - `src/api/admin-routes.ts` 扩展：`GET /admin/settings` 现在带 `library: { dir, writable, fallbackUsed, fallbackReason, indexCount, lastIndexedAt }`；`PUT` 新支持 `standardsLibraryDir` / `libraryFilenamePattern` / `librarySourcePriority` 三字段，路径变更触发 fire-and-forget 全量重扫；新增 `POST /admin/library/rescan`。
+  - 启动钩子：`src/api/app.ts` 进程起来后异步增量扫描一次（fire-and-forget），磁盘上手动加的 PDF 也能立刻被预览查到。
+  - 前端：`public/index.html` 加 `#previewOverlay` 全屏预览层（iframe + 头部下载/新标签/关闭按钮）；`public/js/app-search.js` 加 `previewStandard(id)` + 卡片「预览」按钮 + 右键菜单条目 + Esc/点遮罩关闭；`public/js/app-settings.js` 加 admin-only「标准库」section（路径配置 + 索引计数 + 一键重扫 + fallback banner）。
+  - CSS：`public/styles.css` 末尾新增预览 overlay 与库设置卡片样式；`web/src/styles/components/preview.css` 镜像新增，按 dual-stylesheet 契约同步加载。
+  - 安全要点：所有路径走 `isInsideLibrary()` 做"绝对路径必须落在库根之内"二次校验，防扫描跟随 symlink 把库外文件纳入索引；`requireAuth` 与搜索口径一致（含 guest）。
 - 用户管理新增「允许局域网游客」开关（默认关）：原先 `loginRequired=0`「开放桌面模式」下，guest 回退只对 loopback 客户端（`127.0.0.1` / `::1`）放行，LAN 上的手机和同事 PC 仍被 `auth-middleware.ts:requireAuth` / `auth-routes.ts:/status` 强制要求登录 —— 这是安全默认值，防止"随手关了需要登录"后整个 Wi-Fi 的人都匿名进来。新开关给"完全可信内网"场景一个逃生口：开启后 LAN 客户端也获 guest 回退，账号体系对 LAN 失效。UI 在「用户管理 → 顶部工具条」第三个 checkbox，开启时弹 confirm 弹框显式确认风险（橙色 toast）。
   - 后端：`src/api/admin-routes.ts`（settings GET/PUT 加 `lanGuestAllowed`）+ `src/api/auth-routes.ts:89`（`effectiveLoginRequired` 公式纳入新设置）+ `src/api/auth-middleware.ts:108`（`requireAuth` 卡口纳入）
   - 前端：`public/index.html` 加 `#lanGuestAllowedToggle` + `public/js/app-auth-admin.js` 加 populate 与 `toggleLanGuestAllowed()` confirm 流程
 
 ### Fixed
+- 设置页「内置 Web 服务」URL 行 label 列对齐问题：本机行只有"本机"两字（一行），内网行是"内网 📱 手机版"（带圆角徽章，宽度远超 42px），但 `.web-access-url-row` 的 `grid-template-columns: 42px ...` 把 label 列硬钉在 42px，徽章塞不下被强制换行 → "内网"一行 + "📱手机版"徽章另起一行 → 本机行高 1 行、内网行高 2 行，URL 跟左侧 label 视觉错位。修：第 1 列改为 `auto`（grid 自动取整列最大宽，所有行 label 列等宽），同时给 `.web-access-url-row > span` 和 `.web-access-phone-hint` 加 `white-space: nowrap` 防内部"📱"和"手机版"在窄屏被拆。`public/styles.css` + `web/src/styles/components/toggle-switch.css` 双栈同步
 - 手机端标准检索结果卡片"从中间开始、左边像分列了却空着"（同一列表里有些卡片显示正常、有些异常）：
   - **根因**：`public/styles.css` 行 902-910（≤900px 块）把 `.result-card` 定成 `grid-template-columns: 24px minmax(0, 1fr)` 二列网格，并把 `.card-id` / `.card-body` / `.card-state` / `.card-source-line` / `.card-date` / `.card-actions` 全部钉死 `grid-column: 2`；行 1004-1005（≤640px 手机块）又把网格改回 `grid-template-columns: 1fr` 单列，但**没有同步重置子项的 `grid-column: 2`**。单列网格里子项要求位于第 2 列 → 浏览器创建隐式列轨道把内容放到右边，显式 `1fr` 列空着 → 视觉上"左边像有列却空着"。
   - **为什么时好时坏**：每个卡片渲染哪些子项不一样（有的有 `card-state`、有的没有 `card-actions`），隐式列的宽度由内容撑出来，因此同一列表里会出现"宽窄不一、偏移程度不同"的混合现象 —— 视觉上像 bug 只命中部分卡片。

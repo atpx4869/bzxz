@@ -432,6 +432,7 @@ function buildResultCardHtml(r, i) {
       <div class="card-actions">
         <button data-action="save" data-id="${escapeHtml(r.id)}" class="${saved ? 'saved' : ''}" title="${saved ? '取消收藏' : '收藏'}">${saved ? '已存' : '收藏'}</button>
         <button data-action="detail" data-id="${escapeHtml(r.id)}">详情</button>
+        <button data-action="preview" data-id="${escapeHtml(r.id)}" title="本地预览（已下载的标准）">预览</button>
         <button data-action="download" data-id="${escapeHtml(r.id)}" ${hasText ? '' : 'disabled'}>下载</button>
       </div>
     </div>`;
@@ -612,8 +613,106 @@ document.getElementById('results').addEventListener('click', e => {
   const id = btn.dataset.id;
   if (btn.dataset.action === 'detail') showDetail(id);
   else if (btn.dataset.action === 'download') downloadOne(id, btn);
+  else if (btn.dataset.action === 'preview') previewStandard(id);
   else if (btn.dataset.action === 'save') toggleSavedStandard(id);
 });
+
+// ── PDF 预览（Phase 1）──
+// 流程：POST /api/preview/request → 命中 → iframe 加载 /api/preview/file/:id
+// 未命中 → 提示用户先下载（不自动触发下载，Phase 2 才接入）
+let _previewCurrent = null; // { fileId, url, fileName }
+async function previewStandard(id) {
+  const r = findResultByAnyId ? findResultByAnyId(id) : results.find(x => x.id === id);
+  if (!r) { showToast('未找到该标准', 'fail'); return; }
+  const stdCode = r.standardNumber || '';
+  if (!stdCode) { showToast('该结果缺少标准号，无法预览', 'fail'); return; }
+  openPreviewOverlay(stdCode + (r.title ? `  ${r.title}` : ''));
+  setPreviewBody(`<div class="preview-loading">查询本地库…</div>`);
+  try {
+    const yearMatch = stdCode.match(/-\s*(\d{4})\s*$/);
+    const year = yearMatch ? yearMatch[1] : undefined;
+    const body = year ? { stdCode, year } : { stdCode };
+    const res = await fetch(`${API}/api/preview/request`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await readApiResponse(res);
+    if (data.status === 'ready') {
+      _previewCurrent = { fileId: data.fileId, url: data.url, fileName: stdCode };
+      const safeUrl = data.url + (data.url.includes('?') ? '&' : '?') + 't=' + Date.now();
+      setPreviewBody(`<iframe class="preview-iframe" src="${escapeHtml(safeUrl)}" title="预览 ${escapeHtml(stdCode)}"></iframe>`);
+    } else if (data.status === 'not_in_library') {
+      _previewCurrent = null;
+      setPreviewBody(`
+        <div class="preview-empty">
+          <div class="preview-empty-title">本地库尚无此标准</div>
+          <div class="preview-empty-hint">先点击下方"下载"按钮把 PDF 拉到本地后，再点预览即可直接打开。</div>
+          <div class="preview-empty-actions">
+            <button class="btn btn-primary" id="previewDownloadFallbackBtn">立即下载</button>
+            <button class="btn btn-ghost" id="previewCloseFallbackBtn">关闭</button>
+          </div>
+        </div>`);
+      const dl = document.getElementById('previewDownloadFallbackBtn');
+      if (dl) dl.addEventListener('click', () => {
+        closePreviewOverlay();
+        const card = document.querySelector(`.result-card[data-sid="${CSS.escape(id)}"]`);
+        const btn = card ? card.querySelector('[data-action="download"]') : null;
+        if (typeof downloadOne === 'function') downloadOne(id, btn);
+      });
+      const cls = document.getElementById('previewCloseFallbackBtn');
+      if (cls) cls.addEventListener('click', closePreviewOverlay);
+    } else {
+      setPreviewBody(`<div class="preview-empty"><div class="preview-empty-title">预览失败</div><div class="preview-empty-hint">${escapeHtml(JSON.stringify(data))}</div></div>`);
+    }
+  } catch (e) {
+    setPreviewBody(`<div class="preview-empty"><div class="preview-empty-title">预览失败</div><div class="preview-empty-hint">${escapeHtml(e?.message || String(e))}</div></div>`);
+  }
+}
+
+function openPreviewOverlay(title) {
+  const overlay = document.getElementById('previewOverlay');
+  if (!overlay) return;
+  document.getElementById('previewTitle').textContent = title || '预览';
+  overlay.classList.add('open');
+  overlay.setAttribute('aria-hidden', 'false');
+}
+function closePreviewOverlay() {
+  const overlay = document.getElementById('previewOverlay');
+  if (!overlay) return;
+  overlay.classList.remove('open');
+  overlay.setAttribute('aria-hidden', 'true');
+  setPreviewBody(''); // 卸载 iframe，停止后台流式下载
+  _previewCurrent = null;
+}
+function setPreviewBody(html) {
+  const body = document.getElementById('previewBody');
+  if (body) body.innerHTML = html;
+}
+(function bindPreviewOverlayEvents() {
+  const overlay = document.getElementById('previewOverlay');
+  if (!overlay) return;
+  document.getElementById('previewClose')?.addEventListener('click', closePreviewOverlay);
+  // 点击遮罩空白（panel 外）关闭；点击 panel 内不要触发
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) closePreviewOverlay();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && overlay.classList.contains('open')) closePreviewOverlay();
+  });
+  document.getElementById('previewDownloadBtn')?.addEventListener('click', () => {
+    if (!_previewCurrent) return;
+    // 走 attachment=1 强制浏览器另存为，避免再次内联打开
+    const a = document.createElement('a');
+    a.href = `${_previewCurrent.url}?attachment=1`;
+    a.download = '';
+    document.body.appendChild(a); a.click(); a.remove();
+  });
+  document.getElementById('previewOpenNewBtn')?.addEventListener('click', () => {
+    if (!_previewCurrent) return;
+    window.open(_previewCurrent.url, '_blank', 'noopener,noreferrer');
+  });
+})();
 
 // ── Right-click context menu ──
 let _ctxMenuEl = null;
@@ -712,6 +811,7 @@ document.getElementById('results').addEventListener('contextmenu', e => {
     { label: '复制标准号 + 名称', icon: '≣', action: () => copyToClipboard(`${r.standardNumber || ''}  ${r.title || ''}`.trim()) },
     { divider: true },
     { label: '查看详情', icon: '👁', action: () => showDetail(id) },
+    { label: '预览（本地）', icon: '🗎', action: () => previewStandard(id) },
     { label: r.previewAvailable ? '下载该标准' : '下载该标准（无文本）', icon: '↓', action: () => { const btn = card.querySelector('[data-action="download"]'); if (btn && !btn.disabled) downloadOne(id, btn); else showToast('该标准无可用文本', 'fail'); } },
     { label: isStandardSaved(r) ? '取消收藏' : '加入收藏', icon: '★', action: () => toggleSavedStandard(id) },
     { divider: true },

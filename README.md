@@ -147,7 +147,8 @@ start.bat
 │       ├── by/          # BY 内部网
 │       └── shared/      # OCR 验证码工具
 ├── docs/                # 源实现文档
-└── data/                # SQLite 数据库 (bzxz.db, .gitignore)
+├── data/                # SQLite 数据库 (bzxz.db, .gitignore)
+└── standards/           # 本地标准 PDF 库（预览功能；Electron 模式下放 exe 同级）
 ```
 
 ## API 端点
@@ -231,6 +232,14 @@ start.bat
 | PUT | `/api/admin/users/:id` | 更新用户（角色/状态/密码） |
 | DELETE | `/api/admin/users/:id` | 删除用户 |
 | GET | `/api/admin/users/:id/events` | 用户使用明细 |
+| POST | `/api/admin/library/rescan` | 全量重扫标准库目录 |
+
+### 预览（需登录，含 guest）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/preview/request` | 查本地库；命中返回 `{status:'ready', fileId, url}`，未命中返回 `{status:'not_in_library', tried}` |
+| GET | `/api/preview/file/:id` | 流式回 PDF（HTTP Range + ETag + 304；`?attachment=1` 强制另存） |
 
 ### 统计（需登录）
 
@@ -244,6 +253,7 @@ start.bat
 
 ## 前端功能
 
+- **标准 PDF 预览**：搜索结果卡片「预览」按钮 → 命中本地库即时打开内嵌 iframe PDF 阅读器（支持 Range + ETag）；未命中提示先下载（Phase 2 接自动下载）。库目录默认 `<exe同级>/standards/`，Windows Program Files 安装时探针失败会回退到 `userData/standards` 并在管理员设置页打 banner。多源同号通过 `{stdCode} - {SOURCE}.pdf` 文件名共存，按管理员配置的源优先级选择本地命中
 - 现代深色毛玻璃主题（oklch 色彩空间 + backdrop-filter）
 - 免登录模式（默认开启，无需注册即可使用）
 - 多源并行搜索 + 去重 + 状态排序

@@ -205,6 +205,25 @@ function migrate(db: Database.Database): void {
       PRIMARY KEY (announcement_id, user_id)
     );
     CREATE INDEX IF NOT EXISTS idx_announcement_reads_user ON announcement_reads(user_id);
+
+    -- 持久标准库索引（Phase 1 of 预览功能）
+    -- 每行 = 一份本地 PDF。文件名永远带源后缀 "{stdCode} - {source}.pdf"，
+    -- 由 library-index.ts 扫描时解析。唯一约束让同源同标准只存一份；
+    -- 用户手动删文件后下次扫描会清行，预览时也会 fs.access 再校验。
+    CREATE TABLE IF NOT EXISTS standard_files (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      std_code_norm  TEXT NOT NULL,           -- extractBaseCode 归一化后的标准号
+      year           TEXT NOT NULL DEFAULT '',-- 单独存便于版本区分；空串表示文件名未带年份
+      source         TEXT NOT NULL,           -- gbw / by / bz
+      abs_path       TEXT NOT NULL,           -- 绝对路径（库根目录之内）
+      size           INTEGER NOT NULL DEFAULT 0,
+      mtime          INTEGER NOT NULL DEFAULT 0, -- 增量扫描比对依据
+      mime           TEXT NOT NULL DEFAULT 'application/pdf',
+      indexed_at     TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE (std_code_norm, year, source)
+    );
+    CREATE INDEX IF NOT EXISTS idx_standard_files_lookup ON standard_files(std_code_norm, year);
+    CREATE INDEX IF NOT EXISTS idx_standard_files_source ON standard_files(source);
   `);
 
   // Schema migrations: add columns that may be missing on older DBs.
@@ -237,6 +256,16 @@ function migrate(db: Database.Database): void {
     ['qual_sync_enabled', '1'],
     ['qual_sync_cron', '0 3 * * 0'],
     ['qual_sync_concurrency', '1'],
+    // 标准库 / 预览功能（Phase 1）：
+    // - standards_library_dir 空字符串代表"使用默认值"，由 library-paths.ts 启动时
+    //   填入 exe 同级 /standards。用户在设置里改成绝对路径会覆盖默认。
+    // - library_filename_pattern 文件名模板，支持 {stdCode}/{source}/{year}/{title}。
+    //   默认 "{stdCode} - {source}" 始终带源后缀（决策见 CHANGELOG），不写扩展名（永远 .pdf）。
+    ['standards_library_dir', ''],
+    ['library_filename_pattern', '{stdCode} - {source}'],
+    // library_source_priority：JSON 数组形式存储，源按优先级排列；preview-routes/admin-routes
+    // 用 parseSourcePriority 解析。默认顺序与 DEFAULT_SOURCE_PRIORITY 对齐（gbw > bz > by）。
+    ['library_source_priority', '["gbw","bz","by"]'],
   ];
   for (const [k, v] of qualDefaults) {
     const existing = db.prepare('SELECT value FROM settings WHERE key = ?').get(k);

@@ -660,8 +660,20 @@ function renderSettings() {
     <div class="settings-actions">
       <button class="btn btn-ghost btn-sm" onclick="showDiagnostics()">🩺 诊断</button>
       <button class="btn btn-ghost btn-sm" onclick="resetSettings();renderSettings()">恢复默认</button>
-    </div>`;
+    </div>
+    ${(typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin') ? `
+    <div class="setting-section" id="librarySection">
+      <div class="field-label settings-source-head">
+        标准库
+        <button class="btn btn-sm btn-ghost" id="libraryRescanBtn" onclick="rescanLibrary()">重新扫描</button>
+      </div>
+      <div class="setting-hint">本地标准 PDF 存放目录。预览功能优先读取此目录里已下载的文件，命中即时打开。</div>
+      <div id="libraryStatusBox" class="library-status-box">加载中…</div>
+    </div>` : ''}`;
   initDragSort();
+  if (typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin') {
+    loadLibrarySettings();
+  }
   ensureWebAccessLoaded(false);
   ensureStartupSettingLoaded(false);
   ensurePortSettingLoaded(false);
@@ -674,6 +686,96 @@ function renderSettings() {
       portInput.focus();
       try { portInput.setSelectionRange(portInput.value.length, portInput.value.length); } catch {}
     }
+  }
+}
+
+// ── 标准库设置（Phase 1 of 预览功能）──
+// 用 settings 接口拿 library 状态、路径、索引数；admin 才显示这个 section。
+var libraryState = { loaded: false, loading: false, data: null, error: '' };
+
+async function loadLibrarySettings() {
+  var box = document.getElementById('libraryStatusBox');
+  if (!box) return;
+  libraryState.loading = true;
+  try {
+    var res = await apiFetch('/api/admin/settings');
+    var s = await readApiResponse(res);
+    libraryState.data = s;
+    libraryState.loaded = true;
+    libraryState.error = '';
+    renderLibraryStatus();
+  } catch (e) {
+    libraryState.error = (e && e.message) || '加载失败';
+    box.innerHTML = '<span style="color:var(--danger)">' + escapeHtml(libraryState.error) + '</span>';
+  } finally {
+    libraryState.loading = false;
+  }
+}
+
+function renderLibraryStatus() {
+  var box = document.getElementById('libraryStatusBox');
+  if (!box || !libraryState.data) return;
+  var s = libraryState.data;
+  var lib = s.library || {};
+  var banner = '';
+  if (lib.fallbackUsed) {
+    banner = '<div class="library-banner warn">⚠ ' + escapeHtml(lib.fallbackReason || '首选库目录不可写，已临时回退') + '</div>';
+  } else if (!lib.writable) {
+    banner = '<div class="library-banner err">✕ 当前库目录不可写：' + escapeHtml(lib.fallbackReason || '请检查权限') + '</div>';
+  }
+  var prio = (s.librarySourcePriority || ['gbw','bz','by']).map(srcLabel).join(' › ');
+  var indexed = lib.lastIndexedAt ? lib.lastIndexedAt.replace('T', ' ').replace('Z', '') : '—';
+  box.innerHTML = banner +
+    '<div class="library-row"><span class="library-row-label">当前目录</span>' +
+      '<code class="library-row-value">' + escapeHtml(lib.dir || '—') + '</code></div>' +
+    '<div class="library-row"><span class="library-row-label">配置值</span>' +
+      '<input type="text" id="libraryDirInput" class="library-input" placeholder="留空使用默认（软件安装目录/standards）" value="' + escapeHtml(s.standardsLibraryDir || '') + '">' +
+      '<button class="btn btn-sm btn-primary" onclick="saveLibraryDir()">保存</button></div>' +
+    '<div class="library-row"><span class="library-row-label">已索引</span>' +
+      '<span class="library-row-value">' + (Number(lib.indexCount) || 0) + ' 个 PDF · 最近 ' + escapeHtml(indexed) + '</span></div>' +
+    '<div class="library-row"><span class="library-row-label">源优先级</span>' +
+      '<span class="library-row-value">' + escapeHtml(prio) + '</span>' +
+      '<span class="library-hint">（多源同号时按此顺序选择本地命中）</span></div>';
+}
+
+async function saveLibraryDir() {
+  var input = document.getElementById('libraryDirInput');
+  if (!input) return;
+  var val = input.value.trim();
+  try {
+    var res = await apiFetch('/api/admin/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ standardsLibraryDir: val }),
+    });
+    var data = await readApiResponse(res);
+    libraryState.data = data;
+    renderLibraryStatus();
+    showToast('库目录已保存，后台正在重扫…');
+    // 后端是 fire-and-forget 重扫；给个延迟刷新让计数更新
+    setTimeout(loadLibrarySettings, 2500);
+  } catch (e) {
+    showToast((e && e.message) || '保存失败', 'fail');
+  }
+}
+
+async function rescanLibrary() {
+  var btn = document.getElementById('libraryRescanBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '扫描中…'; }
+  try {
+    var res = await apiFetch('/api/admin/library/rescan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ full: true }),
+    });
+    var data = await readApiResponse(res);
+    var r = data.result || {};
+    showToast('扫描完成：新增 ' + (r.added || 0) + ' · 更新 ' + (r.updated || 0) + ' · 删除 ' + (r.removed || 0));
+    loadLibrarySettings();
+  } catch (e) {
+    showToast((e && e.message) || '扫描失败', 'fail');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '重新扫描'; }
   }
 }
 

@@ -229,3 +229,51 @@ ddddocr 是单 Python 进程，请求/响应通过 **UUID-keyed pending map** �
 | ddddocr 子进程 | 1（多路复用）| UUID pending map | 验证码 OCR 首选 |
 
 **加新的耗时操作前**：判断它是 CPU 密集还是 IO 密集，CPU → worker_threads 池；IO → 看是否已有 client 池可复用；都不是 → 先想想是不是真的需要锁。
+
+## 十、标准库 / 预览模块（Phase 1）
+
+> "下载 + 预览"两个看似独立的功能在底层其实共用一个本地 PDF 库。Phase 1 只接入预览（读路径），Phase 2 才会把下载流接进来（写路径），同一索引、同一目录、同一文件名规则。
+
+### 数据模型
+
+```
+standard_files
+├── std_code_norm  (extractBaseCode 归一后的标准号)
+├── year           (从文件名末尾抽出，可空)
+├── source         ('gbw' | 'bz' | 'by')
+├── abs_path       (含 SOURCE 后缀的绝对路径)
+├── size / mtime   (扫描时的 stat 快照，增量比对用)
+└── UNIQUE (std_code_norm, year, source)
+```
+
+唯一约束的形状决定了"多源同号"的存储方式：**永远带源后缀**（`GB_T 3324-2024 - BW.pdf`），不靠 rename 策略，让两源能并存在同一目录而不互相覆盖。
+
+### 路径解析（src/shared/library-paths.ts）
+
+两级回退：
+
+1. `settings.standards_library_dir`（用户配置）或默认 `<BZXZ_EXE_DIR>/standards/`
+2. 探针失败 → `<BZXZ_USER_DATA_DIR>/standards/`（Windows Program Files 兼容）
+3. 都不通 → 硬塞默认路径 + 把 `fallbackReason` 写进 LibraryStatus，管理员设置页打 banner
+
+之所以**默认不放 C 盘 userData**：标准 PDF 体积大、长期累积，放 C 盘会鼓胀用户 OS 盘；放 exe 同级让用户自己挑装机盘（D / E）。
+
+### 安全 (`isInsideLibrary`)
+
+扫描和预览端点各做一次"绝对路径必须落在库根之内"校验，防 symlink 跟随把库外文件纳入索引。库根改了之后，旧索引行残留指向库外 → 直接 410 GONE + 删行，下次扫描重建。
+
+### 扫描策略 (`scanLibrary`)
+
+- 启动时增量扫描一次（fire-and-forget）
+- 管理员手动 POST `/admin/library/rescan` 全量重扫
+- 增量靠 `(mtime, size)` 双比对；都没变即跳过 parse
+- **不递归子目录**：Phase 1 保持库结构扁平，便于用户在文件管理器里直接浏览
+- **不上 fs.watch**：Windows + OneDrive 场景里 watcher 太不稳定，启动扫描 + 手动重扫覆盖 95% 场景
+
+### 查询优先级 (`lookupFile`)
+
+请求级 `sources` > settings `library_source_priority` > 默认 `['gbw','bz','by']`。多源同号时按数组顺序选第一个本地有的；fs.access 失败的行即时清掉，避免返回 404 fileId。
+
+### Phase 2 预告（未实现）
+
+下载流改造：现在下载完写 `data/exports/`（14 天清理）；Phase 2 改成"按文件名模板写进 standards/" + 完成时 INSERT `standard_files`；预览端点的 `not_in_library` 分支接通自动下载，下完即跳预览。当前 Phase 1 已为这个流程预留 settings `library_filename_pattern` 字段。

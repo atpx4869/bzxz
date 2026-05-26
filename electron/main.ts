@@ -515,6 +515,13 @@ async function startServer(): Promise<number> {
   process.env.BZXZ_STATIC_DIR = app.isPackaged
     ? ((process as any).resourcesPath as string)
     : installDir;
+  // 标准库默认路径 = exe 同级 /standards/，避免 C 盘 userData 膨胀。
+  // 当用户把 bzxz 装在 Program Files 时探针会失败，回退到 userData/standards。
+  // 参考 src/shared/library-paths.ts probeWritable + getFallbackLibraryDir。
+  process.env.BZXZ_EXE_DIR = app.isPackaged
+    ? path.dirname(app.getPath('exe'))
+    : installDir;
+  process.env.BZXZ_USER_DATA_DIR = app.getPath('userData');
   process.env.BZXZ_APP_VERSION = app.getVersion();
   await ensureDataDirs();
 

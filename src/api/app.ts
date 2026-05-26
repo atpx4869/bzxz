@@ -13,6 +13,8 @@ import { createAnnouncementRoutes } from './announcement-routes';
 import { createStatsRoutes } from './stats-routes';
 import { createQualificationRoutes } from './cnas-routes';
 import { createStandardsRoutes } from './standards-routes';
+import { createPreviewRoutes } from './preview-routes';
+import { scanLibrary } from '../services/library-index';
 import { AppError } from '../shared/errors';
 import { respond, respondError } from '../shared/response';
 import { getOcrStatus } from '../sources/shared/captcha-ocr';
@@ -175,6 +177,8 @@ export function createApp() {
   app.use('/api/stats', createStatsRoutes(db, requireAuth));
   const qualRouter = createQualificationRoutes(db, requireAuth);
   app.use(qualRouter);
+  // 预览：requireAuth 在路由内部应用，挂在根上即可（端点路径里已带 /api/preview 前缀）。
+  app.use(createPreviewRoutes(db, requireAuth));
 
   app.get('/api/health', (_req, res) => {
     const version = process.env.npm_package_version || process.env.BZXZ_APP_VERSION || '';
@@ -218,6 +222,12 @@ export function createApp() {
   // in parallel with normal request handling, results land in /api/diagnostics
   // /environment when ready.
   void runEnvironmentCheck();
+
+  // 启动时增量扫描标准库一次：把磁盘新增 / 修改 / 删除的 PDF 同步进索引。
+  // fire-and-forget：库目录探针 + readdir 在挂大网盘时可能阻塞，必须脱离启动主路径。
+  scanLibrary(db, { full: false }).catch((e) => {
+    console.error('[library] startup scan failed:', e);
+  });
 
   app.use(createStandardsRoutes({ db, sourceRegistry, exportTaskStore, requireAuth, baseDir }));
 
