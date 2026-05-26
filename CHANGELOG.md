@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### Added
+- **预览自动下载 Phase 3 polish**：解决连点 / 失败重试 / 长下载体验三个痛点。
+  - **按 (stdCode, year) 去重 taskId**：`src/services/preview-task-store.ts` 给每个任务存一个 normalized key（`stdCode.toUpperCase().replace(/[^A-Z0-9]/g,'') + '::' + year`），新增 `findActiveTaskByKey()` 在 createTask 之前查活跃任务（仅 pending / downloading 算活跃）。`preview-routes.ts` 的 `not_in_library` 分支调用它 → 若有活跃任务直接复用 taskId 并返回 `{ reused: true }`，不再 fire-and-forget 第二个 `runAutoDownload`。覆盖两类场景：用户连点 5 次预览 / 先点下载再点预览同一标准。
+  - **失败 UI 加「重试」按钮**：`public/js/app-search.js` 的 `pollPreviewTask` 失败分支抽出 `renderPreviewFailedUi()`，渲染「重试」+「关闭」两个按钮。重试点击 → abort 旧 poll → 重新调 `previewStandard(_previewLastId)` 走完整 `/api/preview/request` 流程；后端 dedup 兜底，若旧任务还活着复用、否则起新任务。
+  - **取消 3 分钟前端超时**：`pollPreviewTask` 的 `while (Date.now() < deadline)` 改成 `while (!ctrl.signal.aborted)`，前端只在 ready / failed / 用户关闭 / 重试时停 poll。后端任务无 deadline，仅靠 preview-task-store 的 10 分钟无更新 TTL GC 作兜底（GC 命中后轮询接口返 404，前端当作 failed 处理弹「重试」UI）。
 - **标准 PDF 预览 Phase 2：自动下载 + 入库 + 文件夹监听**。
   - **下载即入库（单路径）**：以前下载先落 `data/exports/` 然后 14 天清理；现在直接 `fs.rename` 进 `standards_library_dir`，按 admin 模板（`{stdCode} - {SOURCE}.pdf` 之类）命名并 UPSERT 索引。`data/exports/` 已不再放 PDF，仅留补全功能输出的 xlsx 报表，**不再有 14 天自动清理**（标准永久保留）。`src/shared/fs.ts` 删除 `cleanupOldExportFiles` 和 `DEFAULT_EXPORT_RETENTION_DAYS`。
   - **入库 hook 抽出**：`src/services/download-to-library.ts` 暴露 `moveDownloadToLibrary(db, sourceRegistry, source, standardId, result)`，给 `auto-download` / `multi-download` / preview 自动下载共用。`addFileToLibrary` 改用 `fs.rename`（跨卷 EXDEV/EPERM/EACCES 时 copy+unlink 兜底）+ 文件名冲突 `(1)`、`(2)` 后缀去重。

@@ -647,34 +647,47 @@ document.getElementById('results').addEventListener('click', e => {
   else if (btn.dataset.action === 'save') toggleSavedStandard(id);
 });
 
-// ── PDF 预览（Phase 2）──
+// ── PDF 预览（Phase 2 + Phase 3 polish）──
 // 流程：POST /api/preview/request →
-//   ready    → iframe 加载 /api/preview/file/:id
+//   ready       → iframe 加载 /api/preview/file/:id
 //   downloading → 后端已起任务，前端 poll /api/preview/task/:id 直到 ready / failed
-//                 → ready 切 iframe；failed 提示用户重试
+//                 → ready 切 iframe；failed 提示用户、给「重试」按钮
+//
+// Phase 3 调整：
+// - 后端无 deadline，前端只在 ready / failed / 用户主动关闭时停 poll
+// - 失败 UI 加「重试」按钮，触发新的 /api/preview/request（后端按 stdCode+year 去重，
+//   若旁路还有 pending/downloading 任务会复用；否则起新任务）
 let _previewCurrent = null; // { fileId, url, fileName }
 let _previewPollAbort = null; // 取消正在进行的 poll（用户关弹窗或换标准时）
+let _previewLastId = null;   // 缓存最近一次预览的结果 id，用于失败重试
 
 async function pollPreviewTask(taskId, stdCode) {
-  // 用 AbortController 让"关闭预览"能立刻停掉。
+  // 用 AbortController 让"关闭预览 / 重试"能立刻停掉旧 poll。
   const ctrl = new AbortController();
   _previewPollAbort = ctrl;
-  const deadline = Date.now() + 3 * 60 * 1000; // 最长 3 分钟
   let attempt = 0;
-  while (Date.now() < deadline) {
-    if (ctrl.signal.aborted) return;
+  // 无 deadline：只在 ready / failed / abort 时返回。
+  // 后端 preview-task-store 有 10 分钟无更新的 TTL 兜底，最坏情况会返回 404。
+  while (!ctrl.signal.aborted) {
     attempt++;
     setPreviewBody(`<div class="preview-loading">正在自动下载…（${attempt}）<br><span class="preview-empty-hint">首次入库可能 5~30 秒，受源站速度影响</span></div>`);
     await new Promise(r => setTimeout(r, 1500));
     if (ctrl.signal.aborted) return;
     let data;
+    let httpOk = true;
     try {
       const res = await fetch(`${API}/api/preview/task/${encodeURIComponent(taskId)}`, { signal: ctrl.signal });
+      httpOk = res.ok;
       data = await readApiResponse(res);
     } catch (e) {
       if (ctrl.signal.aborted) return;
-      // 轮询接口短暂抖动 → 继续重试，直到超时
+      // 轮询接口短暂抖动 → 继续重试
       continue;
+    }
+    // 任务过期（TTL 兜底命中）→ 当作失败处理，让用户点重试
+    if (!httpOk || !data || data.status === undefined) {
+      renderPreviewFailedUi(data?.error || '任务已过期或不存在，请重试');
+      return;
     }
     if (data.status === 'ready') {
       _previewCurrent = { fileId: data.fileId, url: data.url, fileName: stdCode };
@@ -683,31 +696,54 @@ async function pollPreviewTask(taskId, stdCode) {
       return;
     }
     if (data.status === 'failed') {
-      setPreviewBody(`
-        <div class="preview-empty">
-          <div class="preview-empty-title">自动下载失败</div>
-          <div class="preview-empty-hint">${escapeHtml(data.error || '所有源都未能下载到此标准。')}</div>
-          <div class="preview-empty-actions">
-            <button class="btn btn-ghost" id="previewCloseFailedBtn">关闭</button>
-          </div>
-        </div>`);
-      const cls = document.getElementById('previewCloseFailedBtn');
-      if (cls) cls.addEventListener('click', closePreviewOverlay);
+      renderPreviewFailedUi(data.error || '所有源都未能下载到此标准。');
       return;
     }
     // pending / downloading → 继续循环
   }
+}
+
+/**
+ * 渲染预览失败弹层：「关闭」+「重试」。
+ * 重试逻辑：调用 previewStandard(_previewLastId) 重新走 /api/preview/request。
+ * 后端会按 stdCode+year 去重，若有活跃任务复用，否则起新任务。
+ */
+function renderPreviewFailedUi(errorMsg) {
   setPreviewBody(`
     <div class="preview-empty">
-      <div class="preview-empty-title">自动下载超时</div>
-      <div class="preview-empty-hint">3 分钟仍未拿到 PDF。可关闭重试或手动点"下载"。</div>
+      <div class="preview-empty-title">自动下载失败</div>
+      <div class="preview-empty-hint">${escapeHtml(errorMsg || '未能下载到此标准。')}</div>
+      <div class="preview-empty-actions">
+        <button class="btn btn-primary" id="previewRetryBtn">重试</button>
+        <button class="btn btn-ghost" id="previewCloseFailedBtn">关闭</button>
+      </div>
     </div>`);
+  const retry = document.getElementById('previewRetryBtn');
+  if (retry) retry.addEventListener('click', () => {
+    if (!_previewLastId) { closePreviewOverlay(); return; }
+    // 停旧 poll，再走一次完整流程
+    if (_previewPollAbort) {
+      try { _previewPollAbort.abort(); } catch { /* ignore */ }
+      _previewPollAbort = null;
+    }
+    previewStandard(_previewLastId);
+  });
+  const cls = document.getElementById('previewCloseFailedBtn');
+  if (cls) cls.addEventListener('click', closePreviewOverlay);
 }
+
 async function previewStandard(id) {
   const r = findResultByAnyId ? findResultByAnyId(id) : results.find(x => x.id === id);
   if (!r) { showToast('未找到该标准', 'fail'); return; }
   const stdCode = r.standardNumber || '';
   if (!stdCode) { showToast('该结果缺少标准号，无法预览', 'fail'); return; }
+  // 记录最近一次预览的 id，供失败弹层的「重试」按钮使用
+  _previewLastId = id;
+  // 若上一次 poll 还活着（用户连点 / 重试场景），先停掉旧的
+  if (_previewPollAbort) {
+    try { _previewPollAbort.abort(); } catch { /* ignore */ }
+    _previewPollAbort = null;
+  }
   openPreviewOverlay(stdCode + (r.title ? `  ${r.title}` : ''));
   setPreviewBody(`<div class="preview-loading">查询本地库…</div>`);
   try {

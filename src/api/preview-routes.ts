@@ -24,7 +24,7 @@ import { getSetting } from '../services/db';
 import type { SourceName } from '../domain/standard';
 import type { SourceRegistry } from '../services/source-registry';
 import { moveDownloadToLibrary } from '../services/download-to-library';
-import { createTask, updateTask, getTask } from '../services/preview-task-store';
+import { createTask, updateTask, getTask, findActiveTaskByKey } from '../services/preview-task-store';
 import { trackEvent } from '../services/usage-tracker';
 import { StandardService } from '../services/standard-service';
 
@@ -144,7 +144,23 @@ export function createPreviewRoutes(
 
       if (!file) {
         // Phase 2：未命中 → 后台触发自动下载 + 入库，前端 poll /api/preview/task/:id
-        const taskId = createTask();
+        //
+        // 去重：若已有同 (stdCode, year) 的活跃任务（pending / downloading）→ 直接复用。
+        // 覆盖两个场景：用户连点预览 / 先点下载再点预览（如果未来下载也走这条路径）。
+        const existing = findActiveTaskByKey(stdCode, year);
+        if (existing) {
+          respond(res, {
+            status: 'downloading',
+            stdCode,
+            year: year ?? null,
+            tried: effectiveSources,
+            taskId: existing,
+            reused: true,
+          });
+          return;
+        }
+
+        const taskId = createTask(stdCode, year);
         const userId = (req as any).user?.id as number;
         // fire-and-forget：runAutoDownload 内部把状态推进 store
         runAutoDownload(taskId, userId, stdCode, year, effectiveSources).catch((e) => {

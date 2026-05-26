@@ -278,6 +278,6 @@ standard_files
 
 **下载即入库**：adapter 把 PDF 写到临时 `data/exports/`，`services/download-to-library.ts` 立即 `fs.rename` 到 `standards/`，按 `library_filename_pattern` 模板（`{stdCode} {source} {year} {title}`）命名 UPSERT `standard_files`。跨卷 `EXDEV/EPERM/EACCES` 时退化为 copy+unlink。**已无 14 天清理**，标准永久保留。`data/exports/` 只剩补全功能的 xlsx 报表。
 
-**预览自动下载流**：`POST /api/preview/request` 未命中 → `services/preview-task-store.ts` 建 task → 后台按 source 优先级遍历 `searchStandards` → `autoDownload`/`exportStandard` → `moveDownloadToLibrary` → task.ready(fileId)。前端 `GET /api/preview/task/:taskId` 轮询 1.5s/次直到 ready 切 iframe，3 分钟超时上限。任务存在内存 Map（重启即丢）+ 10 分钟 TTL GC。
+**预览自动下载流**：`POST /api/preview/request` 未命中 → `services/preview-task-store.ts` 先 `findActiveTaskByKey(stdCode, year)` 查同标准的 pending/downloading 任务，命中直接复用 taskId（返回 `reused:true`），否则 `createTask(stdCode, year)` 建新 task → 后台按 source 优先级遍历 `searchStandards` → `autoDownload`/`exportStandard` → `moveDownloadToLibrary` → task.ready(fileId)。前端 `GET /api/preview/task/:taskId` 轮询 1.5s/次直到 ready 切 iframe / failed 弹「重试」+「关闭」/ 用户主动关闭 abort（**无前端超时**，靠 store 的 10 分钟无更新 TTL GC 兜底；GC 命中后轮询接口返 404，前端当 failed 处理）。任务存在内存 Map（重启即丢）。key 用 normalized `stdCode + year` 保证连点 / 下载预览交叉调用都聚合到同一任务。
 
 **模板引擎**：`services/library-naming.ts` `renderLibraryFilename`。空值占位符 + 相邻分隔符（空格/`-`/`_`/`·`/`—`）被吞掉，避免"GB 3324-2024 -.pdf"悬空尾。非法路径字符 `\/:*?"<>|` 清成空格；总长截到 200 字符防 Windows 260 字符路径上限。admin zod schema 强制模板含 `{stdCode}`。
