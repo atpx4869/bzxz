@@ -353,8 +353,12 @@ function renderQualSearchResults(items) {
         if (dates.length) parts.push('<div style="font-size:11px;margin-top:3px">' + dates.join(' · ') + '</div>');
         return '<div class="qual-result-item">' + parts.join('') + '</div>';
       }).join('');
+      // 手机端：点标准号头直接跳「标准搜索」并预填，桌面端保留展开/收起。
+      // 决策见 onQualGroupClick 注释。code 内可能含特殊字符 → 转义反斜杠、单引号
+      // 后塞进 onclick 的单引号字符串里。
+      var codeJs = code.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
       html += '<div class="qual-result-group">'
-        + '<div class="qual-result-std" onclick="toggleQualGroup(\'' + gid + '\')" style="cursor:pointer">'
+        + '<div class="qual-result-std" onclick="onQualGroupClick(\'' + gid + '\',\'' + codeJs + '\')" style="cursor:pointer">'
         + '<span class="qual-group-arrow" id="' + gid + '_arrow" style="display:inline-block;width:16px;font-size:10px;color:var(--text-3);transition:transform 0.2s">▶</span>'
         + escapeHtml(code) + '<span class="qual-std-name">' + escapeHtml(cleanName) + '</span>'
         + '<span style="float:right;font-size:11px;color:var(--text-3)">' + g.items.length + ' 项</span>'
@@ -383,6 +387,28 @@ function toggleAllQualGroups(expand) {
   document.querySelectorAll('#qualResults .qual-group-arrow').forEach(function(el) {
     el.style.transform = expand ? 'rotate(90deg)' : '';
   });
+}
+
+/**
+ * 资质结果里标准号头的统一点击入口。
+ *   - 手机端（≤640px 且未点「切换桌面版」）：直接跳到「标准搜索」tab 并预填 code、
+ *     回车 doSearch。窄屏用户在资质页看到一个标准号，下一步就是想搜它能不能下到、
+ *     看详情；让他先展开 5 行检测项目再去手动复制粘贴属于多此一举。
+ *   - 桌面端：保持原 expand/collapse 行为不变，避免破坏宽屏批量浏览能力的工作流。
+ */
+function onQualGroupClick(gid, code) {
+  var isMobile = window.matchMedia('(max-width: 640px)').matches
+    && !document.body.classList.contains('force-desktop');
+  if (isMobile && typeof switchTab === 'function') {
+    switchTab('search');
+    var input = document.getElementById('searchInput');
+    if (input) {
+      input.value = code;
+      if (typeof doSearch === 'function') doSearch();
+    }
+    return;
+  }
+  toggleQualGroup(gid);
 }
 
 function toggleQualGroup(gid) {

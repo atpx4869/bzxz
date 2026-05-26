@@ -31,6 +31,11 @@
   - 后端：`src/api/admin-routes.ts`（settings GET/PUT 加 `lanGuestAllowed`）+ `src/api/auth-routes.ts:89`（`effectiveLoginRequired` 公式纳入新设置）+ `src/api/auth-middleware.ts:108`（`requireAuth` 卡口纳入）
   - 前端：`public/index.html` 加 `#lanGuestAllowedToggle` + `public/js/app-auth-admin.js` 加 populate 与 `toggleLanGuestAllowed()` confirm 流程
 
+### Changed
+- **手机端资质查询：隐掉「可视化」tab + 标准号头点击直跳「标准搜索」**
+  - **隐 tab**：`public/styles.css` 与 `web/src/styles/responsive.css` `@media (max-width: 640px)` 块新增 `body:not(.force-desktop) .qual-tab[data-qual-tab="visual"] { display: none; }`，并去掉只剩 1 个 tab 时多余的 `tab-bar` 底线。窄屏下可视化矩阵一列摊开无密度优势，搜索 tab 单独够用；想看可视化的切「桌面版」即可。
+  - **点击直跳标准搜索**：`public/js/app-qual.js` 抽出 `onQualGroupClick(gid, code)` 替换原 `toggleQualGroup` onclick。手机端（≤640px 且未切桌面版）点资质结果里的标准号头 → `switchTab('search')` + 预填 `#searchInput` + 自动 `doSearch()`；桌面端保留 expand/collapse 不变。Why：窄屏用户在资质页看到标准号，下一步几乎一定是「去搜它能不能下到」，强制先展 5 行检测项目再去复制粘贴属于多此一举。
+
 ### Fixed
 - **NSIS 升级会把本地 `standards/` 标准库整目录删掉**：用户报告升级后 `G:\bzxz\standards` 下几十 GB 已下载 PDF 全没了。
   - **根因**：`build/installer.nsh` 之前只把 `$INSTDIR\data`（资质数据库）做了 backup-rename-restore 保护，PDF 库目录 `$INSTDIR\standards`（默认库路径 `<exe 同级>\standards`）落在 NSIS `RMDir /r "$INSTDIR"` 扫荡范围里直接被清空。electron-builder 升级时静默调用旧版卸载器 → 不弹任何询问 → 整库蒸发。

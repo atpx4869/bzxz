@@ -1014,6 +1014,12 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
      普通类选择器压不过 inline style，必须 !important。 */
   body:not(.force-desktop) #toolbar { display: none !important; }
 
+  /* 资质查询页：手机端隐掉「可视化」tab。Why：可视化卡片矩阵在窄屏一列摊开
+     没有信息密度优势，徒增滚屏；搜索 tab 单独够用。tab-bar 只剩一项时也无
+     需保留 border-bottom，给一个干净的 16px 间隔。 */
+  body:not(.force-desktop) .qual-tab[data-qual-tab="visual"] { display: none; }
+  body:not(.force-desktop) .qual-tab-bar { border-bottom: none; margin-bottom: 4px; }
+
   /* 筛选条折叠（A 方案）：手机端默认收成"筛选 ▾"一行按钮，
      .filter-bar.open 时再展开。桌面端 .filter-collapse 永远 display:none、
      .filter-bar-body 永远 display:contents —— 手机端在这里反过来：
