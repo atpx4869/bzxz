@@ -809,50 +809,28 @@ async function loadLabsSyncLogs() {
 }
 
 // ── Qual badges for search results ──
-// 从标准号里抠出年份后缀（4 位数字 + 可选 1 字母修订标记，如 '2010A'）；
-// 兼容脏空格变体 'GB/T 3325 -2024' 与全角破折号 '－'
-function extractYear(stdCode) {
-  if (!stdCode) return '';
-  const normalized = String(stdCode).replace(/[‐-―－]/g, '-');
-  const m = normalized.match(/-\s*(\d{4}[A-Za-z]?)\s*$/);
-  return m ? m[1] : '';
-}
-
 function qualBadgeHtml(standardNumber) {
   if (!qualData || !standardNumber) return '';
   const quals = qualData[standardNumber];
   if (!quals || !quals.length) return '';
-  const inputYear = extractYear(standardNumber);
   const cnas = quals.filter(q => q.source === 'CNAS');
   const cma = quals.filter(q => q.source === 'CMA');
-  // 当 source 下所有命中行都是跨年版本时（没有一条与输入同年），徽章本体打 ⚠ 修饰类，
-  // 让用户在 tooltip 之前就感知到"这是跨版本兜底匹配，请核对实际版本"
-  const allCrossYear = (list) => inputYear && list.length > 0 && list.every(q => {
-    const y = extractYear(q.stdCode);
-    return y && y !== inputYear;
-  });
-  const cnasCross = allCrossYear(cnas);
-  const cmaCross = allCrossYear(cma);
   let html = '<span class="qual-badges">';
   // Badge text 只显示 source 简称（CNAS / CMA），保持两源视觉对齐；
   // 完整证书有效期 / 机构数等明细在 hover tooltip 里给。
   if (cnas.length) {
-    const tip = buildQualTooltip(cnas, 'CNAS', inputYear);
-    const cls = 'qual-badge qual-badge-cnas' + (cnasCross ? ' qual-badge-cross-year' : '');
-    const mark = cnasCross ? '<span class="qual-badge-warn" title="仅匹配到其它年份版本">⚠</span>' : '';
-    html += `<span class="${cls}"><span class="qual-dot"></span>CNAS${mark}<span class="qual-tooltip">${tip}</span></span>`;
+    const tip = buildQualTooltip(cnas, 'CNAS');
+    html += `<span class="qual-badge qual-badge-cnas"><span class="qual-dot"></span>CNAS<span class="qual-tooltip">${tip}</span></span>`;
   }
   if (cma.length) {
-    const tip = buildQualTooltip(cma, 'CMA', inputYear);
-    const cls = 'qual-badge qual-badge-cma' + (cmaCross ? ' qual-badge-cross-year' : '');
-    const mark = cmaCross ? '<span class="qual-badge-warn" title="仅匹配到其它年份版本">⚠</span>' : '';
-    html += `<span class="${cls}"><span class="qual-dot"></span>CMA${mark}<span class="qual-tooltip">${tip}</span></span>`;
+    const tip = buildQualTooltip(cma, 'CMA');
+    html += `<span class="qual-badge qual-badge-cma"><span class="qual-dot"></span>CMA<span class="qual-tooltip">${tip}</span></span>`;
   }
   html += '</span>';
   return html;
 }
 
-function buildQualTooltip(quals, source, inputYear) {
+function buildQualTooltip(quals, source) {
   const now = beijingDate();
   const parts = [];
 
@@ -869,11 +847,6 @@ function buildQualTooltip(quals, source, inputYear) {
     const lines = [];
     if (q.stdName && q.stdName !== q.testStandard) {
       lines.push('<b>' + escapeHtml(q.stdName) + '</b>');
-    }
-    // 跨年命中提示：仅当用户搜的标准号带年份、且命中行的年份与之不同时显示
-    const rowYear = extractYear(q.stdCode);
-    if (inputYear && rowYear && rowYear !== inputYear) {
-      lines.push('<span style="color:var(--warning)">⚠ 仅匹配到 ' + escapeHtml(rowYear) + ' 版</span>');
     }
     if (q.category) lines.push('<span style="color:var(--text-3)">领域</span> ' + escapeHtml(q.category));
     if (q.testItem) lines.push('<span style="color:var(--text-3)">项目</span> ' + escapeHtml(q.testItem.length > 40 ? q.testItem.slice(0, 40) + '…' : q.testItem));
