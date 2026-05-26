@@ -123,6 +123,25 @@
   /* filter-bar.css */
   .filter-sort { flex: 1 1 100%; margin-left: 0; }
 
+  /* 筛选条折叠（A 方案）：默认收成"筛选 ▾"一行按钮，点击切 .open 展开 */
+  body:not(.force-desktop) .filter-bar { gap: 8px; margin-bottom: 12px; }
+  body:not(.force-desktop) .filter-collapse {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 14px; min-height: 40px;
+    border: 1px solid var(--border); border-radius: 100px;
+    background: oklch(20% 0.014 255 / 0.7); color: var(--text-2);
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    flex: 1 1 100%; justify-content: center;
+  }
+  body:not(.force-desktop) .filter-collapse.has-active { border-color: var(--accent); color: var(--text); }
+  body:not(.force-desktop) .filter-bar-body {
+    display: none;
+    flex: 1 1 100%;
+    flex-wrap: wrap; align-items: center; gap: 6px;
+  }
+  body:not(.force-desktop) .filter-bar.open .filter-bar-body { display: flex; }
+  body:not(.force-desktop) .filter-bar-body .filter-sep { display: none; }
+
   /* result-card.css —— 标准搜索结果卡片手机紧凑版（5 行结构）：
      标准号 / 标准名 / 标识合并行（state + text + 源 + 资质徽章） / 时间 / 4 按钮等宽
      - 复选框、推荐性副标题、标题行内徽章、独立 state/source-line 全隐藏

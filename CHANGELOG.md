@@ -20,6 +20,9 @@
   - 前端：`public/index.html` 加 `#lanGuestAllowedToggle` + `public/js/app-auth-admin.js` 加 populate 与 `toggleLanGuestAllowed()` confirm 流程
 
 ### Fixed
+- 手机端标准搜索结果筛选条默认折叠：原来 `.filter-bar` 包含源 chips + 状态 chips + 3 个 toggle + 排序下拉，手机窄屏折行后能占 4–5 行，用户每次搜完都要先滑过这一坨才能看到结果。
+  - JS：`public/js/app-search.js:renderFilterBar()` 把原内容包进 `<div class="filter-bar-body">`，前面加一个 `<button class="filter-collapse">筛选 ▾ <count></button>` 折叠按钮；按钮上的徽章实时显示激活筛选项数（source/status 各算 1 + 三个 toggle 任一开各 1）；新增 click handler 切 `.filter-bar.open`，`aria-expanded` 同步给屏幕阅读器
+  - CSS：桌面默认 `.filter-collapse { display:none }`、`.filter-bar-body { display:contents }`（子项继续直接参与 `.filter-bar` 的 flex 排版，桌面视觉零回归）；手机 ≤640px 块反过来：按钮 `display:inline-flex`、body 默认 `display:none`、`.open` 时 `display:flex` flex-wrap。`public/styles.css` + `web/src/styles/components/filter-bar.css` + `web/src/styles/responsive.css` 三处同步
 - 手机端标准搜索结果卡片不够紧凑（原来 9 行：复选框 / 标准号 / 标题 / 推荐性 / state / source / 资质徽章 / 时间 / 按钮）：用户反馈"复选框单独占用一行"。重构成 5 行：标准号 / 标准名 / **标识合并行（state + 文本状态 + 源 + CMA/CNAS 资质徽章 同行 flex-wrap）** / 时间 / 4 按钮等宽平铺。
   - JS：`public/js/app-search.js` 渲染时在 `.card-source-line` 后新增 `.card-meta-line` div，把 statusBadge / textBadge / srcBadges / `qualBadgeHtml()` 揉成一行；资质徽章在桌面端原位（`.card-title-row` 内）仍渲一份，手机端靠 `display:none` 切换 —— 双 template 维护成本最低
   - CSS：`public/styles.css` + `web/src/styles/components/result-card.css`（桌面默认 `.card-meta-line { display:none }`）；`public/styles.css` §11 + `web/src/styles/responsive.css` ≤640px 块（手机端隐藏 `.check-col` / `.card-subtitle`（推荐性标签）/ `.card-title-row .qual-badges` / `.card-state` / `.card-source-line`，显示 `.card-meta-line`，把 `.card-title-row` 回到 row 方向，`.card-body` 解除 `-webkit-line-clamp:2`）

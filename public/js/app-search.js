@@ -373,7 +373,21 @@ function renderFilterBar() {
         <option value="sourceCount" ${filterState.sort === 'sourceCount' ? 'selected' : ''}>来源最多</option>
       </select>
     </label>`;
-  bar.innerHTML = chipHtml(srcChips, filterState.sources) + '<span class="filter-sep"></span>' + chipHtml(statusChips, filterState.statuses) + quickTools;
+  // 激活计数：非默认的筛选项个数（source/status 任一选中 + 三个 toggle 任一开 = 各算 1）
+  // 用于折叠按钮上的徽章，让用户知道折叠态下有几条筛选生效
+  const activeCount =
+    (filterState.sources.size > 0 ? 1 : 0) +
+    (filterState.statuses.size > 0 ? 1 : 0) +
+    (filterState.onlyDownloadable ? 1 : 0) +
+    (filterState.onlyQualified ? 1 : 0) +
+    (filterState.onlySaved ? 1 : 0);
+  const collapseBtn = `<button class="filter-collapse${activeCount ? ' has-active' : ''}" type="button" data-filter-collapse aria-expanded="false">
+    <span class="filter-collapse-label">筛选</span>
+    ${activeCount ? `<span class="filter-collapse-count">${activeCount}</span>` : ''}
+    <span class="filter-collapse-caret" aria-hidden="true">▾</span>
+  </button>`;
+  const bodyHtml = chipHtml(srcChips, filterState.sources) + '<span class="filter-sep"></span>' + chipHtml(statusChips, filterState.statuses) + quickTools;
+  bar.innerHTML = collapseBtn + `<div class="filter-bar-body">${bodyHtml}</div>`;
   bar.classList.add('visible');
 }
 
@@ -589,6 +603,14 @@ function appendNextResultsBatch() {
 
 // Filter bar chip clicks
 document.getElementById('filterBar').addEventListener('click', e => {
+  // 手机端折叠按钮：切 .open 让 .filter-bar-body 显隐；桌面端按钮 CSS display:none 永远不触发
+  const collapseBtn = e.target.closest('[data-filter-collapse]');
+  if (collapseBtn) {
+    const bar = document.getElementById('filterBar');
+    const open = bar.classList.toggle('open');
+    collapseBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    return;
+  }
   const toggle = e.target.closest('[data-filter-toggle]');
   if (toggle) {
     if (toggle.dataset.filterToggle === 'downloadable') filterState.onlyDownloadable = !filterState.onlyDownloadable;

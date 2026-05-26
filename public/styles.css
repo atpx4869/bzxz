@@ -178,6 +178,14 @@ body.sidebar-collapsed .env-warning { left: var(--sidebar-collapsed-w); }
 .filter-sort select:focus { border-color: var(--accent); color: var(--text); }
 .filter-chip[data-filter-toggle] { border-style: dashed; }
 .filter-chip[data-filter-toggle].active { border-style: solid; }
+/* 折叠按钮：桌面端永远 display:none；手机端 ≤640px 媒体块里打开。
+   .filter-bar-body 桌面用 display:contents 让其子项继续直接参与 .filter-bar 的 flex 排版，
+   桌面端视觉与原来单层 DOM 完全一致 —— 避免回归。 */
+.filter-bar-body { display: contents; }
+.filter-collapse { display: none; }
+.filter-collapse-count { background: var(--accent); color: #fff; border-radius: 100px; padding: 0 7px; font-size: 11px; font-weight: 600; min-width: 16px; text-align: center; }
+.filter-collapse-caret { transition: transform 0.18s var(--ease-out); }
+.filter-bar.open .filter-collapse-caret { transform: rotate(180deg); }
 
 /* Result list */
 .results-table-head { display: grid; grid-template-columns: 28px minmax(150px, 190px) minmax(220px, 1fr) minmax(128px, 160px) minmax(88px, 128px) minmax(118px, 142px) 172px; align-items: center; gap: 14px; padding: 0 16px 8px; color: var(--text-3); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
@@ -978,6 +986,30 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
   body:not(.force-desktop) .toolbar-left,
   body:not(.force-desktop) .toolbar-right { flex-wrap: wrap; }
   body:not(.force-desktop) .filter-sort { flex: 1 1 100%; margin-left: 0; }
+
+  /* 筛选条折叠（A 方案）：手机端默认收成"筛选 ▾"一行按钮，
+     .filter-bar.open 时再展开。桌面端 .filter-collapse 永远 display:none、
+     .filter-bar-body 永远 display:contents —— 手机端在这里反过来：
+     - 按钮 display:inline-flex 露出
+     - body 切回 display:flex 自成一行 flex-wrap 容器，便于整体 .open 时显示 / 折叠时隐藏 */
+  body:not(.force-desktop) .filter-bar { gap: 8px; margin-bottom: 12px; }
+  body:not(.force-desktop) .filter-collapse {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 14px; min-height: 40px;
+    border: 1px solid var(--border); border-radius: 100px;
+    background: oklch(20% 0.014 255 / 0.7); color: var(--text-2);
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    flex: 1 1 100%; justify-content: center;
+  }
+  body:not(.force-desktop) .filter-collapse.has-active { border-color: var(--accent); color: var(--text); }
+  body:not(.force-desktop) .filter-bar-body {
+    display: none;                /* 默认折叠 */
+    flex: 1 1 100%;
+    flex-wrap: wrap; align-items: center; gap: 6px;
+  }
+  body:not(.force-desktop) .filter-bar.open .filter-bar-body { display: flex; }
+  /* 内部 sep 在窄屏太碍眼，折叠展开后也藏掉 */
+  body:not(.force-desktop) .filter-bar-body .filter-sep { display: none; }
 
   /* 5) Modal -> 近全屏（详情页主用） */
   body:not(.force-desktop) .modal { width: calc(100% - 20px); padding: 18px; max-height: 88dvh; }

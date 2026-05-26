@@ -13,3 +13,11 @@
 .filter-sort select:focus { border-color: var(--accent); color: var(--text); }
 .filter-chip[data-filter-toggle] { border-style: dashed; }
 .filter-chip[data-filter-toggle].active { border-style: solid; }
+/* 折叠按钮：桌面端永远 display:none；手机端 ≤640px 媒体块里打开。
+   .filter-bar-body 桌面用 display:contents 让子项继续直接参与 .filter-bar 的 flex 排版，
+   桌面端视觉与原来单层 DOM 完全一致 —— 避免回归。 */
+.filter-bar-body { display: contents; }
+.filter-collapse { display: none; }
+.filter-collapse-count { background: var(--accent); color: #fff; border-radius: 100px; padding: 0 7px; font-size: 11px; font-weight: 600; min-width: 16px; text-align: center; }
+.filter-collapse-caret { transition: transform 0.18s var(--ease-out); }
+.filter-bar.open .filter-collapse-caret { transform: rotate(180deg); }
