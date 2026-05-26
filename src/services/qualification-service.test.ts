@@ -2,7 +2,7 @@ import BetterSqlite3 from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 
 import { QualificationService, buildFuzzyLikePattern } from './qualification-service';
-import { extractBaseCode, extractFullCode } from '../shared/std-code';
+import { extractBaseCode, extractFullCode, cleanStdCode } from '../shared/std-code';
 
 describe('extractBaseCode', () => {
   it('strips type designator and year suffix on clean input', () => {
@@ -86,6 +86,40 @@ describe('extractFullCode', () => {
 
   it('ISO colon variant becomes dash variant for storage', () => {
     expect(extractFullCode('ISO 4287:1997')).toBe('ISO4287-1997');
+  });
+});
+
+describe('cleanStdCode', () => {
+  it('collapses whitespace around year-dash (the CNAS scraper dirty case)', () => {
+    // 真实数据：CNAS 抓出来 'GB/T 3325 -2024'，子串 LIKE '%3325-%' 因为中间空格漏命中
+    expect(cleanStdCode('GB/T 3325 -2024')).toBe('GB/T 3325-2024');
+    expect(cleanStdCode('GB/T 3325- 2024')).toBe('GB/T 3325-2024');
+    expect(cleanStdCode('GB/T 3325 - 2024')).toBe('GB/T 3325-2024');
+  });
+
+  it('preserves prefix capitalization and slash (does not normalize the prefix)', () => {
+    // cleanStdCode 跟 extractFullCode 不同 —— 不大写、不删 '/T'，只是清洗空白
+    // 这样 DB 里的 std_code 字段保留可读形态供 UI 回显
+    expect(cleanStdCode('GB/T 3325-2024')).toBe('GB/T 3325-2024');
+    expect(cleanStdCode('gb/t 3325-2024')).toBe('gb/t 3325-2024');
+  });
+
+  it('folds multiple internal spaces', () => {
+    expect(cleanStdCode('GB/T  3325-2024')).toBe('GB/T 3325-2024');
+  });
+
+  it('trims leading/trailing whitespace', () => {
+    expect(cleanStdCode('  GB/T 3325-2024  ')).toBe('GB/T 3325-2024');
+  });
+
+  it('handles revision suffix (year + letter)', () => {
+    expect(cleanStdCode('GB/T 3836 -2010A')).toBe('GB/T 3836-2010A');
+  });
+
+  it('is idempotent (running twice produces the same result)', () => {
+    // db.ts::fixupDirtyStdCodes 用 `cleaned !== std_code` 做 dirty 判定，幂等是必要前提
+    const cleaned = cleanStdCode('GB/T 3325 -2024');
+    expect(cleanStdCode(cleaned)).toBe(cleaned);
   });
 });
 
@@ -247,6 +281,26 @@ describe('searchQualifications (Step 4: keyword search uses std_code_norm/base)'
     expect(results.length).toBeGreaterThanOrEqual(1);
     expect(results[0].source).toBe('CNAS');
     expect(results[0].stdCode).toBe(dirtyCode);   // DB 里的原始脏数据照原样回显
+    db.close();
+  });
+
+  it('finds row when user searches with a code fragment (Step 6 regression)', () => {
+    // 真实案例：用户搜 '3325-' 这种片段时，老实现只走 std_code LIKE '%3325-%'，
+    // CNAS 脏空格变体 'GB/T 3325 -2024' 因为中间空格断了不命中。
+    // Step 6 修法：用 query 算出的 fullCode/baseCode 再做一遍归一化列 LIKE
+    // ('3325-' → '3325-' → 'GB3325-2024' 含 '3325-' ✓)
+    const db = makeTestDb();
+    db.prepare("INSERT INTO cnas_labs (lab_no, lab_name) VALUES ('LAB001', 'Test Lab')").run();
+    const dirtyCode = 'GB/T 3325 -2024';
+    db.prepare(`
+      INSERT INTO cnas_qualifications (lab_no, std_code, std_code_norm, std_code_base, std_name, effective_date, expiry_date, category, test_object, test_param, test_standard, limit_desc)
+      VALUES ('LAB001', ?, ?, ?, '', '', '', '', '', '', '', '')
+    `).run(dirtyCode, extractFullCode(dirtyCode), extractBaseCode(dirtyCode));
+
+    const svc = new QualificationService(db as any);
+    const results = svc.searchQualifications('3325-');
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results[0].source).toBe('CNAS');
     db.close();
   });
 });

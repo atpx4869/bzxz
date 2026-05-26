@@ -3,6 +3,13 @@
 ## [Unreleased]
 
 ### Added
+- **资质匹配 Step 6 — 抓取侧清洗 + 搜索归一化 LIKE + 旧数据 fixup**：解决"资质查询页搜片段 `3325-` 匹不上 CNAS 脏空格变体"的问题，把 Step 1-5 没覆盖的最后一类场景闭掉。
+  - **抓取入库清洗**：`src/shared/std-code.ts` 加 `cleanStdCode(raw)`，只折叠"年份连字符附近的多空格"，不动前缀大小写和 `/T`。`syncCnasLab` / `syncCmaLab` INSERT 前调一次，CNAS 写出的 `'GB/T 3325 -2024'` 一进 DB 就变成 `'GB/T 3325-2024'`。
+  - **搜索归一化 LIKE 兜底**：`searchQualifications` WHERE 增加 `std_code_norm LIKE ? OR std_code_base LIKE ?` 两条分支，query 也跑一遍 extractFullCode/extractBaseCode 后做子串。用户搜 `'3325-'` → extractFullCode 算成 `'3325-'`，`'GB3325-2024'` 含 `'3325-'` 命中 ✓。彻底闭掉"片段查询遇上脏空格"的盲区。
+  - **旧数据一次性 fixup**：`db.ts::fixupDirtyStdCodes` 启动检测 `std_code LIKE '% -%' OR '%- %'` 的行，JS 侧用 `cleanStdCode(x) !== x` 精筛后原地 update + 重算 norm/base。幂等：清洗过的行下次启动不再被处理。老用户升级后不用手动重抓 CNAS。
+  - **测试**：6 个 `cleanStdCode` 单测（脏空格变体 / 前缀保留 / 多空格 / trim / 修订标记 / 幂等）+ 1 个 `searchQualifications` 片段查询回归测试。29 个纯函数测试本地全过。
+  - **CLAUDE.md 契约更新**：归一化契约改成"`cleanStdCode → extractFullCode → extractBaseCode` 三层防御"。
+
 - **资质匹配严谨度大改**（5 步）：解决"匹配能跑但担心不严谨"的系统性隐患，把所有入口收敛到归一化列索引等值查询。
   - **Step 1 — 归一化函数扩展 + 拆分**：`src/shared/std-code.ts` 抽出 `preNormalize` / `extractFullCode` / `extractBaseCode`（脱离 `qualification-service.ts` 避免 db.ts 循环依赖）。新增 prepass 覆盖全角数字/字母/空格/破折号、ISO 冒号年份分隔符 (`ISO 4287:1997` → `ISO 4287-1997`)、无空格变体 (`GB/T3325-2024`)、修订标记 (`2010A`)。`extractFullCode` 保留年份用于精确匹配，`extractBaseCode` 剥年份用于跨年模糊兜底。
   - **Step 5 — 徽章 tooltip 标注命中年份**：`public/js/app-qual.js` 给跨年命中加 ⚠ 视觉标记。当 source 下所有命中行的年份都与用户搜的不同时，徽章本体加 `.qual-badge-cross-year`（虚线边框 + 半透明）+ ⚠ 小图标；tooltip 每条命中行也显式标"仅匹配到 XXXX 版"。`web/src/styles/pages/qualifications.css` 加配套样式 + oklch fallback。

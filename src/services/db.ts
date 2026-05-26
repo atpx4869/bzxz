@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'node:path';
 import { getRootDir } from '../shared/fs';
-import { extractBaseCode, extractFullCode } from '../shared/std-code';
+import { extractBaseCode, extractFullCode, cleanStdCode } from '../shared/std-code';
 
 let _db: Database.Database | null = null;
 
@@ -260,6 +260,7 @@ function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_cma_qual_base  ON cma_qualifications(std_code_base);
   `);
   backfillNormalizedStdCodes(db);
+  fixupDirtyStdCodes(db);
 
   cleanupLegacyCmaData(db);
 
@@ -329,6 +330,47 @@ function backfillNormalizedStdCodes(db: Database.Database): void {
       txn(rows.slice(i, i + CHUNK));
     }
     console.log(`[db] backfilled ${rows.length} ${table} rows with std_code_norm / std_code_base`);
+  }
+}
+
+/**
+ * 一次性把历史脏 std_code 清洗成干净形态：'GB/T 3325 -2024' → 'GB/T 3325-2024'。
+ *
+ * 触发场景：升级到 Step 6 前 CNAS 抓取写入的 std_code 含年份连字符附近多空格，
+ * 让 `std_code LIKE '%3325-%'` 这种子串搜索漏命中。新版抓取已经在 INSERT 前调
+ * cleanStdCode，但**老数据还停在脏形态**，这里把它们一次性 update 干净，同步
+ * 重算 std_code_norm / std_code_base（虽然两个归一化列对脏数据本来就有正确值，
+ * 重算只是确保一致）。幂等：清洗后 cleanStdCode(x) === x 的行下次启动会被
+ * `WHERE std_code != cleanStdCode(std_code)` 过滤掉。
+ */
+function fixupDirtyStdCodes(db: Database.Database): void {
+  for (const table of ['cnas_qualifications', 'cma_qualifications'] as const) {
+    // SQL 侧粗筛：含 ' -' 或 '- ' 的行才需要清洗。把全表扫范围压到几百行级别。
+    const candidates = db.prepare(`
+      SELECT id, std_code FROM ${table}
+      WHERE std_code LIKE '% -%' OR std_code LIKE '%- %'
+    `).all() as Array<{ id: number; std_code: string }>;
+    if (candidates.length === 0) continue;
+
+    // JS 侧精筛：cleanStdCode 后真有改变的行才 update（SQL LIKE 会误匹标题里的 "GB - 2024" 之类）
+    const dirty = candidates
+      .map(r => ({ id: r.id, std_code: r.std_code, cleaned: cleanStdCode(r.std_code) }))
+      .filter(r => r.cleaned !== r.std_code);
+    if (dirty.length === 0) continue;
+
+    const update = db.prepare(
+      `UPDATE ${table} SET std_code = ?, std_code_norm = ?, std_code_base = ? WHERE id = ?`,
+    );
+    const txn = db.transaction((chunk: typeof dirty) => {
+      for (const r of chunk) {
+        update.run(r.cleaned, extractFullCode(r.cleaned), extractBaseCode(r.cleaned), r.id);
+      }
+    });
+    const CHUNK = 1000;
+    for (let i = 0; i < dirty.length; i += CHUNK) {
+      txn(dirty.slice(i, i + CHUNK));
+    }
+    console.log(`[db] cleaned ${dirty.length} ${table} rows with whitespace around year suffix (e.g. 'GB/T 3325 -2024' → 'GB/T 3325-2024')`);
   }
 }
 

@@ -96,21 +96,21 @@ Chrome ≤109 上整条 declaration 解析失败，主题崩。
 
 ## 资质表 std_code 归一化契约（**强制**）
 
-`cnas_qualifications` / `cma_qualifications` 任何 INSERT 都必须同时写入：
+`cnas_qualifications` / `cma_qualifications` 任何 INSERT 都必须三层防御一起做：
 
-- `std_code` —— 原始抓取数据（保留以便诊断和 UI 回显）
-- `std_code_norm = extractFullCode(std_code)` —— 保留年份的归一化（精确匹配用）
-- `std_code_base = extractBaseCode(std_code)` —— 剥年份的归一化（跨年模糊匹配用）
+1. **`cleanStdCode(raw)`** — 抓取入库前折叠年份连字符附近的多空格（不动前缀大小写）。让 DB 里 `std_code` 字段本身干净，保证 `LIKE '%3325-%'` 这种子串查询不漏命中
+2. **`std_code_norm = extractFullCode(std_code)`** — 保留年份的归一化（精确匹配用）
+3. **`std_code_base = extractBaseCode(std_code)`** — 剥年份的归一化（跨年模糊匹配用）
 
-`src/shared/std-code.ts` 是单一真相源，db.ts 启动时检测列空自动回填。
+`src/shared/std-code.ts` 是单一真相源，db.ts 启动时检测列空自动回填 + 检测脏空格自动 fixup。
 
-**Why:** `queryByStdCodes` / `searchQualifications` 都靠这两列做索引等值匹配，不再走 LIKE + LIMIT 兜底。漏写归一化列 → 新写入的行**根本进不了徽章和搜索**（旧脏空格变体 `'GB/T 3325 -2024'` 的事故由此而来）。
+**Why:** 三层各管一类问题。cleanStdCode 解决 CNAS 抓取写"年份连字符附近脏空格"导致 `LIKE` 子串漏命中；归一化列解决全角/无空格/ISO 冒号变体 + 跨年版本兜底。漏写任何一层 → 新写入的行某类查询路径会漏（已经踩过"诊断接口显示能拉到、用户搜片段匹不上"的坑）。
 
 **How to apply:**
 
-- 新增 INSERT 资质数据的位置：先 `import { extractFullCode, extractBaseCode } from '../shared/std-code'`，INSERT 时一并提供
-- 新增数据源（除 CNAS/CMA 外）想沾资质徽章 → schema 也加这两列 + 索引，沿用同样的归一化函数
-- 改 `extractFullCode` / `extractBaseCode` 逻辑（覆盖新的脏数据变体）后必须删 DB 强制下次启动回填 —— 或者临时跑一遍 `UPDATE cnas_qualifications SET std_code_norm='' WHERE ...` 触发 `backfillNormalizedStdCodes`。新加 case 的单测放 `qualification-service.test.ts` 防回归
+- 新增 INSERT 资质数据的位置：先 `import { cleanStdCode, extractFullCode, extractBaseCode } from '../shared/std-code'`，对原始 stdCode 先 `cleanStdCode`，再把清洗后的值传给 `extractFullCode` / `extractBaseCode`
+- 新增数据源（除 CNAS/CMA 外）想沾资质徽章 → schema 也加这两列 + 索引，沿用同样的三层防御
+- 改 `cleanStdCode` / `extractFullCode` / `extractBaseCode` 逻辑（覆盖新的脏数据变体）后必须删 DB 强制下次启动回填 —— 或者临时跑 `UPDATE cnas_qualifications SET std_code_norm=''` 触发 backfill + fixup。新加 case 的单测放 `qualification-service.test.ts` 防回归
 
 ## 记忆系统
 

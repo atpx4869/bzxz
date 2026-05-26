@@ -68,3 +68,21 @@ export function extractBaseCode(code: string): string {
   const full = extractFullCode(code);
   return full.replace(/-\d{4}[A-Z]?$/, '');
 }
+
+/**
+ * "GB/T 3325 -2024" / "GB/T 3325- 2024" → "GB/T 3325-2024" — 抓取入库前的轻量清洗。
+ *
+ * 与 extractBaseCode / extractFullCode 的区别：这函数**不去掉前缀**（GB/T 保留）、
+ * **不大写**，只把"年份连字符附近的多余空格"和"多空格"折叠掉。目的是让 DB 里存的
+ * std_code 字段自己就是干净的，让 `std_code LIKE '%3325-%'` 这种 SQL 子串查询能
+ * 一致命中（CNAS 抓取写的脏空格变体会让子串 LIKE 漏命中）。
+ *
+ * 已知触发场景：cnas-scraper 抓出来的 `stdDescAndClause` 字段在 CNAS 网站 HTML 里
+ * 渲染为 'GB/T 3325 -2024'（数字和连字符之间有空格），无法可视察觉但破坏字符串匹配。
+ */
+export function cleanStdCode(raw: string): string {
+  return raw
+    .replace(/\s+/g, ' ')                    // 多空格折叠
+    .replace(/\s*-\s*(\d{4}[A-Za-z]?)/, '-$1')   // '3325 -2024' / '3325- 2024' / '3325 - 2024' → '3325-2024'
+    .trim();
+}

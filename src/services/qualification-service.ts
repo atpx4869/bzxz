@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3';
 import { getDb } from './db';
 import { CmaScraper, type CmaCapability, type CmaSearchResult } from './cma-scraper';
 import { CnasScraper, type CnasCapability, type CnasLabInfo } from './cnas-scraper';
-import { extractBaseCode, extractFullCode } from '../shared/std-code';
+import { extractBaseCode, extractFullCode, cleanStdCode } from '../shared/std-code';
 
 export interface Qualification {
   source: 'CNAS' | 'CMA';
@@ -210,18 +210,24 @@ export class QualificationService {
 
   /** Search qualifications by keyword.
    *
-   * 关键点：用户搜的可能是标准号（脏空格 / 全角 / 无空格变体），也可能是关键词（实验室名 / 测试项）。
-   * 老实现纯 LIKE 子串 → 'GB/T 3325-2024' 匹不到 DB 里 'GB/T 3325 -2024' 这种脏数据。
-   * 修法：把 query 跑一遍 extractFullCode / extractBaseCode；归一化列做精确/跨年索引等值，
-   * 与传统 LIKE 子串 OR 起来，命中并集。
+   * 关键点：用户搜的可能是标准号片段（如 '3325-' / 'GB/T 3325'）、完整带年（'GB/T 3325-2024'，
+   * 含全角/脏空格变体）、关键词（实验室名 / 测试项）。
+   *
+   * 多层匹配，越严越靠前：
+   * 1. std_code_norm = ? / std_code_base = ?  — query 解析成完整标准号时索引等值命中
+   * 2. std_code_norm LIKE / std_code_base LIKE — query 是片段时归一化形态做子串
+   *    （比如 '3325-' 在归一化形态下都是 'GB3325-2024' 的子串，CNAS 脏空格变体不再漏）
+   * 3. std_code LIKE — 兜底原始字段子串
+   * 4. 其余字段 LIKE — 关键词搜实验室名 / 测试项
    */
   searchQualifications(query: string, source?: 'CNAS' | 'CMA', limit = 50): Qualification[] {
     const q = `%${query}%`;
-    // 算 norm/base：当 query 像标准号时（含字母 + 数字），命中归一化列 → 闭掉脏数据 bug
-    // 当 query 是纯关键词时（如实验室名），extractFullCode 会返回大写折叠版（如 "湖北" → "湖北"），
-    // norm/base 列不会命中（因为列里存的是标准号归一化），LIKE 子串照旧走
     const queryFull = extractFullCode(query);
     const queryBase = extractBaseCode(query);
+    // 把 query 也归一化一遍再 LIKE：用户搜 '3325-'，extractFullCode → '3325-'，
+    // 'GB3325-2024' 含 '3325-' ✓；这一步把"片段不带前缀也能匹"和"脏数据"两个问题一起闭掉
+    const qNorm = `%${queryFull}%`;
+    const qBase = `%${queryBase}%`;
     const results: Qualification[] = [];
 
     if (!source || source === 'CNAS') {
@@ -235,12 +241,13 @@ export class QualificationService {
         LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
         LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
         WHERE q.std_code_norm = ? OR q.std_code_base = ?
+           OR q.std_code_norm LIKE ? OR q.std_code_base LIKE ?
            OR q.std_code LIKE ? OR q.std_name LIKE ? OR q.lab_no LIKE ?
            OR l.lab_name LIKE ? OR q.test_object LIKE ? OR q.test_param LIKE ?
            OR q.test_standard LIKE ? OR q.category LIKE ?
         ORDER BY q.std_code, q.effective_date DESC
         LIMIT ?
-      `).all(queryFull, queryBase, q, q, q, q, q, q, q, q, limit) as any[];
+      `).all(queryFull, queryBase, qNorm, qBase, q, q, q, q, q, q, q, q, limit) as any[];
 
       for (const row of rows) {
         results.push({
@@ -271,12 +278,13 @@ export class QualificationService {
         LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
         LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
         WHERE q.std_code_norm = ? OR q.std_code_base = ?
+           OR q.std_code_norm LIKE ? OR q.std_code_base LIKE ?
            OR q.std_code LIKE ? OR q.std_name LIKE ? OR q.cert_number LIKE ?
            OR l.lab_name LIKE ? OR q.test_item LIKE ? OR q.test_standard LIKE ?
            OR q.category LIKE ?
         ORDER BY q.std_code, q.effective_date DESC
         LIMIT ?
-      `).all(queryFull, queryBase, q, q, q, q, q, q, q, limit) as any[];
+      `).all(queryFull, queryBase, qNorm, qBase, q, q, q, q, q, q, q, limit) as any[];
 
       for (const row of rows) {
         results.push({
@@ -512,7 +520,10 @@ export class QualificationService {
       `);
       const insertCmaChunk = this.db.transaction((chunk: typeof capabilities) => {
         for (const cap of chunk) {
-          const stdCode = (cap.yjbzNumber ?? '').trim();
+          // 抓取入库前清洗 std_code：CNAS / CMA 网站 HTML 偶发把"年份连字符附近多空格"渲进 std_code，
+          // 让 'std_code LIKE %3325-%' 这种子串查询漏命中。cleanStdCode 不动前缀和大小写、
+          // 只折叠空白 —— 跟归一化列正交，两层一起防御
+          const stdCode = cleanStdCode(cap.yjbzNumber ?? '');
           if (!stdCode) continue;
           insertCma.run(
             nextCertNumber,
@@ -658,7 +669,8 @@ export class QualificationService {
       `);
       const insertCnasChunk = this.db.transaction((chunk: typeof capabilities) => {
         for (const cap of chunk) {
-          const stdCode = (cap.stdCode ?? cap.stdDescAndClause ?? '').trim();
+          // 抓取入库前清洗（同 CMA 上方注释）—— CNAS 是已知会产出 'GB/T 3325 -2024' 脏空格变体的源
+          const stdCode = cleanStdCode(cap.stdCode ?? cap.stdDescAndClause ?? '');
           if (!stdCode) continue;
           insertCnas.run(
             labNo,
@@ -809,4 +821,4 @@ export function buildFuzzyLikePattern(base: string): string | null {
 
 // 标准号归一化函数已抽到 src/shared/std-code.ts（避免 db.ts 迁移逻辑反向依赖 qualification-service.ts）。
 // 这里继续 re-export 是为了不破坏现有引用（admin-routes / library-index 已经从这里 import）。
-export { extractBaseCode, extractFullCode };
+export { extractBaseCode, extractFullCode, cleanStdCode };
