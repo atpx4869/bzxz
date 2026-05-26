@@ -128,8 +128,13 @@ export function createPreviewRoutes(
       }
 
       const fileName = path.basename(file.absPath);
-      // RFC 5987：filename* 编码 UTF-8 支持中文；filename= 兜底纯 ASCII 客户端
-      const asciiName = fileName.replace(/[^\x20-\x7E]/g, '_');
+      // RFC 5987：filename* 编码 UTF-8 支持中文；filename= 兜底纯 ASCII 客户端。
+      // ASCII 名再额外 escape `"` 和 `\`，避免用户手动塞名为 `a";x=...".pdf`
+      // 的文件时破坏 header 结构（buildLibraryFilename 自己写出的文件不会有，
+      // 但库目录里允许人为放文件，必须按不可信处理）。
+      const asciiName = fileName
+        .replace(/[^\x20-\x7E]/g, '_')
+        .replace(/["\\]/g, '_');
       const dispositionType = req.query.attachment === '1' ? 'attachment' : 'inline';
       res.setHeader('Content-Type', file.mime || 'application/pdf');
       res.setHeader(
