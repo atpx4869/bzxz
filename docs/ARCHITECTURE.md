@@ -115,7 +115,7 @@ type ApiResult<T> =
 
 **键名规范**：
 - DB settings 表：`snake_case`（`qual_sync_cron`、`registration_enabled`）
-- localStorage：`bzxz_` 前缀 + `snake_case`（`bzxz_priority`、`bzxz_download_mode`）
+- localStorage：`bzxz_` 前缀 + `snake_case`（`bzxz_priority`、`bzxz_concurrency`）
 - Electron settings.json：`camelCase`（`downloadPath`、`webServiceEnabled`）—— JSON 是 JS 边界
 
 ---
@@ -218,6 +218,34 @@ type ApiResult<T> =
 
 ddddocr 是单 Python 进程，请求/响应通过 **UUID-keyed pending map** 多路复用：调用方塞一个 reqId 进 stdin，监听 stdout 收到同一 reqId 时 resolve。无锁，天然并发安全。
 
+### 6. 源级并发信号量（`src/shared/source-semaphore.ts` + `src/shared/semaphore.ts`）
+
+**问题**：前端 `downloadConcurrency` 默认 5 是 per-user 的，10 个用户同时批量下载 = 50 并发打源站；竞速模式下 ×3 源 = 150。国标网这类政府站点 IP 频控敏感，必须钉死真实出口并发。
+
+**方案**：FIFO 计数信号量按源全局共享。
+
+- `bz=2`（pdf-merge worker pool 也只 2，叠在一起不会让 worker queue 堆死）
+- `gbw=4`（直 PDF + OCR；4 个并发足以打满 ddddocr 又不堆死队列）
+- `by=4`（内网直 PDF，跟 GBW 同量级）
+- `BzAdapter.exportStandard` / `ByAdapter.exportStandard` / `GbwAdapter.autoDownload` 入口全部包 `getSourceSemaphore(src).run(...)`
+- `Semaphore.setLimit()` 运行时可调（未来想暴露给 admin 设置时直接接上）
+- 诊断：`GET /api/diagnostics/sources` 返回 `{ active, limit, waiting }`
+
+**禁止**：在 adapter 内部再加 mutex/queue —— semaphore 已经把出口压住了，内部串行只会让自己的请求排队等自己。
+
+### 7. 跨用户下载任务去重（`src/services/export-task-store.ts`）
+
+**问题**：两个用户同时点 `GB/T 18584-2024` 下载 → 两次完整 BZ JPEG 拼接、两份重复的国标网请求、写到同一个 `exports/GB-18584-2024.pdf` 互相覆盖。
+
+**方案**：`ExportTaskStore.activeByStandard: Map<standardId, taskId>` 索引活跃任务，第二个 createTask 时把 userId 追加到现有 task 的 `subscribers: number[]` 拿现成进度流。
+
+- 活跃定义：`status ∈ {queued, running}`；终态 (`success`/`failed`) 摘除映射，下次同标准能起新任务
+- owner 校验从 `task.userId === req.user.id` 改为 `store.isSubscriber(taskId, userId)`，多个 subscriber 都能读同 task / 开同 SSE 流
+- 复用 task 时 `ExportTaskService.createTask` 不会重复调 `runTask`（用 `subscribers.length === 1` 区分新建 vs 复用）
+- 预览侧 `preview-task-store.ts::findActiveTaskByKey` 用同模式去重已运行数月
+
+**禁止**：终态不摘活跃索引——会让旧成功 task 被未来同标准请求误复用，但文件可能已过 TTL 清理。
+
 ### 总览
 
 | 资源 | 池大小 | 模式 | 触发场景 |
@@ -227,6 +255,8 @@ ddddocr 是单 Python 进程，请求/响应通过 **UUID-keyed pending map** �
 | Tesseract Worker | 2 | tesseract.js 池 | 验证码 OCR（ddddocr 不可用时回退）|
 | undici HTTP | 32/origin | keep-alive + pipelining | 所有外网 HTTP 请求 |
 | ddddocr 子进程 | 1（多路复用）| UUID pending map | 验证码 OCR 首选 |
+| Source Semaphore (bz/gbw/by) | 2/4/4 | FIFO 计数信号量 | 多用户下载共享出口 IP，钉死真实并发 |
+| ExportTaskStore subscribers | 不限人数 | activeByStandard 索引 + 共享 SSE | 同标准跨用户下载去重 |
 
 **加新的耗时操作前**：判断它是 CPU 密集还是 IO 密集，CPU → worker_threads 池；IO → 看是否已有 client 池可复用；都不是 → 先想想是不是真的需要锁。
 

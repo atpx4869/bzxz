@@ -59,8 +59,8 @@ start.bat
 
 ### 功能概览
 
-- **搜索**：按标准号/关键词搜索资质记录，支持来源过滤（CNAS/CMA/全部）
-- **可视化**：批量关键词查询，按标准号聚合展示 CMA/CNAS 能力，统计面板显示命中数、能力数、过期记录
+- **搜索**：按标准号/关键词搜索资质记录，支持来源过滤（CNAS/CMA/全部）；"全部参数"/"部分参数"的能力记录在分组内自动置顶
+- **可视化**：批量关键词查询，按 `query → stdCode` 两级聚合，CMA / CNAS 双列展示（与「搜索」tab 同款渲染：标准号分组默认收起、机构名行内）。stats 显示命中数、能力数、过期记录
 - **订阅管理**：订阅/取消订阅实验室，实时同步进度显示（如 `2541/6521 (39%)`）
 - **同步日志**：记录每次同步的时间、状态、抓取记录数
 
@@ -97,8 +97,14 @@ start.bat
 - CNAS：Playwright 无头浏览器 + Stealth 反检测，分页抓取能力范围 API
 - CMA：HTTP 请求 + Cheerio HTML 解析
 - 增量同步：对比证书日期避免不必要的全量抓取
-- 标准号模糊匹配：去除年份/类型后缀后比对（如 `GB/T 23440-2009` → `GB23440`）
+- **标准号三层归一化匹配**（`src/shared/std-code.ts`）：
+  - **L1 `cleanStdCode`** 抓取入库前清洗（折叠"年份连字符附近的多空格"，如 `'GB/T 3325 -2024'` → `'GB/T 3325-2024'`），让原始 `std_code` 字段子串 LIKE 一致工作
+  - **L2 `std_code_norm`** 保留年份的归一化列（`'GB3325-2024'`），用于同号同年精确匹配；走 B-tree 索引等值查询
+  - **L3 `std_code_base`** 剥年份的归一化列（`'GB3325'`），用于跨年版本兜底匹配（搜 2024 命中 2017 版）
+  - 覆盖变体：脏空格 / 全角字符 / 无空格 (`GB/T3325`) / ISO 冒号年份 (`ISO 4287:1997`) / 修订标记 (`2010A`)
+  - 启动时自动回填旧数据（`backfillNormalizedStdCodes`）+ 清洗历史脏 `std_code`（`fixupDirtyStdCodes`），幂等
 - 后台定时同步：默认每周日凌晨 3 点（可配置 cron 表达式）
+- 诊断接口：`GET /api/admin/qual/diagnose?code=<标准号>` 返回 DB 实际命中行 + 归一化列匹配状态，用于排查漏命中
 
 ## 账号管理
 
@@ -233,6 +239,14 @@ start.bat
 | DELETE | `/api/admin/users/:id` | 删除用户 |
 | GET | `/api/admin/users/:id/events` | 用户使用明细 |
 | POST | `/api/admin/library/rescan` | 全量重扫标准库目录 |
+| GET | `/api/admin/qual/diagnose?code=` | 资质漏命中诊断：返回 DB 行的归一化列状态、Phase1/Phase2/索引等值各路径命中情况 |
+
+### 诊断（需登录）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/diagnostics/hosts` | 上游主机延迟统计（按 origin 维度 min/max/avg） |
+| GET | `/api/diagnostics/sources` | 源级并发信号量当前状态：`{ bz, gbw, by }` 各 `{ active, limit, waiting }` |
 
 ### 预览（需登录，含 guest）
 
@@ -264,6 +278,10 @@ start.bat
 - 新版**深色玻璃拟态**登录页（紫蓝渐变 + 浮动光球 + 模糊磨砂卡片），底部内联应用版本号 + `/api/health` 实时在线状态徽标
 - 主题统一：topbar / sidebar / 卡片 / 主按钮均采用同色系玻璃拟态 + 渐变 active 态
 - **后端自动切源下载**：批量下载时后端按优先级自动尝试多个源，失败自动切换
+- **多用户并发适配**：
+  - **跨用户下载去重**：两个用户同时点同一标准下载，底层 `adapter.exportStandard` 只跑一次。`ExportTaskStore` 用 `activeByStandard` 索引找现有活跃任务，把新用户追加到 `subscribers`，共享同一 SSE 进度流和最终结果
+  - **源级并发信号量**（`src/shared/source-semaphore.ts`）：每个源全局并发上限独立钉死，与前端 `downloadConcurrency` 解耦。默认 `bz=2 / gbw=4 / by=4`（依据：BZ 单次涉及 12 路 JPEG + pdf-lib worker，GBW/BY 是直 PDF）。多用户叠加不会让真实出口超额
+  - 诊断接口 `GET /api/diagnostics/sources` 返回各源 `{ active, limit, waiting }`
 - 行级下载反馈（spinner + 卡片高亮 + 成功/失败闪烁）
 - BZ 页级实时进度
 - 搜索历史（可配置条数 3~20，localStorage 持久化）
@@ -282,7 +300,8 @@ start.bat
 - 资质能力验证面板：
   - 搜索/可视化/订阅管理/同步日志 四个子标签页
   - 搜索结果自动标注 CNAS/CMA 资质徽章（hover 详情）
-  - 可视化批量查询，按标准号聚合 CMA/CNAS 能力并排展示
+  - 可视化批量查询：按 query → stdCode 两级聚合，CMA / CNAS 双列展示，与「搜索」tab 共用同一套渲染（`buildQualColumn`），改一处两边生效
+  - 同 stdCode 下"全部参数"/"部分参数"自动置顶（这类条目代表整张证书覆盖范围，比单项检测更有信号价值）
   - CNAS 订阅详情（注册编号、其他名称、单位地址、认可有效期、证书任务列表）
   - CMA 订阅详情（证书编号、信用代码、地址、行业、证书状态）
   - 实时同步进度显示（`2541/6521 (39%)`），2 秒轮询自动刷新
@@ -365,7 +384,9 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
-- **资质匹配严谨度大改** — DB 加 `std_code_norm`/`std_code_base` 归一化列与索引，启动时自动回填旧数据；`queryByStdCodes` 用索引等值替代 Phase 2 LIKE+LIMIT 兜底，根除截断风险与五位数字号误命中。归一化覆盖全角/无空格/ISO 冒号/修订标记变体；资质查询页修了搜 `GB/T 3325-2024` 匹不到 CNAS 脏空格变体 `GB/T 3325 -2024` 的潜在 bug。徽章 tooltip 给跨年命中加 ⚠ 标记，让"DB 只有 2017 版、用户搜 2024"这种兜底匹配对用户透明
+- **多用户并发适配** — 跨用户下载去重（同标准只跑一次底层 export，subscribers 共享 SSE 流）+ 源级全局信号量（bz=2/gbw=4/by=4，跟前端 `downloadConcurrency` 解耦）+ 删除竞速模式（多用户共享出口 IP 时放大频控风险）。诊断 `/api/diagnostics/sources` 看实时 `{active,limit,waiting}`
+- **资质匹配三层防御** — `cleanStdCode` 抓取入库前清洗 + `std_code_norm`/`std_code_base` 归一化列与索引等值匹配；启动时自动回填旧数据 + 清洗历史脏 `std_code`。覆盖全角/无空格/脏空格/ISO 冒号/修订标记变体，根除"搜 `GB/T 3325-2024` 匹不到 `GB/T 3325 -2024` 脏空格变体"等已知 bug。诊断 `/api/admin/qual/diagnose?code=` 一键定位漏命中
+- **资质可视化 tab 重构** — 改用与「资质查询-搜索」同款两列布局，标准号分组默认收起，"全部参数"/"部分参数"分组内自动置顶
 - **Win7 老浏览器全面兼容** — `scripts/css-oklch-fallback.mjs` 给 34 个 CSS 文件、773 条 `oklch()` declaration 一次性注入 sRGB hex / rgba fallback；新写 oklch 后跑 `npm run oklch:fix`，CI 用 `npm run oklch:check` 守门
 - **BZ 下载修复** — packaged Electron 跑 pdf-merge-worker 报 `Cannot find package 'pdf-lib'`：补 `pdf-lib` + `@pdf-lib` + `pako` + `tslib` 到 `asarUnpack`
 - **前端模块化（P1）** — `public/styles.css` 1179 行整体拆分为 31 个文件，
