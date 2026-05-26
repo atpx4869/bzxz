@@ -3,7 +3,13 @@
 ## [Unreleased]
 
 ### Added
-- **资质可视化 tab 重设计**（Step 7）：解决"机构名重复占位 + CMA/CNAS 分两列被截 + 标准号埋在卡头不显眼"三个 UX 痛点。
+- **资质可视化 tab 改用搜索页同款布局**（Step 8 — 推翻 Step 7 的 .qv2-* 设计）：用户反馈 Step 7 的"stdCode 大字 + 行头徽章"过于花哨。改回与「资质查询-搜索」**完全同款**：两列 CMA/CNAS、标准号分组默认收起、机构名行内（多机构时）。
+  - **buildQualColumn 提到模块级**：从 `renderQualSearchResults` 内部抽出，可视化页 `renderQualVisual` 直接复用。两个 tab 视觉/交互完全一致，未来改一处生效两处。多 query 时按 query 分 section，每 section 内调一次 `buildQualColumn` 渲染 CMA/CNAS 两列。`gidPrefix` 参数让两 tab 的 group id 不冲突。
+  - **section head 用 `.qv-section-title`**：黄绿 strong + 灰色 "N 条"，配「全部展开/全部收起」按钮。`toggleQualVisualSection` 简化为遍历 `[id$="_body"]` + 旋转 arrow（与搜索页 `toggleAllQualGroups` 同行为）。
+  - **删除 Step 7 引入的所有 `.qv2-*` 选择器**：~60 行 CSS 清掉，oklch declaration 数从 797 回到 774。代码路径只剩一个真相源，无回滚负担。
+  - **后端 `/api/qualifications/visual` 不动，无 schema 改动**。
+
+- **资质可视化 tab 重设计**（Step 7）：~~解决"机构名重复占位 + CMA/CNAS 分两列被截 + 标准号埋在卡头不显眼"三个 UX 痛点。~~ 设计被用户认为太花哨，Step 8 推翻重做。
   - **机构名提到顶部 stats 栏**：所有结果卡片不再重复显示机构名。stats 栏从 4 列网格扩到 6 列（用 `:has(.qv2-lab-pill)` 选择器），右侧加一格"检验机构"卡片，单机构显示全名、多机构显示数量 + hover 全名 tooltip。
   - **标准号成为视觉主体**：每个 stdCode 一张独立卡片，stdCode 用 `DM Mono 16px 700` 大字显示，右侧贴年份徽章。当用户搜的关键词带年份且与 stdCode 年份不一致时，徽章变橙色 ⚠ + 卡片边框虚线半透明（视觉提示"这是跨年兜底命中"）。
   - **CMA/CNAS 改为能力行头徽章**：不再分两列。同 stdCode 下所有能力扁平列出，每行最前面一个圆点 + 源名小徽章。能力排序：未过期 > 过期 → CMA > CNAS → testItem 字母序。同 query 内 stdCard 排序：与输入同年优先 → 能力多优先 → stdCode 字母序。
