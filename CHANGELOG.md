@@ -32,6 +32,11 @@
   - 前端：`public/index.html` 加 `#lanGuestAllowedToggle` + `public/js/app-auth-admin.js` 加 populate 与 `toggleLanGuestAllowed()` confirm 流程
 
 ### Fixed
+- **标准检索 CNAS 资质徽章漏命中（GB/T 3325-2024 等）**：搜索 `3325-2024` 时 `GB/T 3325-2024` 显示无 CNAS 资质，实际数据库里有。
+  - **根因**：`queryByStdCodes` 的 Phase 2 模糊回退用 `q.std_code LIKE 'GB%' + LIMIT 500` —— CNAS 表里 `GB` 前缀几万条，目标行 `'GB/T 3325 -2024'`（含 scraper 残留空格）常被 LIMIT 截在窗口外，JS 端 `extractBaseCode` 严格判等就拿不到候选行。Phase 1 精确 `IN` 又因为入参是干净的 `'GB/T 3325-2024'`、DB 里是带空格变种而错过 → 两路都漏。
+  - **修**：`src/services/qualification-service.ts` 抽出 `buildFuzzyLikePattern(base)`，把 `extractBaseCode` 输出再拆成 `(prefix, digits)`，拼成 `'GB%3325%'` 这种「字母前缀 + 数字尾巴」紧 LIKE，命中收敛 ~100×；同时 `LIMIT` 提到 2000、加 `ORDER BY rowid` 让结果稳定。安全侧 prefix 强制 `/^[A-Z]+$/` 且 ≤ 8 字符、digits 走白名单 `[A-Z0-9]` 过滤并截到 16 字符，杜绝 `%` / `_` 注入扩成全表扫描的 DoS 向量。
+  - **回归测试**：`qualification-service.test.ts` 新增 `buildFuzzyLikePattern` 7 个单元用例 + 1 个端到端用例（in-memory SQLite 灌 800 条无关 GB 行 + 1 条目标行，验证 `GB/T 3325-2024` 命中）。
+
 - **BZ 下载失败 `Cannot find package 'pdf-lib' imported from app.asar.unpacked/dist/src/shared/pdf-merge-worker.js`**：
   - **根因**：`pdf-merge-worker.js` 在 `asarUnpack` 名单里，被 electron-builder 抽到 `app.asar.unpacked/dist/src/shared/`；运行时 Node 从该路径走 `node_modules/pdf-lib` 解析，逐级向上找却落不到 `app.asar/node_modules/pdf-lib` —— asar 外的目录不会回 hop 到 asar 内部去找包。worker_threads 子线程在 dev `tsx`/`tsc-then-electron` 跑时都能命中（`node_modules` 是真目录），打包后才暴露
   - **修**：`package.json` `build.asarUnpack` 额外加 `node_modules/pdf-lib/**/*`、`node_modules/@pdf-lib/**/*`、`node_modules/pako/**/*`、`node_modules/tslib/**/*`（pdf-lib 的 3 个 prod 依赖），让 worker 在 `app.asar.unpacked` 下能正常向上解析。worker 文件本身已经在 asarUnpack 里，主进程 `await import('pdf-lib')` 走的是 asar 内部解析，不受影响

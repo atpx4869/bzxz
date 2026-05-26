@@ -196,39 +196,44 @@ export class QualificationService {
       }
     }
 
-    // For any input codes with no results, narrow to plausible rows via SQL LIKE on
-    // the leading prefix (e.g. "GB"), then apply the exact base-code comparison in JS.
-    // Falls back from O(N) full-table scans to O(matching-prefix), capped by LIMIT.
+    // For any input codes, narrow to plausible rows via SQL LIKE then apply the exact
+    // base-code comparison in JS. Falls back from O(N) full-table scans to O(matching).
+    //
     // Run fuzzy fallback for every input — not just ones with zero hits.
     // A code can already hold a CMA match (clean std_code in DB) while CNAS
     // still misses Phase 1 because its std_code has stray whitespace
     // ('GB/T 3325 -2024'). Filtering on result[code]?.length would skip those.
     // Downstream `addMatch` dedupes by source+labNo, so re-running is safe.
+    //
+    // LIKE 模式：用 `prefix%digits%` —— 只把 base code 拆成「字母前缀 + 数字尾巴」
+    // 拼 LIKE 模式（如 'GB/T 3325-2024' → base 'GB3325' → 'GB%3325%'），比仅前缀
+    // 'GB%' 命中收敛 100×。早期版本只用 prefix LIKE + LIMIT 500，CNAS 表里 GB
+    // 前缀有几万条记录，目标行常常被 LIMIT 截掉 → 标准检索结果漏掉 CNAS 资质徽章。
     const unmatchedInputs = stdCodes.slice();
     if (unmatchedInputs.length > 0) {
-      const FUZZY_LIMIT = 500;
+      const FUZZY_LIMIT = 2000;
       const inputBases = unmatchedInputs.map(code => ({ input: code, base: extractBaseCode(code) }));
-      // Group inputs by their alphabetic prefix (GB / GBT / YY / etc.) for prefix-LIKE queries
-      // prefix is sanitized to /^[A-Z]+$/ before being used in a LIKE clause —
-      // % and _ from user input would otherwise widen the scan to a full-table
-      // walk (DoS amplifier) or leak unrelated rows.
-      const prefixes = new Set<string>();
+      // buildFuzzyLikePattern 统一负责 (prefix, digits) 拆分 + 白名单 + 注入防御，
+      // 拼出形如 'GB%3325%' 的紧 LIKE。base 拆不出合法 prefix 时返回 null，跳过。
+      const patternSet = new Set<string>();   // 用于 dedupe LIKE 参数
       for (const { base } of inputBases) {
-        const prefix = base.match(/^[A-Z]+/)?.[0];
-        if (prefix && /^[A-Z]+$/.test(prefix) && prefix.length <= 8) {
-          prefixes.add(prefix);
-        }
+        const pattern = buildFuzzyLikePattern(base);
+        if (pattern) patternSet.add(pattern);
       }
-      if (prefixes.size > 0) {
-        const likeClauses = Array.from(prefixes).map(() => 'q.std_code LIKE ?').join(' OR ');
-        const likeArgs = Array.from(prefixes).map(p => `${p}%`);
+      if (patternSet.size > 0) {
+        const patterns = Array.from(patternSet);
+        const likeClauses = patterns.map(() => 'q.std_code LIKE ?').join(' OR ');
+        const likeArgs = patterns;
 
+        // ORDER BY rowid 让结果稳定 —— 配 FUZZY_LIMIT 2000，再叠精确数字串
+        // narrow，几乎不可能再被截掉。
         const cnasCandidates = this.db.prepare(`
           SELECT q.std_code, q.std_name, q.lab_no, l.lab_name,
                  q.effective_date, q.expiry_date, q.category,
                  q.test_object, q.test_param, q.test_standard, q.limit_desc
           FROM cnas_qualifications q LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
           WHERE ${likeClauses}
+          ORDER BY q.rowid
           LIMIT ?
         `).all(...likeArgs, FUZZY_LIMIT) as any[];
         const cmaCandidates = this.db.prepare(`
@@ -237,6 +242,7 @@ export class QualificationService {
                  q.test_item, q.test_standard, q.limit_desc
           FROM cma_qualifications q LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
           WHERE ${likeClauses}
+          ORDER BY q.rowid
           LIMIT ?
         `).all(...likeArgs, FUZZY_LIMIT) as any[];
 
@@ -833,6 +839,24 @@ async function runWithConcurrency<T, R>(items: T[], concurrency: number, worker:
   });
   await Promise.all(runners);
   return results;
+}
+
+/**
+ * 从一个标准编码 base（extractBaseCode 的输出，如 'GB3325'）拼出 SQL LIKE 模式。
+ * 形如 'GB%3325%' —— prefix 拉前缀、数字尾巴拉过滤，比仅 'GB%' 命中收敛 100×。
+ * 输入 base 拆不出数字尾巴或前缀非法时返回 null，调用方按需 fallback。
+ *
+ * 安全：prefix 必须匹配 /^[A-Z]+$/ 且长度 ≤ 8，digits 用白名单 [A-Z0-9] 过滤
+ * 并截断到 16 字符，避免 % / _ 注入把扫描扩成全表 / DoS。
+ */
+export function buildFuzzyLikePattern(base: string): string | null {
+  const m = base.match(/^([A-Z]+)([0-9].*)?$/);
+  if (!m) return null;
+  const prefix = m[1];
+  const digits = m[2] ?? '';
+  if (!/^[A-Z]+$/.test(prefix) || prefix.length > 8) return null;
+  const safeDigits = digits.replace(/[^A-Z0-9]/gi, '').slice(0, 16);
+  return safeDigits ? `${prefix}%${safeDigits}%` : `${prefix}%`;
 }
 
 /** "GB/T 23440-2009" → "GB23440" — strip year suffix, type designator, and whitespace.
