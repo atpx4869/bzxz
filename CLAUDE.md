@@ -79,6 +79,21 @@ Chrome ≤109 上整条 declaration 解析失败，主题崩。
 （`#fff / #333 / #eee / #2563eb`），独立于全局暗色玻璃主题。改这两个文件时
 **保持具体色值而非 `var(--*)`**，否则会被 `theme/glass.css` 覆写成暗色。
 
+## NSIS 升级保留契约（**强制**）
+
+`build/installer.nsh` 在升级 / 卸载时必须保留两个目录，方案是「同卷 Rename 到 `$INSTDIR\..` 临时占位 → `RMDir /r $INSTDIR` → Rename 回来」：
+
+- `$INSTDIR\data` —— 资质数据库 / CNAS·CMA 缓存（交互卸载弹窗确认，默认保留；升级静默路径直接保留）
+- `$INSTDIR\standards` —— 本地标准 PDF 库（默认库路径 `<exe 同级>\standards`，**始终保留、不弹窗、不接受 IDNO**）
+
+**Why:** 用户报告过升级把几十 GB 已下载 PDF 全删的事故。`data/` 体量小、丢了能重新订阅；`standards/` 是用户花时间积累的资产、误操作代价高，要走资源管理器显式手删才合理。同卷 Rename 是元数据操作、瞬时完成，不会复制 PDF 内容。
+
+**How to apply:**
+
+- 新增「需要跨升级保留」的目录按 backup-rename-restore 模板加，不要让 NSIS 直接 RMDir 覆盖
+- 库路径变量从前端可改（admin 设置 `standardsLibraryDir`），但 NSIS 看不到该设置 —— **始终按默认路径 `$INSTDIR\standards` 处理**。改过路径的用户库本就不在 `$INSTDIR` 下、升级本来就不会动到，无需特殊保护
+- 改 `installer.nsh` 后跑一遍打包（GitHub Actions `electron:build:nsis`）测一次升级流程，确保 Rename 临时占位（`$INSTDIR\..`）有写权限（Program Files 装机时会踩 UAC）
+
 ## 记忆系统
 
 跨会话的项目状态、未做项、风险点记在 auto-memory（不在仓库里）。Claude 会自己维护，

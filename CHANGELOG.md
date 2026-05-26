@@ -32,6 +32,10 @@
   - 前端：`public/index.html` 加 `#lanGuestAllowedToggle` + `public/js/app-auth-admin.js` 加 populate 与 `toggleLanGuestAllowed()` confirm 流程
 
 ### Fixed
+- **NSIS 升级会把本地 `standards/` 标准库整目录删掉**：用户报告升级后 `G:\bzxz\standards` 下几十 GB 已下载 PDF 全没了。
+  - **根因**：`build/installer.nsh` 之前只把 `$INSTDIR\data`（资质数据库）做了 backup-rename-restore 保护，PDF 库目录 `$INSTDIR\standards`（默认库路径 `<exe 同级>\standards`）落在 NSIS `RMDir /r "$INSTDIR"` 扫荡范围里直接被清空。electron-builder 升级时静默调用旧版卸载器 → 不弹任何询问 → 整库蒸发。
+  - **修**：`build/installer.nsh` 给 `standards/` 加同款 backup-rename-restore（同卷 Rename 是元数据操作、几十 GB 也是瞬时完成）。standards 默认**始终保留**、不弹询问、不接受 `IDNO`（PDF 体量大、误操作代价高，想真正清掉走资源管理器手删）。`data/` 的弹窗保留旧逻辑、文案里加一句提示 standards 始终保留。
+
 - **标准检索 CNAS 资质徽章漏命中（GB/T 3325-2024 等）**：搜索 `3325-2024` 时 `GB/T 3325-2024` 显示无 CNAS 资质，实际数据库里有。
   - **根因**：`queryByStdCodes` 的 Phase 2 模糊回退用 `q.std_code LIKE 'GB%' + LIMIT 500` —— CNAS 表里 `GB` 前缀几万条，目标行 `'GB/T 3325 -2024'`（含 scraper 残留空格）常被 LIMIT 截在窗口外，JS 端 `extractBaseCode` 严格判等就拿不到候选行。Phase 1 精确 `IN` 又因为入参是干净的 `'GB/T 3325-2024'`、DB 里是带空格变种而错过 → 两路都漏。
   - **修**：`src/services/qualification-service.ts` 抽出 `buildFuzzyLikePattern(base)`，把 `extractBaseCode` 输出再拆成 `(prefix, digits)`，拼成 `'GB%3325%'` 这种「字母前缀 + 数字尾巴」紧 LIKE，命中收敛 ~100×；同时 `LIMIT` 提到 2000、加 `ORDER BY rowid` 让结果稳定。安全侧 prefix 强制 `/^[A-Z]+$/` 且 ≤ 8 字符、digits 走白名单 `[A-Z0-9]` 过滤并截到 16 字符，杜绝 `%` / `_` 注入扩成全表扫描的 DoS 向量。
