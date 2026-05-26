@@ -365,6 +365,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **资质匹配严谨度大改** — DB 加 `std_code_norm`/`std_code_base` 归一化列与索引，启动时自动回填旧数据；`queryByStdCodes` 用索引等值替代 Phase 2 LIKE+LIMIT 兜底，根除截断风险与五位数字号误命中。归一化覆盖全角/无空格/ISO 冒号/修订标记变体；资质查询页修了搜 `GB/T 3325-2024` 匹不到 CNAS 脏空格变体 `GB/T 3325 -2024` 的潜在 bug。徽章 tooltip 给跨年命中加 ⚠ 标记，让"DB 只有 2017 版、用户搜 2024"这种兜底匹配对用户透明
 - **Win7 老浏览器全面兼容** — `scripts/css-oklch-fallback.mjs` 给 34 个 CSS 文件、773 条 `oklch()` declaration 一次性注入 sRGB hex / rgba fallback；新写 oklch 后跑 `npm run oklch:fix`，CI 用 `npm run oklch:check` 守门
 - **BZ 下载修复** — packaged Electron 跑 pdf-merge-worker 报 `Cannot find package 'pdf-lib'`：补 `pdf-lib` + `@pdf-lib` + `pako` + `tslib` 到 `asarUnpack`
 - **前端模块化（P1）** — `public/styles.css` 1179 行整体拆分为 31 个文件，

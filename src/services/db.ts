@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'node:path';
 import { getRootDir } from '../shared/fs';
+import { extractBaseCode, extractFullCode } from '../shared/std-code';
 
 let _db: Database.Database | null = null;
 
@@ -243,6 +244,23 @@ function migrate(db: Database.Database): void {
   addColumnIfMissing(db, 'cnas_labs', 'org_address',     "TEXT DEFAULT ''");
   addColumnIfMissing(db, 'cnas_labs', 'validity_period', "TEXT DEFAULT ''");
   addColumnIfMissing(db, 'cnas_labs', 'cert_tasks',      "TEXT DEFAULT '[]'");
+
+  // 资质标准号归一化列（Step 2-3）：把脏空格/全角/无空格/ISO 冒号变体在写入时落成统一形态，
+  // 让 queryByStdCodes / searchQualifications 用索引等值查询，不再需要 LIKE + LIMIT 兜底。
+  // - std_code_norm = extractFullCode(std_code) 保留年份，用于"同号同年"精确匹配
+  // - std_code_base = extractBaseCode(std_code) 剥年份，用于"同号跨年"模糊兜底
+  addColumnIfMissing(db, 'cnas_qualifications', 'std_code_norm', "TEXT DEFAULT ''");
+  addColumnIfMissing(db, 'cnas_qualifications', 'std_code_base', "TEXT DEFAULT ''");
+  addColumnIfMissing(db, 'cma_qualifications',  'std_code_norm', "TEXT DEFAULT ''");
+  addColumnIfMissing(db, 'cma_qualifications',  'std_code_base', "TEXT DEFAULT ''");
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_cnas_qual_norm ON cnas_qualifications(std_code_norm);
+    CREATE INDEX IF NOT EXISTS idx_cnas_qual_base ON cnas_qualifications(std_code_base);
+    CREATE INDEX IF NOT EXISTS idx_cma_qual_norm  ON cma_qualifications(std_code_norm);
+    CREATE INDEX IF NOT EXISTS idx_cma_qual_base  ON cma_qualifications(std_code_base);
+  `);
+  backfillNormalizedStdCodes(db);
+
   cleanupLegacyCmaData(db);
 
   ensureGuestUser(db);
@@ -280,6 +298,38 @@ function addColumnIfMissing(db: Database.Database, table: string, column: string
   const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
   if (columns.some((c) => c.name === column)) return;
   db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+/**
+ * 把 cnas_qualifications / cma_qualifications 里 std_code_norm 还为空的旧行回填一次。
+ *
+ * 触发场景：列刚被 addColumnIfMissing 加上、或者上一版没回填完跑到一半挂掉。
+ * 已经回填过的行（std_code_norm != ''）不会被重跑，所以幂等。回填本身只算
+ * 字符串、不查网络、不发请求，几万行也只几百毫秒。
+ *
+ * 不做的事：跨进程并发保护 —— migrate() 在启动期单进程跑，且后续 INSERT 自带
+ * std_code_norm，二者不会撞车。
+ */
+function backfillNormalizedStdCodes(db: Database.Database): void {
+  for (const table of ['cnas_qualifications', 'cma_qualifications'] as const) {
+    const rows = db.prepare(`
+      SELECT id, std_code FROM ${table}
+      WHERE COALESCE(std_code_norm, '') = ''
+    `).all() as Array<{ id: number; std_code: string }>;
+    if (rows.length === 0) continue;
+
+    const update = db.prepare(`UPDATE ${table} SET std_code_norm = ?, std_code_base = ? WHERE id = ?`);
+    const txn = db.transaction((chunk: typeof rows) => {
+      for (const r of chunk) {
+        update.run(extractFullCode(r.std_code), extractBaseCode(r.std_code), r.id);
+      }
+    });
+    const CHUNK = 1000;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      txn(rows.slice(i, i + CHUNK));
+    }
+    console.log(`[db] backfilled ${rows.length} ${table} rows with std_code_norm / std_code_base`);
+  }
 }
 
 function cleanupLegacyCmaData(db: Database.Database): void {

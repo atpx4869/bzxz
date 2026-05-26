@@ -1,7 +1,8 @@
 import BetterSqlite3 from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 
-import { QualificationService, buildFuzzyLikePattern, extractBaseCode } from './qualification-service';
+import { QualificationService, buildFuzzyLikePattern } from './qualification-service';
+import { extractBaseCode, extractFullCode } from '../shared/std-code';
 
 describe('extractBaseCode', () => {
   it('strips type designator and year suffix on clean input', () => {
@@ -38,6 +39,53 @@ describe('extractBaseCode', () => {
 
   it('uppercases lowercase input', () => {
     expect(extractBaseCode('gb/t 3325-2024')).toBe('GB3325');
+  });
+
+  it('handles full-width digits / letters / punctuation (Excel autocorrect, copy-paste)', () => {
+    // 用户从 Word/Excel 复制可能带全角，CNAS 站点偶发把 '-' 渲染成全角破折号
+    expect(extractBaseCode('ＧＢ／Ｔ ３３２５－２０２４')).toBe('GB3325');
+    expect(extractBaseCode('GB/T 3325－2024')).toBe('GB3325'); // 全角破折号
+    expect(extractBaseCode('GB/T　3325-2024')).toBe('GB3325'); // 全角空格
+  });
+
+  it('handles ISO colon year separator', () => {
+    // 国际标准号常见写法 'ISO 4287:1997' —— 冒号也是年份分隔
+    expect(extractBaseCode('ISO 4287:1997')).toBe('ISO4287');
+  });
+
+  it('handles no-space variant (GB/T3325-2024) — collapses to same base', () => {
+    // 老正则 /\/[A-Z]+/gi 在无空格变体上会把 '/T3325' 整段当 type-designator 删空
+    // 新正则用 lookahead 限定 '/T' 后必须接数字/空白/结尾才剥
+    expect(extractBaseCode('GB/T3325-2024')).toBe('GB3325');
+    expect(extractBaseCode('GB/T3325-2024')).toBe(extractBaseCode('GB/T 3325-2024'));
+  });
+
+  it('handles revision suffix (e.g. 2010A) on year', () => {
+    // GB/T 3836-2010A 真实存在；年份后缀是 4 位数字 + 可选 1 字母
+    expect(extractBaseCode('GB/T 3836-2010A')).toBe('GB3836');
+  });
+});
+
+describe('extractFullCode', () => {
+  it('preserves year while normalizing prefix and whitespace', () => {
+    expect(extractFullCode('GB/T 3325-2024')).toBe('GB3325-2024');
+    expect(extractFullCode('GB/T 3325 -2024')).toBe('GB3325-2024');
+    expect(extractFullCode('GB/T3325-2024')).toBe('GB3325-2024');
+    expect(extractFullCode('gb/t 3325-2024')).toBe('GB3325-2024');
+  });
+
+  it('cross-source clean and dirty variants produce identical full code (precise match enabler)', () => {
+    // CNAS 抓出来 'GB/T 3325 -2024'、CMA 抓出来 'GB/T 3325-2024' —— 两个 full code 必须相等，
+    // 这样 Step 2-3 把 std_code_norm 落库后可以走索引等值查询
+    expect(extractFullCode('GB/T 3325 -2024')).toBe(extractFullCode('GB/T 3325-2024'));
+  });
+
+  it('passes through codes without year (legacy std without revision)', () => {
+    expect(extractFullCode('JB 4730')).toBe('JB4730');
+  });
+
+  it('ISO colon variant becomes dash variant for storage', () => {
+    expect(extractFullCode('ISO 4287:1997')).toBe('ISO4287-1997');
   });
 });
 
@@ -83,17 +131,20 @@ describe('buildFuzzyLikePattern', () => {
 
 // Helper: tiny in-memory schema covering only what queryByStdCodes touches.
 // We don't need the full migration here — just the SELECT/WHERE surface.
+// Step 2-3 加了 std_code_norm / std_code_base 归一化列，所以测试 schema 也要带上。
 function makeTestDb() {
   const db = new BetterSqlite3(':memory:');
   db.exec(`
     CREATE TABLE cnas_qualifications (
-      lab_no TEXT, std_code TEXT, std_name TEXT,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lab_no TEXT, std_code TEXT, std_code_norm TEXT, std_code_base TEXT, std_name TEXT,
       effective_date TEXT, expiry_date TEXT, category TEXT,
       test_object TEXT, test_param TEXT, test_standard TEXT, limit_desc TEXT
     );
     CREATE TABLE cnas_labs (lab_no TEXT, lab_name TEXT);
     CREATE TABLE cma_qualifications (
-      cert_number TEXT, std_code TEXT, std_name TEXT,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cert_number TEXT, std_code TEXT, std_code_norm TEXT, std_code_base TEXT, std_name TEXT,
       effective_date TEXT, expiry_date TEXT, category TEXT,
       test_item TEXT, test_standard TEXT, limit_desc TEXT
     );
@@ -105,23 +156,25 @@ function makeTestDb() {
   return db;
 }
 
-describe('queryByStdCodes Phase 2 fuzzy fallback (regression)', () => {
-  it('finds GB/T 3325-2024 even when CNAS table has thousands of GB rows ahead of it', () => {
-    // Repro for the Layer-4 bug: prefix-only LIKE 'GB%' + LIMIT 500 dropped the
-    // target row when there were many earlier GB rows. The fix uses
-    // 'GB%3325%' instead — selectivity goes 100× tighter so LIMIT no longer bites.
+describe('queryByStdCodes (Step 2-3: index-based exact + fuzzy match)', () => {
+  it('finds GB/T 3325-2024 across stray-whitespace variant via std_code_base index', () => {
+    // 老回归 case 升级：原来用 800 行 GB 噪音测 LIKE+LIMIT 截断；
+    // 新算法用 std_code_base 索引等值匹配，根本不用 LIMIT 兜底，但回归 case 留着确保
+    // 行为不变（CNAS 脏空格变体 'GB/T 3325 -2024' 仍能匹到用户搜的 'GB/T 3325-2024'）
     const db = makeTestDb();
     db.prepare("INSERT INTO cnas_labs (lab_no, lab_name) VALUES ('LAB001', 'Test Lab')").run();
-    // Seed 800 unrelated GB rows that would all match 'GB%' but not 'GB%3325%'
     const insertNoise = db.prepare(`
-      INSERT INTO cnas_qualifications (lab_no, std_code, std_name, effective_date, expiry_date, category, test_object, test_param, test_standard, limit_desc)
-      VALUES ('LAB001', ?, '', '', '', '', '', '', '', '')
+      INSERT INTO cnas_qualifications (lab_no, std_code, std_code_norm, std_code_base, std_name, effective_date, expiry_date, category, test_object, test_param, test_standard, limit_desc)
+      VALUES ('LAB001', ?, ?, ?, '', '', '', '', '', '', '', '')
     `);
+    // 仍灌 800 行无关 GB 数据，证明跨年/跨变体不会受表大小影响
     for (let i = 0; i < 800; i++) {
-      insertNoise.run(`GB/T ${10000 + i}-2020`);
+      const code = `GB/T ${10000 + i}-2020`;
+      insertNoise.run(code, extractFullCode(code), extractBaseCode(code));
     }
-    // Target row with CNAS-scraper stray-space variant
-    insertNoise.run('GB/T 3325 -2024');
+    // CNAS-scraper 脏空格变体 —— 这是真实数据
+    const dirtyCode = 'GB/T 3325 -2024';
+    insertNoise.run(dirtyCode, extractFullCode(dirtyCode), extractBaseCode(dirtyCode));
 
     const svc = new QualificationService(db as any);
     const result = svc.queryByStdCodes(['GB/T 3325-2024']);
@@ -129,6 +182,71 @@ describe('queryByStdCodes Phase 2 fuzzy fallback (regression)', () => {
     expect(result['GB/T 3325-2024']).toBeDefined();
     expect(result['GB/T 3325-2024'].length).toBeGreaterThanOrEqual(1);
     expect(result['GB/T 3325-2024'][0].source).toBe('CNAS');
+    db.close();
+  });
+
+  it('cross-year fuzzy match: searching 2024 returns 2017 / 2008 versions of same standard', () => {
+    // 产品语义"同一标准的所有版本都标徽章"。诊断面板验证过：DB 真实情况下 CMA 有 2017/2008/1995 三版，
+    // 用户搜 2024 时全都应该回 —— 上层 tooltip 靠 year 对比标 ⚠ 跨年提示
+    const db = makeTestDb();
+    db.prepare("INSERT INTO cma_labs (cert_number, lab_name) VALUES ('CERT001', 'Test CMA')").run();
+    const insert = db.prepare(`
+      INSERT INTO cma_qualifications (cert_number, std_code, std_code_norm, std_code_base, std_name, effective_date, expiry_date, category, test_item, test_standard, limit_desc)
+      VALUES ('CERT001', ?, ?, ?, '', '', '', '', '', '', '')
+    `);
+    for (const code of ['GB/T 3325-1995', 'GB/T 3325-2008', 'GB/T 3325-2017']) {
+      insert.run(code, extractFullCode(code), extractBaseCode(code));
+    }
+
+    const svc = new QualificationService(db as any);
+    const result = svc.queryByStdCodes(['GB/T 3325-2024']);
+
+    // 三版历史记录都该回来 —— 跨年模糊匹配是 base 列等值
+    expect(result['GB/T 3325-2024']).toBeDefined();
+    const stdCodes = result['GB/T 3325-2024'].map(q => q.stdCode);
+    // 同 cert_number / source 的多条会被 addMatch 按 source+labNo 去重 —— 这里只剩 1 条
+    expect(stdCodes.length).toBe(1);
+    expect(stdCodes[0]).toMatch(/3325/);
+    db.close();
+  });
+
+  it('does not match GB/T 33325-2016 when searching GB/T 3325-2024 (selectivity)', () => {
+    // 防回归：早期 LIKE 'GB%3325%' 会同时命中 'GB/T 33325' 五位数字标准号 —— 老 buildFuzzyLikePattern
+    // 靠 JS 端 base 比对兜底剔除。现在用 std_code_base 索引等值，'GB3325' ≠ 'GB33325'，
+    // 5 位数字号根本不进结果集，更严谨
+    const db = makeTestDb();
+    db.prepare("INSERT INTO cma_labs (cert_number, lab_name) VALUES ('CERT001', 'Test CMA')").run();
+    const insert = db.prepare(`
+      INSERT INTO cma_qualifications (cert_number, std_code, std_code_norm, std_code_base, std_name, effective_date, expiry_date, category, test_item, test_standard, limit_desc)
+      VALUES ('CERT001', ?, ?, ?, '', '', '', '', '', '', '')
+    `);
+    const code = 'GB/T 33325-2016';
+    insert.run(code, extractFullCode(code), extractBaseCode(code));
+
+    const svc = new QualificationService(db as any);
+    const result = svc.queryByStdCodes(['GB/T 3325-2024']);
+    expect(result['GB/T 3325-2024']).toBeUndefined();   // 不能误命中
+    db.close();
+  });
+});
+
+describe('searchQualifications (Step 4: keyword search uses std_code_norm/base)', () => {
+  it('finds stray-whitespace variant when user searches clean code', () => {
+    // 老实现纯 LIKE 子串：搜 'GB/T 3325-2024' 时 'GB/T 3325 -2024' 匹不上（中间空格断了）。
+    // 修法：query 算出 fullCode/baseCode 走归一化列等值，与传统 LIKE 兜底 OR 起来
+    const db = makeTestDb();
+    db.prepare("INSERT INTO cnas_labs (lab_no, lab_name) VALUES ('LAB001', 'Test Lab')").run();
+    const dirtyCode = 'GB/T 3325 -2024';
+    db.prepare(`
+      INSERT INTO cnas_qualifications (lab_no, std_code, std_code_norm, std_code_base, std_name, effective_date, expiry_date, category, test_object, test_param, test_standard, limit_desc)
+      VALUES ('LAB001', ?, ?, ?, '', '', '', '', '', '', '', '')
+    `).run(dirtyCode, extractFullCode(dirtyCode), extractBaseCode(dirtyCode));
+
+    const svc = new QualificationService(db as any);
+    const results = svc.searchQualifications('GB/T 3325-2024');
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results[0].source).toBe('CNAS');
+    expect(results[0].stdCode).toBe(dirtyCode);   // DB 里的原始脏数据照原样回显
     db.close();
   });
 });

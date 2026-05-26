@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3';
 import { getDb } from './db';
 import { CmaScraper, type CmaCapability, type CmaSearchResult } from './cma-scraper';
 import { CnasScraper, type CnasCapability, type CnasLabInfo } from './cnas-scraper';
+import { extractBaseCode, extractFullCode } from '../shared/std-code';
 
 export interface Qualification {
   source: 'CNAS' | 'CMA';
@@ -103,33 +104,50 @@ export class QualificationService {
 
   // ─── Query ───
 
-  /** Batch query qualifications by standard codes (for search result badges) */
+  /** Batch query qualifications by standard codes (for search result badges).
+   *
+   * 算法（用 std_code_norm / std_code_base 归一化列做索引等值查询，O(log N)，
+   * 不再需要 LIKE + LIMIT 兜底）：
+   *
+   * 1. 把每个输入 stdCode 算出 fullCode（含年）+ baseCode（剥年）
+   * 2. SQL 一次 IN (fullCodes) 拉出"同号同年"精确命中
+   * 3. SQL 一次 IN (baseCodes) 拉出"同号跨年"模糊命中（含上一步的超集）
+   * 4. 用 fullCode → input、baseCode → inputs 映射回写到每个 input key
+   * 5. 用 source+labNo 去重，跨年命中的同源同号会自动并入
+   */
   queryByStdCodes(stdCodes: string[]): Record<string, Qualification[]> {
     if (stdCodes.length === 0) return {};
 
-    const placeholders = stdCodes.map(() => '?').join(',');
     const result: Record<string, Qualification[]> = {};
 
-    // Build base code → input codes mapping for fuzzy matching
+    // 算每个 input 的 fullCode / baseCode，并建反向映射
+    const fullToInputs = new Map<string, string[]>();
     const baseToInputs = new Map<string, string[]>();
     for (const code of stdCodes) {
+      const full = extractFullCode(code);
       const base = extractBaseCode(code);
+      if (!fullToInputs.has(full)) fullToInputs.set(full, []);
+      fullToInputs.get(full)!.push(code);
       if (!baseToInputs.has(base)) baseToInputs.set(base, []);
       baseToInputs.get(base)!.push(code);
     }
+    const fullCodes = Array.from(fullToInputs.keys());
+    const baseCodes = Array.from(baseToInputs.keys());
 
-    // Helper: map a qualification row to result under all matching input codes
     const addMatch = (key: string, qual: Qualification) => {
       if (!result[key]) result[key] = [];
-      // Deduplicate by source+labNo
+      // 用 source+labNo 去重 —— 同一实验室同一标准号可能在 DB 里有多条（不同测试项），
+      // 徽章层面合并成一条，详情留给 tooltip 渲染
       if (!result[key].some(q => q.source === qual.source && q.labNo === qual.labNo)) {
         result[key].push(qual);
       }
     };
 
-    // CNAS
+    // CNAS: 一次 IN (baseCodes) 拉出所有同号（含跨年）命中 —— 索引等值查询，
+    // baseCodes 是去重过的，几十个 input 也只查几十次索引
+    const basePlaceholders = baseCodes.map(() => '?').join(',');
     const cnasRows = this.db.prepare(`
-      SELECT q.std_code, q.std_name, q.lab_no,
+      SELECT q.std_code, q.std_code_base, q.std_name, q.lab_no,
              COALESCE(link.display_name, l.lab_name) AS lab_name,
              link.display_name AS linked_lab_name,
              q.effective_date, q.expiry_date, q.category,
@@ -137,10 +155,9 @@ export class QualificationService {
       FROM cnas_qualifications q
       LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
       LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
-      WHERE q.std_code IN (${placeholders})
-    `).all(...stdCodes) as any[];
+      WHERE q.std_code_base IN (${basePlaceholders})
+    `).all(...baseCodes) as any[];
 
-    const matchedCnasBases = new Set<string>();
     for (const row of cnasRows) {
       const qual: Qualification = {
         source: 'CNAS', stdCode: row.std_code, stdName: row.std_name,
@@ -151,21 +168,15 @@ export class QualificationService {
         testItem: [row.test_object, row.test_param].filter(Boolean).join(' > '),
         testStandard: row.test_standard, limitDesc: row.limit_desc,
       };
-      // Exact match: add under exact code
-      for (const code of stdCodes) {
-        if (code === row.std_code) addMatch(code, qual);
-      }
-      // Fuzzy: add under all input codes with same base
-      const rowBase = extractBaseCode(row.std_code);
-      matchedCnasBases.add(rowBase);
-      for (const input of baseToInputs.get(rowBase) ?? []) {
+      // 同号跨年的所有 input 都加上 —— 前端 tooltip 自行靠 year 对比标 ⚠ 跨年提示
+      for (const input of baseToInputs.get(row.std_code_base) ?? []) {
         addMatch(input, qual);
       }
     }
 
-    // CMA
+    // CMA: 同样逻辑
     const cmaRows = this.db.prepare(`
-      SELECT q.std_code, q.std_name, q.cert_number,
+      SELECT q.std_code, q.std_code_base, q.std_name, q.cert_number,
              COALESCE(link.display_name, l.lab_name) AS lab_name,
              link.display_name AS linked_lab_name,
              q.effective_date, q.expiry_date, q.category,
@@ -173,8 +184,8 @@ export class QualificationService {
       FROM cma_qualifications q
       LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
       LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
-      WHERE q.std_code IN (${placeholders})
-    `).all(...stdCodes) as any[];
+      WHERE q.std_code_base IN (${basePlaceholders})
+    `).all(...baseCodes) as any[];
 
     for (const row of cmaRows) {
       const qual: Qualification = {
@@ -185,101 +196,32 @@ export class QualificationService {
         category: row.category, testItem: row.test_item,
         testStandard: row.test_standard, limitDesc: row.limit_desc,
       };
-      // Exact match
-      for (const code of stdCodes) {
-        if (code === row.std_code) addMatch(code, qual);
-      }
-      // Fuzzy: add under all input codes with same base
-      const rowBase = extractBaseCode(row.std_code);
-      for (const input of baseToInputs.get(rowBase) ?? []) {
+      for (const input of baseToInputs.get(row.std_code_base) ?? []) {
         addMatch(input, qual);
       }
     }
 
-    // For any input codes, narrow to plausible rows via SQL LIKE then apply the exact
-    // base-code comparison in JS. Falls back from O(N) full-table scans to O(matching).
-    //
-    // Run fuzzy fallback for every input — not just ones with zero hits.
-    // A code can already hold a CMA match (clean std_code in DB) while CNAS
-    // still misses Phase 1 because its std_code has stray whitespace
-    // ('GB/T 3325 -2024'). Filtering on result[code]?.length would skip those.
-    // Downstream `addMatch` dedupes by source+labNo, so re-running is safe.
-    //
-    // LIKE 模式：用 `prefix%digits%` —— 只把 base code 拆成「字母前缀 + 数字尾巴」
-    // 拼 LIKE 模式（如 'GB/T 3325-2024' → base 'GB3325' → 'GB%3325%'），比仅前缀
-    // 'GB%' 命中收敛 100×。早期版本只用 prefix LIKE + LIMIT 500，CNAS 表里 GB
-    // 前缀有几万条记录，目标行常常被 LIMIT 截掉 → 标准检索结果漏掉 CNAS 资质徽章。
-    const unmatchedInputs = stdCodes.slice();
-    if (unmatchedInputs.length > 0) {
-      const FUZZY_LIMIT = 2000;
-      const inputBases = unmatchedInputs.map(code => ({ input: code, base: extractBaseCode(code) }));
-      // buildFuzzyLikePattern 统一负责 (prefix, digits) 拆分 + 白名单 + 注入防御，
-      // 拼出形如 'GB%3325%' 的紧 LIKE。base 拆不出合法 prefix 时返回 null，跳过。
-      const patternSet = new Set<string>();   // 用于 dedupe LIKE 参数
-      for (const { base } of inputBases) {
-        const pattern = buildFuzzyLikePattern(base);
-        if (pattern) patternSet.add(pattern);
-      }
-      if (patternSet.size > 0) {
-        const patterns = Array.from(patternSet);
-        const likeClauses = patterns.map(() => 'q.std_code LIKE ?').join(' OR ');
-        const likeArgs = patterns;
-
-        // ORDER BY rowid 让结果稳定 —— 配 FUZZY_LIMIT 2000，再叠精确数字串
-        // narrow，几乎不可能再被截掉。
-        const cnasCandidates = this.db.prepare(`
-          SELECT q.std_code, q.std_name, q.lab_no, l.lab_name,
-                 q.effective_date, q.expiry_date, q.category,
-                 q.test_object, q.test_param, q.test_standard, q.limit_desc
-          FROM cnas_qualifications q LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
-          WHERE ${likeClauses}
-          ORDER BY q.rowid
-          LIMIT ?
-        `).all(...likeArgs, FUZZY_LIMIT) as any[];
-        const cmaCandidates = this.db.prepare(`
-          SELECT q.std_code, q.std_name, q.cert_number, l.lab_name,
-                 q.effective_date, q.expiry_date, q.category,
-                 q.test_item, q.test_standard, q.limit_desc
-          FROM cma_qualifications q LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
-          WHERE ${likeClauses}
-          ORDER BY q.rowid
-          LIMIT ?
-        `).all(...likeArgs, FUZZY_LIMIT) as any[];
-
-        for (const { input, base: inputBase } of inputBases) {
-          for (const row of cnasCandidates) {
-            if (extractBaseCode(row.std_code) === inputBase) {
-              addMatch(input, {
-                source: 'CNAS', stdCode: row.std_code, stdName: row.std_name,
-                labNo: row.lab_no, labName: row.lab_name ?? '',
-                effectiveDate: row.effective_date, expiryDate: row.expiry_date,
-                category: row.category,
-                testItem: [row.test_object, row.test_param].filter(Boolean).join(' > '),
-                testStandard: row.test_standard, limitDesc: row.limit_desc,
-              });
-            }
-          }
-          for (const row of cmaCandidates) {
-            if (extractBaseCode(row.std_code) === inputBase) {
-              addMatch(input, {
-                source: 'CMA', stdCode: row.std_code, stdName: row.std_name,
-                labNo: row.cert_number, labName: row.lab_name ?? '',
-                effectiveDate: row.effective_date, expiryDate: row.expiry_date,
-                category: row.category, testItem: row.test_item,
-                testStandard: row.test_standard, limitDesc: row.limit_desc,
-              });
-            }
-          }
-        }
-      }
-    }
+    // fullCodes 暂时只用来调试一致性 —— 上面 baseCodes 已经覆盖（fullCodes ⊂ baseCodes 命中集），
+    // 保留映射以便未来需要"严格同年优先排序"时直接用。
+    void fullCodes;
 
     return result;
   }
 
-  /** Search qualifications by keyword */
+  /** Search qualifications by keyword.
+   *
+   * 关键点：用户搜的可能是标准号（脏空格 / 全角 / 无空格变体），也可能是关键词（实验室名 / 测试项）。
+   * 老实现纯 LIKE 子串 → 'GB/T 3325-2024' 匹不到 DB 里 'GB/T 3325 -2024' 这种脏数据。
+   * 修法：把 query 跑一遍 extractFullCode / extractBaseCode；归一化列做精确/跨年索引等值，
+   * 与传统 LIKE 子串 OR 起来，命中并集。
+   */
   searchQualifications(query: string, source?: 'CNAS' | 'CMA', limit = 50): Qualification[] {
     const q = `%${query}%`;
+    // 算 norm/base：当 query 像标准号时（含字母 + 数字），命中归一化列 → 闭掉脏数据 bug
+    // 当 query 是纯关键词时（如实验室名），extractFullCode 会返回大写折叠版（如 "湖北" → "湖北"），
+    // norm/base 列不会命中（因为列里存的是标准号归一化），LIKE 子串照旧走
+    const queryFull = extractFullCode(query);
+    const queryBase = extractBaseCode(query);
     const results: Qualification[] = [];
 
     if (!source || source === 'CNAS') {
@@ -292,12 +234,13 @@ export class QualificationService {
         FROM cnas_qualifications q
         LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
         LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
-        WHERE q.std_code LIKE ? OR q.std_name LIKE ? OR q.lab_no LIKE ?
+        WHERE q.std_code_norm = ? OR q.std_code_base = ?
+           OR q.std_code LIKE ? OR q.std_name LIKE ? OR q.lab_no LIKE ?
            OR l.lab_name LIKE ? OR q.test_object LIKE ? OR q.test_param LIKE ?
            OR q.test_standard LIKE ? OR q.category LIKE ?
         ORDER BY q.std_code, q.effective_date DESC
         LIMIT ?
-      `).all(q, q, q, q, q, q, q, q, limit) as any[];
+      `).all(queryFull, queryBase, q, q, q, q, q, q, q, q, limit) as any[];
 
       for (const row of rows) {
         results.push({
@@ -327,12 +270,13 @@ export class QualificationService {
         FROM cma_qualifications q
         LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
         LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
-        WHERE q.std_code LIKE ? OR q.std_name LIKE ? OR q.cert_number LIKE ?
+        WHERE q.std_code_norm = ? OR q.std_code_base = ?
+           OR q.std_code LIKE ? OR q.std_name LIKE ? OR q.cert_number LIKE ?
            OR l.lab_name LIKE ? OR q.test_item LIKE ? OR q.test_standard LIKE ?
            OR q.category LIKE ?
         ORDER BY q.std_code, q.effective_date DESC
         LIMIT ?
-      `).all(q, q, q, q, q, q, q, limit) as any[];
+      `).all(queryFull, queryBase, q, q, q, q, q, q, q, limit) as any[];
 
       for (const row of rows) {
         results.push({
@@ -563,8 +507,8 @@ export class QualificationService {
       }
 
       const insertCma = this.db.prepare(`
-        INSERT INTO cma_qualifications (cert_number, std_code, std_name, qual_type, effective_date, expiry_date, category, sub_category, test_item, test_standard, limit_desc, note, place_name)
-        VALUES (?, ?, ?, 'CMA', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO cma_qualifications (cert_number, std_code, std_code_norm, std_code_base, std_name, qual_type, effective_date, expiry_date, category, sub_category, test_item, test_standard, limit_desc, note, place_name)
+        VALUES (?, ?, ?, ?, ?, 'CMA', ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       const insertCmaChunk = this.db.transaction((chunk: typeof capabilities) => {
         for (const cap of chunk) {
@@ -573,6 +517,8 @@ export class QualificationService {
           insertCma.run(
             nextCertNumber,
             stdCode,
+            extractFullCode(stdCode),
+            extractBaseCode(stdCode),
             cap.yjbzNameNumber ?? '',
             detail.licValidTimeBegin ?? '',
             detail.licValidTimeEnd ?? '',
@@ -707,8 +653,8 @@ export class QualificationService {
       this.db.prepare('DELETE FROM cnas_qualifications WHERE lab_no = ?').run(labNo);
 
       const insertCnas = this.db.prepare(`
-        INSERT INTO cnas_qualifications (lab_no, std_code, std_name, qual_type, effective_date, expiry_date, category, sub_category, test_object, test_param, test_param_en, test_standard, std_code_en, limit_desc, branch_address)
-        VALUES (?, ?, ?, 'CNAS', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO cnas_qualifications (lab_no, std_code, std_code_norm, std_code_base, std_name, qual_type, effective_date, expiry_date, category, sub_category, test_object, test_param, test_param_en, test_standard, std_code_en, limit_desc, branch_address)
+        VALUES (?, ?, ?, ?, ?, 'CNAS', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       const insertCnasChunk = this.db.transaction((chunk: typeof capabilities) => {
         for (const cap of chunk) {
@@ -717,6 +663,8 @@ export class QualificationService {
           insertCnas.run(
             labNo,
             stdCode,
+            extractFullCode(stdCode),
+            extractBaseCode(stdCode),
             cap.stdAllDesc ?? cap.stdDescAndClause ?? '',
             '', '',
             cap.bigTypeName ?? '',
@@ -859,14 +807,6 @@ export function buildFuzzyLikePattern(base: string): string | null {
   return safeDigits ? `${prefix}%${safeDigits}%` : `${prefix}%`;
 }
 
-/** "GB/T 23440-2009" → "GB23440" — strip year suffix, type designator, and whitespace.
- *  Handles variants with stray whitespace: "GB/T 3325 -2024", "GB/T 3325-2024 ", etc.
- *  All normalize to the same base ("GB3325") so Phase 2 fuzzy matching can bridge
- *  scraper-side data inconsistencies between CNAS and CMA. */
-export function extractBaseCode(code: string): string {
-  return code
-    .replace(/\s*-\s*\d{4}\s*$/, '')   // year suffix with surrounding whitespace
-    .replace(/\/[A-Z]+/gi, '')         // type designator anywhere — old lookahead (?=\s) missed clean variants
-    .replace(/\s+/g, '')
-    .toUpperCase();
-}
+// 标准号归一化函数已抽到 src/shared/std-code.ts（避免 db.ts 迁移逻辑反向依赖 qualification-service.ts）。
+// 这里继续 re-export 是为了不破坏现有引用（admin-routes / library-index 已经从这里 import）。
+export { extractBaseCode, extractFullCode };

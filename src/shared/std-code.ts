@@ -1,0 +1,70 @@
+/**
+ * 标准号归一化：把脏数据（CNAS / CMA 抓取变体、用户手输、Excel 复制全角）统一成
+ * 半角 ASCII 形态，让两条独立来源的同号同年记录得到完全相同的字符串，可以走索引
+ * 等值匹配，不需要 LIKE + LIMIT 兜底。
+ *
+ * 拆出来的原因：db.ts 在 migrate() 里要回填 std_code_norm 列，但 db.ts 不能依赖
+ * qualification-service.ts（后者依赖 db.ts，会循环 import）。这里是底层纯函数，
+ * 不依赖任何状态。
+ */
+
+/**
+ * 把脏标准号 prepass 成"半角 + 折叠空白 + 大写"的形态：CNAS / CMA / 用户手输的所有变体
+ * 在 extractBaseCode / extractFullCode 之前先统一过这一道，让后续的字符串处理只用考虑
+ * 半角 ASCII 形态。
+ *
+ * 已知脏数据来源：CNAS 抓取写 'GB/T 3325 -2024'、用户复制粘贴带全角空格、Excel 里
+ * 标准号被 autocorrect 成全角破折号 '－'、ISO 标准号写 'ISO 4287:1997'。
+ */
+function preNormalize(code: string): string {
+  return code
+    .replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))  // 全角数字 ０-９ → 0-9
+    .replace(/[Ａ-ｚ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))  // 全角字母 Ａ-ｚ → A-z
+    .replace(/　/g, ' ')              // 全角空格 → 半角
+    .replace(/[‐-―－]/g, '-') // U+2010..2015 (figure/en/em/horizontal bar) + U+FF0D (全角连字符) → '-'
+    .replace(/[／]/g, '/')            // 全角斜杠 → '/'
+    .replace(/[：]/g, ':')            // 全角冒号 → ':'（ISO 标准用冒号当年份分隔）
+    .replace(/[:](\d{4}\b)/, '-$1')       // ISO 'ISO 4287:1997' → 'ISO 4287-1997' 让后续年份剥离逻辑统一
+    .replace(/\s+/g, ' ')                  // 折叠连续空白
+    .trim()
+    .toUpperCase();
+}
+
+/**
+ * "GB/T 23440-2009" → "GB23440-2009" — 严谨归一化（保留年份）。
+ *
+ * 用途：精确匹配。两条来自不同源的同号同年记录（CNAS 'GB/T 3325 -2024' /
+ * CMA 'GB/T 3325-2024'）经过此函数都得到相同字符串，可以在归一化列上做索引等值
+ * 查询，O(log N)，不再需要 LIKE + LIMIT 兜底。
+ *
+ * 与 extractBaseCode 的关系：extractFullCode 是 extractBaseCode + 年份后缀。
+ */
+export function extractFullCode(code: string): string {
+  const pre = preNormalize(code);
+  // 拆出年份后缀（含可选的 'A'/'B'/'R' 修订标记，如 'GB/T 3836-2010A'）；
+  // 不要求一定有年份，老式标准号如 'JB 4730' 也接受
+  const yearMatch = pre.match(/\s*-\s*(\d{4}[A-Z]?)\s*$/);
+  const yearSuffix = yearMatch ? `-${yearMatch[1]}` : '';
+  const withoutYear = yearMatch ? pre.slice(0, yearMatch.index!) : pre;
+  // 剥 type designator：'GB/T 3325' / 'GB/T3325'（无空格）/ 'GBZ/T 188' 都归到 prefix + digits
+  // 旧实现 /\/[A-Z]+/gi 在无空格变体上会把 '/T3325' 一起删空 → 这里只删 '/T' 不动后面
+  const stripped = withoutYear.replace(/\/[A-Z]+(?=\d|\s|$|-)/gi, '');
+  const compact = stripped.replace(/\s+/g, '');
+  // 兜底：剥完空字符串说明输入异常，返回 preNormalize 形态防止下游 base="" 触发全表匹配
+  if (!compact) return pre;
+  return compact + yearSuffix;
+}
+
+/**
+ * "GB/T 23440-2009" → "GB23440" — 跨年模糊归一化（剥年份）。
+ *
+ * 用途：跨版本兜底匹配 —— 用户搜 2024 版时 DB 只有 2017 版也能命中（产品语义里
+ * "同一标准的所有版本都标徽章"，但 UI 上要靠 tooltip 显式告知用户命中的是哪个年版）。
+ *
+ * Handles variants: 'GB/T 3325 -2024'（脏空格）/ 'GB/T 3325-2024 ' / 'GB/T3325-2024'
+ * （无空格）/ 'ＧＢ／Ｔ ３３２５－２０２４'（全角）/ 'ISO 4287:1997'（ISO 冒号）。
+ */
+export function extractBaseCode(code: string): string {
+  const full = extractFullCode(code);
+  return full.replace(/-\d{4}[A-Z]?$/, '');
+}

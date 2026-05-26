@@ -94,6 +94,24 @@ Chrome ≤109 上整条 declaration 解析失败，主题崩。
 - 库路径变量从前端可改（admin 设置 `standardsLibraryDir`），但 NSIS 看不到该设置 —— **始终按默认路径 `$INSTDIR\standards` 处理**。改过路径的用户库本就不在 `$INSTDIR` 下、升级本来就不会动到，无需特殊保护
 - 改 `installer.nsh` 后跑一遍打包（GitHub Actions `electron:build:nsis`）测一次升级流程，确保 Rename 临时占位（`$INSTDIR\..`）有写权限（Program Files 装机时会踩 UAC）
 
+## 资质表 std_code 归一化契约（**强制**）
+
+`cnas_qualifications` / `cma_qualifications` 任何 INSERT 都必须同时写入：
+
+- `std_code` —— 原始抓取数据（保留以便诊断和 UI 回显）
+- `std_code_norm = extractFullCode(std_code)` —— 保留年份的归一化（精确匹配用）
+- `std_code_base = extractBaseCode(std_code)` —— 剥年份的归一化（跨年模糊匹配用）
+
+`src/shared/std-code.ts` 是单一真相源，db.ts 启动时检测列空自动回填。
+
+**Why:** `queryByStdCodes` / `searchQualifications` 都靠这两列做索引等值匹配，不再走 LIKE + LIMIT 兜底。漏写归一化列 → 新写入的行**根本进不了徽章和搜索**（旧脏空格变体 `'GB/T 3325 -2024'` 的事故由此而来）。
+
+**How to apply:**
+
+- 新增 INSERT 资质数据的位置：先 `import { extractFullCode, extractBaseCode } from '../shared/std-code'`，INSERT 时一并提供
+- 新增数据源（除 CNAS/CMA 外）想沾资质徽章 → schema 也加这两列 + 索引，沿用同样的归一化函数
+- 改 `extractFullCode` / `extractBaseCode` 逻辑（覆盖新的脏数据变体）后必须删 DB 强制下次启动回填 —— 或者临时跑一遍 `UPDATE cnas_qualifications SET std_code_norm='' WHERE ...` 触发 `backfillNormalizedStdCodes`。新加 case 的单测放 `qualification-service.test.ts` 防回归
+
 ## 记忆系统
 
 跨会话的项目状态、未做项、风险点记在 auto-memory（不在仓库里）。Claude 会自己维护，

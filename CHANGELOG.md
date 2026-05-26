@@ -3,6 +3,15 @@
 ## [Unreleased]
 
 ### Added
+- **资质匹配严谨度大改**（5 步）：解决"匹配能跑但担心不严谨"的系统性隐患，把所有入口收敛到归一化列索引等值查询。
+  - **Step 1 — 归一化函数扩展 + 拆分**：`src/shared/std-code.ts` 抽出 `preNormalize` / `extractFullCode` / `extractBaseCode`（脱离 `qualification-service.ts` 避免 db.ts 循环依赖）。新增 prepass 覆盖全角数字/字母/空格/破折号、ISO 冒号年份分隔符 (`ISO 4287:1997` → `ISO 4287-1997`)、无空格变体 (`GB/T3325-2024`)、修订标记 (`2010A`)。`extractFullCode` 保留年份用于精确匹配，`extractBaseCode` 剥年份用于跨年模糊兜底。
+  - **Step 5 — 徽章 tooltip 标注命中年份**：`public/js/app-qual.js` 给跨年命中加 ⚠ 视觉标记。当 source 下所有命中行的年份都与用户搜的不同时，徽章本体加 `.qual-badge-cross-year`（虚线边框 + 半透明）+ ⚠ 小图标；tooltip 每条命中行也显式标"仅匹配到 XXXX 版"。`web/src/styles/pages/qualifications.css` 加配套样式 + oklch fallback。
+  - **Step 2-3 — DB schema 加归一化列 + 重写 queryByStdCodes**：`cnas_qualifications` / `cma_qualifications` 加 `std_code_norm` (extractFullCode) + `std_code_base` (extractBaseCode) 两列与 B-tree 索引；`db.ts::migrate()` 检测列不存在时自动回填（分块 1000 行/事务，幂等）。`queryByStdCodes` 老 Phase 1 (`std_code IN (...)`) + Phase 2 (LIKE `prefix%digits%` + LIMIT 2000 + JS 端 base 比对) 共约 100 行替换成两条 `std_code_base IN (?, ?, ?)` 索引等值查询，O(log N)，再无 LIMIT 截断风险；同时彻底消除"用户搜 3325 误命中 33325"五位数字号边界 case（base 列 `GB3325 ≠ GB33325`，不进结果集）。
+  - **Step 4 — 资质查询页修脏数据 bug**：`searchQualifications` 老纯 LIKE 子串匹配匹不到 `'GB/T 3325 -2024'` 这种 CNAS 抓取脏空格变体（中间空格断了 `'%GB/T 3325-2024%'`）。改成 `std_code_norm = ? OR std_code_base = ?` 与 LIKE 兜底 OR 起来，闭掉这条未爆 bug。`queryVisualKeywords` 内部复用 `searchQualifications`，一改全闭。
+  - **管理诊断接口加强**：`GET /api/admin/qual/diagnose` 增加 `normColumnHit` / `baseColumnHit` 字段，对比 DB 列里实际落盘的归一化值与即时算出的值，老数据回填异常一眼可见。
+  - **测试**：`qualification-service.test.ts` 新增 8 个 case 覆盖全角/无空格/ISO 冒号/修订标记/跨年模糊/五位数字号防误命中/搜脏数据 4 类场景；老回归 case `finds GB/T 3325-2024 even when...` 升级 schema 加归一化列。`extractBaseCode` / `extractFullCode` / `buildFuzzyLikePattern` 共 23 个纯函数单测全过。
+  - **风险与回滚**：列加迁移是 additive 改动，不删旧 `std_code` 列；旧行回填日志会打 `[db] backfilled N rows`。`buildFuzzyLikePattern` 保留 export（诊断接口仍用），未来确认稳定后再清。
+
 - **预览自动下载 Phase 3 polish**：解决连点 / 失败重试 / 长下载体验三个痛点。
   - **按 (stdCode, year) 去重 taskId**：`src/services/preview-task-store.ts` 给每个任务存一个 normalized key（`stdCode.toUpperCase().replace(/[^A-Z0-9]/g,'') + '::' + year`），新增 `findActiveTaskByKey()` 在 createTask 之前查活跃任务（仅 pending / downloading 算活跃）。`preview-routes.ts` 的 `not_in_library` 分支调用它 → 若有活跃任务直接复用 taskId 并返回 `{ reused: true }`，不再 fire-and-forget 第二个 `runAutoDownload`。覆盖两类场景：用户连点 5 次预览 / 先点下载再点预览同一标准。
   - **失败 UI 加「重试」按钮**：`public/js/app-search.js` 的 `pollPreviewTask` 失败分支抽出 `renderPreviewFailedUi()`，渲染「重试」+「关闭」两个按钮。重试点击 → abort 旧 poll → 重新调 `previewStandard(_previewLastId)` 走完整 `/api/preview/request` 流程；后端 dedup 兜底，若旧任务还活着复用、否则起新任务。
