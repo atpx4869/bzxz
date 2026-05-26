@@ -32,6 +32,10 @@
   - 前端：`public/index.html` 加 `#lanGuestAllowedToggle` + `public/js/app-auth-admin.js` 加 populate 与 `toggleLanGuestAllowed()` confirm 流程
 
 ### Fixed
+- **BZ 下载失败 `Cannot find package 'pdf-lib' imported from app.asar.unpacked/dist/src/shared/pdf-merge-worker.js`**：
+  - **根因**：`pdf-merge-worker.js` 在 `asarUnpack` 名单里，被 electron-builder 抽到 `app.asar.unpacked/dist/src/shared/`；运行时 Node 从该路径走 `node_modules/pdf-lib` 解析，逐级向上找却落不到 `app.asar/node_modules/pdf-lib` —— asar 外的目录不会回 hop 到 asar 内部去找包。worker_threads 子线程在 dev `tsx`/`tsc-then-electron` 跑时都能命中（`node_modules` 是真目录），打包后才暴露
+  - **修**：`package.json` `build.asarUnpack` 额外加 `node_modules/pdf-lib/**/*`、`node_modules/@pdf-lib/**/*`、`node_modules/pako/**/*`、`node_modules/tslib/**/*`（pdf-lib 的 3 个 prod 依赖），让 worker 在 `app.asar.unpacked` 下能正常向上解析。worker 文件本身已经在 asarUnpack 里，主进程 `await import('pdf-lib')` 走的是 asar 内部解析，不受影响
+- 手机端 `#toolbar` 整条隐藏（两行：已选/下载选中/停止/全选 + 收藏徽章/只看收藏/紧凑/导出结果）：上一轮把复选框去掉后这两行只剩观感、按不到任何东西，仍占两行空间用户要滑过才看到结果。"只看收藏"在折叠筛选条里已经有同等入口（`data-filter-toggle="saved"`）不丢功能；批量下载 / 导出 / 密度切换在手机端不常用，要的用户走"切换到完整版"。`public/styles.css` §11 + `web/src/styles/responsive.css` 同步。用 `!important` 是因为 `updateToolbar()` 主动写 inline `style.display='flex'`，普通类选择器压不过 inline style
 - 老浏览器（Win7 Chrome ≤109、Win7 Edge、老版 Safari）打开 Web 端整个 UI 变白底黑字、按钮没颜色没边框：根因是 `:root` 里 13 个核心 CSS 变量（`--bg / --surface / --text / --accent / --success / --danger / --warning / --glass-bg` 等）全部用 `oklch()` 定义，而 oklch 颜色空间要 **Chrome 111（2023-03）/ Firefox 113 / Safari 15.4** 起才支持，Win7 上 Chrome 官方最高只到 109 装不上 111+，整条 declaration 失效 → 变量回退到 initial → 主题崩溃。
   - **修**：双声明套路，每个变量先写 sRGB hex / rgba 兜底，再写 oklch。旧浏览器解析 oklch 失败丢弃这条声明、保留 hex；新浏览器两条都解析、后者赢。色值是 oklch 在 sRGB 空间的近似映射（`--accent: #4f6df0` ≈ `oklch(66% 0.20 250)` 等），不要求像素级一致 —— 主题观感保留、按钮可见、文字可读
   - **范围**：`public/styles.css` `:root` 块 + `web/src/styles/base.css` 同步。散布在选择器里直接写 `oklch(...)` 的硬编码（阴影、半透明边框等次要色）不动 —— 老浏览器丢失它们退化成无阴影 / 无 hover 高亮，能接受

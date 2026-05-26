@@ -78,6 +78,10 @@
 
   /* result-card / toolbar */
   .toolbar, .toolbar-left, .toolbar-right { flex-wrap: wrap; }
+  /* 手机端整个 #toolbar 隐掉（已选/下载选中/全选 + 收藏徽章/只看收藏/紧凑/导出结果）：
+     批量入口手机端没意义，"只看收藏"已在折叠筛选条里有同等入口。
+     !important 是因为 JS updateToolbar() 写 inline style.display='flex'。 */
+  body:not(.force-desktop) #toolbar { display: none !important; }
 
   /* modal.css —— detail modal */
   .modal { width: calc(100% - 20px); padding: 18px; max-height: 88vh; }

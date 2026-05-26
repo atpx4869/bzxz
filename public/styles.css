@@ -1006,6 +1006,14 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
   body:not(.force-desktop) .toolbar-right { flex-wrap: wrap; }
   body:not(.force-desktop) .filter-sort { flex: 1 1 100%; margin-left: 0; }
 
+  /* 手机端整个 #toolbar 隐掉：
+     - .toolbar-left（已选 / 下载选中 / 停止 / 全选）—— 复选框上一轮已去掉，批量入口在手机端没意义
+     - .toolbar-right（收藏徽章 / 只看收藏 / 紧凑 / 导出结果）——"只看收藏"已在折叠筛选条里有同等入口
+       （filter-toggle="saved"），密度切换 / 导出结果在手机端不常用，要的话切桌面版
+     用 !important 因为 JS updateToolbar() 主动写 inline style.display='flex'，
+     普通类选择器压不过 inline style，必须 !important。 */
+  body:not(.force-desktop) #toolbar { display: none !important; }
+
   /* 筛选条折叠（A 方案）：手机端默认收成"筛选 ▾"一行按钮，
      .filter-bar.open 时再展开。桌面端 .filter-collapse 永远 display:none、
      .filter-bar-body 永远 display:contents —— 手机端在这里反过来：

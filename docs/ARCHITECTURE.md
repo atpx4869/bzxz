@@ -194,7 +194,7 @@ type ApiResult<T> =
 - 队列 + WeakMap 跟踪每个 slot 的 pending job
 - Worker 启动开销 ≈ 50-100ms（pdf-lib 懒加载首次）
 
-**Electron 打包注意**：worker_threads 不能从 `app.asar` 加载 `.js`。`package.json` 的 `build.asarUnpack` 拉出 `dist/src/shared/pdf-merge-worker.js`，`getWorkerEntry()` 把路径里的 `app.asar` 改写成 `app.asar.unpacked`。**改 pdf-merge 相关文件位置时必须同步这两处。**
+**Electron 打包注意**：worker_threads 不能从 `app.asar` 加载 `.js`。`package.json` 的 `build.asarUnpack` 拉出 `dist/src/shared/pdf-merge-worker.js`，`getWorkerEntry()` 把路径里的 `app.asar` 改写成 `app.asar.unpacked`。**同时必须把 `pdf-lib` 及其依赖（`@pdf-lib/*` / `pako` / `tslib`）也加进 asarUnpack** —— 否则 worker 从 `app.asar.unpacked/dist/src/shared/` 走 `node_modules` 向上解析时落不回 asar 内部，运行时报 `Cannot find package 'pdf-lib'`。改 pdf-merge 相关文件位置或升级 pdf-lib 依赖树时同步这三处。
 
 **Shutdown**：`src/api/app.ts:shutdown()` 调用 `closePdfMergePool()` 让 worker 优雅退出。
 

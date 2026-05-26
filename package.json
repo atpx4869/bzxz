@@ -36,7 +36,11 @@
       "node_modules/playwright/**/*",
       "node_modules/playwright-core/**/*",
       "dist/src/shared/pdf-merge-worker.js",
-      "dist/src/shared/pdf-merge-worker.js.map"
+      "dist/src/shared/pdf-merge-worker.js.map",
+      "node_modules/pdf-lib/**/*",
+      "node_modules/@pdf-lib/**/*",
+      "node_modules/pako/**/*",
+      "node_modules/tslib/**/*"
     ],
     "extraResources": [
       {
