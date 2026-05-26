@@ -1003,6 +1003,13 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
   body:not(.force-desktop) .batch-toolbar { display: none; }
   body:not(.force-desktop) .result-card,
   body:not(.force-desktop) .batch-result-card { grid-template-columns: 1fr; padding: 12px 14px; gap: 6px; }
+  /* ≤900px 块把 .result-card 设成了 2 列网格并把子项钉到 grid-column:2；
+     这里改回单列后必须同时重置子项的列定位，否则浏览器会为 grid-column:2
+     创建隐式列，内容全跑到隐式列里、显式列空着 —— 视觉上卡片从中间开始、
+     左边像分列了却空着。子项数量不同（有/没有 card-state、card-actions 等）
+     会让隐式列宽度不同，所以会呈现"有些正常有些歪"。 */
+  body:not(.force-desktop) .result-card > *,
+  body:not(.force-desktop) .batch-result-card > * { grid-column: auto; }
   body:not(.force-desktop) .result-card .card-id,
   body:not(.force-desktop) .batch-result-card .card-id { font-size: 16px; font-weight: 600; }
   body:not(.force-desktop) .result-card .card-body { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
