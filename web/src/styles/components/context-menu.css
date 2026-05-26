@@ -1,11 +1,11 @@
 /* Right-click context menu —— 原 public/styles.css 行 266–274。
  * 配套行为：legacy app-search.js 里的 buildResultContextMenu。 */
 
-.ctx-menu { min-width: 220px; padding: 6px; background: oklch(20% 0.016 255 / 0.96); backdrop-filter: blur(16px); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: 0 16px 48px rgba(0,0,0,0.6); animation: ctxMenuIn 0.12s var(--ease-out); }
+.ctx-menu { min-width: 220px; padding: 6px; background: rgba(17, 22, 29, 0.96); background: oklch(20% 0.016 255 / 0.96); backdrop-filter: blur(16px); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: 0 16px 48px rgba(0,0,0,0.6); animation: ctxMenuIn 0.12s var(--ease-out); }
 .ctx-menu-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; font-size: 12.5px; color: var(--text); border-radius: 4px; cursor: pointer; user-select: none; }
-.ctx-menu-item:hover { background: oklch(66% 0.20 250 / 0.18); color: var(--text); }
+.ctx-menu-item:hover { background: rgba(0, 149, 254, 0.18); background: oklch(66% 0.20 250 / 0.18); color: var(--text); }
 .ctx-menu-icon { width: 16px; flex-shrink: 0; text-align: center; color: var(--text-3); font-size: 12px; font-family: 'DM Mono', monospace; }
-.ctx-menu-item:hover .ctx-menu-icon { color: oklch(78% 0.14 250); }
+.ctx-menu-item:hover .ctx-menu-icon { color: #7cbdff; color: oklch(78% 0.14 250); }
 .ctx-menu-label { flex: 1; }
 .ctx-menu-divider { height: 1px; background: var(--border); margin: 4px 6px; }
 @keyframes ctxMenuIn { from { opacity: 0; transform: scale(0.96) translateY(-3px); } to { opacity: 1; transform: scale(1) translateY(0); } }

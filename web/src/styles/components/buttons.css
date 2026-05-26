@@ -4,13 +4,13 @@
  * theme/glass.css 里 1036–1047 提供 .btn-primary 的渐变与发光覆盖。 */
 
 .btn { padding: 10px 22px; border-radius: var(--radius-sm); font: 500 14px 'DM Sans', sans-serif; cursor: pointer; border: none; transition: all 0.18s var(--ease-out); letter-spacing: 0.01em; }
-.btn-primary { background: var(--accent); color: #fff; box-shadow: 0 2px 8px oklch(66% 0.20 250 / 0.2); }
-.btn-primary:hover { background: var(--accent-h); transform: translateY(-1px); box-shadow: 0 6px 20px oklch(66% 0.20 250 / 0.3); }
+.btn-primary { background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(0, 149, 254, 0.2); box-shadow: 0 2px 8px oklch(66% 0.20 250 / 0.2); }
+.btn-primary:hover { background: var(--accent-h); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0, 149, 254, 0.3); box-shadow: 0 6px 20px oklch(66% 0.20 250 / 0.3); }
 .btn-ghost { background: transparent; color: var(--text-2); border: 1px solid var(--border); }
-.btn-ghost:hover { border-color: var(--text-2); color: var(--text); background: oklch(22% 0.014 255 / 0.5); }
+.btn-ghost:hover { border-color: var(--text-2); color: var(--text); background: rgba(22, 27, 33, 0.5); background: oklch(22% 0.014 255 / 0.5); }
 .btn-sm { padding: 6px 14px; font-size: 12px; }
-.btn:disabled, .btn[disabled] { opacity: 0.5; cursor: not-allowed; background: oklch(22% 0.01 255 / 0.5); color: var(--text-3); border-color: oklch(28% 0.01 255 / 0.5); box-shadow: none; transform: none; }
-.btn:disabled:hover, .btn[disabled]:hover { background: oklch(22% 0.01 255 / 0.5); color: var(--text-3); transform: none; box-shadow: none; }
+.btn:disabled, .btn[disabled] { opacity: 0.5; cursor: not-allowed; background: rgba(24, 27, 31, 0.5); background: oklch(22% 0.01 255 / 0.5); color: var(--text-3); border-color: rgba(38, 41, 46, 0.5); border-color: oklch(28% 0.01 255 / 0.5); box-shadow: none; transform: none; }
+.btn:disabled:hover, .btn[disabled]:hover { background: rgba(24, 27, 31, 0.5); background: oklch(22% 0.01 255 / 0.5); color: var(--text-3); transform: none; box-shadow: none; }
 
 /* 全局复用的旋转动画 —— 也被 components/progress-strip.css 的 .src-prog-spin
  * 与 components/result-card.css 的 .btn-spinner 引用。 */

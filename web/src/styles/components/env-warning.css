@@ -8,10 +8,10 @@
   left: var(--sidebar-w);
   right: 0;
   z-index: 205;
-  background: oklch(58% 0.20 25 / 0.18);
+  background: rgba(215, 51, 55, 0.18); background: oklch(58% 0.20 25 / 0.18);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border-bottom: 1px solid oklch(58% 0.20 25 / 0.3);
+  border-bottom: 1px solid rgba(215, 51, 55, 0.3); border-bottom: 1px solid oklch(58% 0.20 25 / 0.3);
   color: var(--text);
   padding: 8px 18px;
   font-size: 12px;
@@ -22,7 +22,7 @@
   transition: background 0.15s var(--ease-out);
 }
 body.sidebar-collapsed .env-warning { left: var(--sidebar-collapsed-w); }
-.env-warning:hover { background: oklch(58% 0.20 25 / 0.18); }
+.env-warning:hover { background: rgba(215, 51, 55, 0.18); background: oklch(58% 0.20 25 / 0.18); }
 .env-warning-icon { font-size: 14px; flex: 0 0 auto; }
 .env-warning-text { flex: 1; color: var(--text-2); }
 .env-warning-link { color: var(--danger); font-weight: 600; flex: 0 0 auto; }

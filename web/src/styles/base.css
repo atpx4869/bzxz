@@ -65,8 +65,8 @@ body { min-height: 100vh; overflow-x: hidden; }
  * 放 base 是因为这是单一全局选择器，没有组件归属。 */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: oklch(28% 0.014 255); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: oklch(34% 0.016 255); }
+::-webkit-scrollbar-thumb { background: #242930; background: oklch(28% 0.014 255); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #323840; background: oklch(34% 0.016 255); }
 
 /* 通用计数入场动画 —— 原 public/styles.css 行 476-477。
  * .count-anim 在多个组件被复用（stats 数字、徽章计数等），keyframe + utility class

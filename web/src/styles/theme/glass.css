@@ -15,6 +15,10 @@
 /* Ambient gradient + faint orbs behind everything */
 html {
   background:
+    radial-gradient(80% 60% at 12% -8%, rgba(13, 20, 44, 0.55) 0%, transparent 60%),
+    radial-gradient(70% 55% at 105% 110%, rgba(30, 16, 33, 0.45) 0%, transparent 60%),
+    radial-gradient(60% 55% at 50% 110%, rgba(0, 21, 23, 0.35) 0%, transparent 60%),
+    var(--bg); background:
     radial-gradient(80% 60% at 12% -8%, oklch(20% 0.05 270 / 0.55) 0%, transparent 60%),
     radial-gradient(70% 55% at 105% 110%, oklch(20% 0.04 320 / 0.45) 0%, transparent 60%),
     radial-gradient(60% 55% at 50% 110%, oklch(18% 0.03 200 / 0.35) 0%, transparent 60%),
@@ -27,6 +31,8 @@ body::before {
   pointer-events: none;
   z-index: 0;
   background-image:
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px); background-image:
     linear-gradient(oklch(100% 0 0 / 0.018) 1px, transparent 1px),
     linear-gradient(90deg, oklch(100% 0 0 / 0.018) 1px, transparent 1px);
   background-size: 56px 56px;
@@ -40,101 +46,105 @@ body::before {
 
 /* Topbar — frosted */
 .topbar {
-  background: oklch(18% 0.018 260 / 0.62);
-  border-bottom-color: oklch(100% 0 0 / 0.06);
+  background: rgba(13, 18, 26, 0.62); background: oklch(18% 0.018 260 / 0.62);
+  border-bottom-color: rgba(255, 255, 255, 0.06); border-bottom-color: oklch(100% 0 0 / 0.06);
   backdrop-filter: blur(24px) saturate(140%);
   -webkit-backdrop-filter: blur(24px) saturate(140%);
-  box-shadow: 0 1px 0 oklch(100% 0 0 / 0.04) inset;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset; box-shadow: 0 1px 0 oklch(100% 0 0 / 0.04) inset;
 }
 .topbar-logo {
   width: 28px; height: 28px;
   object-fit: contain;
   flex-shrink: 0;
   align-self: center;
-  filter: drop-shadow(0 2px 4px oklch(0% 0 0 / 0.35));
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35)); filter: drop-shadow(0 2px 4px oklch(0% 0 0 / 0.35));
 }
-.topbar-btn:hover { background: oklch(100% 0 0 / 0.06); }
+.topbar-btn:hover { background: rgba(255, 255, 255, 0.06); background: oklch(100% 0 0 / 0.06); }
 
 /* Sidebar — frosted */
 .sidebar {
-  background: oklch(17% 0.016 260 / 0.55);
-  border-right-color: oklch(100% 0 0 / 0.06);
+  background: rgba(11, 16, 22, 0.55); background: oklch(17% 0.016 260 / 0.55);
+  border-right-color: rgba(255, 255, 255, 0.06); border-right-color: oklch(100% 0 0 / 0.06);
   backdrop-filter: blur(22px) saturate(140%);
   -webkit-backdrop-filter: blur(22px) saturate(140%);
 }
 .sidebar-item { transition: background 0.18s var(--ease-out), color 0.18s var(--ease-out), box-shadow 0.18s var(--ease-out); }
-.sidebar-item:hover { background: oklch(100% 0 0 / 0.05); color: var(--text); }
+.sidebar-item:hover { background: rgba(255, 255, 255, 0.05); background: oklch(100% 0 0 / 0.05); color: var(--text); }
 .sidebar-item.active {
-  background: linear-gradient(135deg, oklch(66% 0.22 250 / 0.18), oklch(62% 0.22 290 / 0.18));
-  color: oklch(82% 0.14 255);
-  box-shadow: 0 0 0 1px oklch(70% 0.20 250 / 0.22) inset,
+  background: linear-gradient(135deg, rgba(0, 149, 254, 0.18), rgba(138, 99, 254, 0.18)); background: linear-gradient(135deg, oklch(66% 0.22 250 / 0.18), oklch(62% 0.22 290 / 0.18));
+  color: #9cc7ff; color: oklch(82% 0.14 255);
+  box-shadow: 0 0 0 1px rgba(63, 163, 255, 0.22) inset,
+              0 6px 18px -10px rgba(75, 142, 255, 0.55); box-shadow: 0 0 0 1px oklch(70% 0.20 250 / 0.22) inset,
               0 6px 18px -10px oklch(66% 0.22 260 / 0.55);
 }
-.sidebar-item.active .sidebar-desc { color: oklch(70% 0.10 255); }
-.sidebar-user { border-top-color: oklch(100% 0 0 / 0.06); }
+.sidebar-item.active .sidebar-desc { color: #73a1dc; color: oklch(70% 0.10 255); }
+.sidebar-user { border-top-color: rgba(255, 255, 255, 0.06); border-top-color: oklch(100% 0 0 / 0.06); }
 .sidebar-user-avatar {
-  background: linear-gradient(135deg, oklch(66% 0.22 250 / 0.35), oklch(62% 0.22 290 / 0.35));
-  box-shadow: 0 0 0 1px oklch(100% 0 0 / 0.08) inset;
+  background: linear-gradient(135deg, rgba(0, 149, 254, 0.35), rgba(138, 99, 254, 0.35)); background: linear-gradient(135deg, oklch(66% 0.22 250 / 0.35), oklch(62% 0.22 290 / 0.35));
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset; box-shadow: 0 0 0 1px oklch(100% 0 0 / 0.08) inset;
 }
 
 /* Primary button — gradient that matches the login submit */
 .btn-primary {
-  background: linear-gradient(135deg, oklch(66% 0.22 250), oklch(60% 0.22 285));
-  box-shadow: 0 8px 22px -8px oklch(66% 0.22 260 / 0.55),
+  background: linear-gradient(135deg, #0095fe, #7960fb); background: linear-gradient(135deg, oklch(66% 0.22 250), oklch(60% 0.22 285));
+  box-shadow: 0 8px 22px -8px rgba(75, 142, 255, 0.55),
+              0 0 0 1px rgba(255, 255, 255, 0.06) inset; box-shadow: 0 8px 22px -8px oklch(66% 0.22 260 / 0.55),
               0 0 0 1px oklch(100% 0 0 / 0.06) inset;
 }
 .btn-primary:hover {
-  background: linear-gradient(135deg, oklch(70% 0.22 250), oklch(64% 0.22 285));
+  background: linear-gradient(135deg, #3fa3ff, #8472ff); background: linear-gradient(135deg, oklch(70% 0.22 250), oklch(64% 0.22 285));
   filter: brightness(1.04);
-  box-shadow: 0 12px 28px -8px oklch(66% 0.22 260 / 0.7),
+  box-shadow: 0 12px 28px -8px rgba(75, 142, 255, 0.7),
+              0 0 0 1px rgba(255, 255, 255, 0.1) inset; box-shadow: 0 12px 28px -8px oklch(66% 0.22 260 / 0.7),
               0 0 0 1px oklch(100% 0 0 / 0.10) inset;
 }
 
 /* Glass cards / panels that already use --surface get a touch of frosting */
 .confirm-card, .download-center, .auth-card-fallback,
 .user-dropdown, .shortcuts-panel {
-  background: oklch(20% 0.018 260 / 0.62);
-  border-color: oklch(100% 0 0 / 0.08);
+  background: rgba(17, 22, 30, 0.62); background: oklch(20% 0.018 260 / 0.62);
+  border-color: rgba(255, 255, 255, 0.08); border-color: oklch(100% 0 0 / 0.08);
   backdrop-filter: blur(22px) saturate(140%);
   -webkit-backdrop-filter: blur(22px) saturate(140%);
 }
 
 /* Search row — frosted glass */
 .search-row {
-  background: oklch(14% 0.018 260 / 0.55);
-  border-color: oklch(100% 0 0 / 0.08);
+  background: rgba(5, 9, 17, 0.55); background: oklch(14% 0.018 260 / 0.55);
+  border-color: rgba(255, 255, 255, 0.08); border-color: oklch(100% 0 0 / 0.08);
   backdrop-filter: blur(14px) saturate(135%);
   -webkit-backdrop-filter: blur(14px) saturate(135%);
 }
 .search-row:focus-within {
-  border-color: oklch(70% 0.20 250 / 0.6);
-  box-shadow: 0 0 0 4px oklch(66% 0.20 250 / 0.14),
+  border-color: rgba(63, 163, 255, 0.6); border-color: oklch(70% 0.20 250 / 0.6);
+  box-shadow: 0 0 0 4px rgba(0, 149, 254, 0.14),
+              0 8px 32px -8px rgba(0, 149, 254, 0.35); box-shadow: 0 0 0 4px oklch(66% 0.20 250 / 0.14),
               0 8px 32px -8px oklch(66% 0.22 250 / 0.35);
 }
 
 /* Result cards and toolbar — frosted */
 .result-card {
-  background: oklch(18% 0.014 260 / 0.55);
-  border-color: oklch(100% 0 0 / 0.07);
+  background: rgba(14, 18, 24, 0.55); background: oklch(18% 0.014 260 / 0.55);
+  border-color: rgba(255, 255, 255, 0.07); border-color: oklch(100% 0 0 / 0.07);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
 .result-card:hover {
-  background: oklch(20% 0.018 260 / 0.7);
-  border-color: oklch(100% 0 0 / 0.14);
+  background: rgba(17, 22, 30, 0.7); background: oklch(20% 0.018 260 / 0.7);
+  border-color: rgba(255, 255, 255, 0.14); border-color: oklch(100% 0 0 / 0.14);
 }
 .toolbar {
-  background: oklch(18% 0.016 260 / 0.5);
-  border-color: oklch(100% 0 0 / 0.07);
+  background: rgba(13, 18, 25, 0.5); background: oklch(18% 0.016 260 / 0.5);
+  border-color: rgba(255, 255, 255, 0.07); border-color: oklch(100% 0 0 / 0.07);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
 
 /* Source / filter chips — keep accent in line with new gradient */
 .source-tag.active, .filter-chip.active {
-  background: linear-gradient(135deg, oklch(66% 0.22 250), oklch(60% 0.22 285));
+  background: linear-gradient(135deg, #0095fe, #7960fb); background: linear-gradient(135deg, oklch(66% 0.22 250), oklch(60% 0.22 285));
   border-color: transparent;
-  box-shadow: 0 6px 18px -8px oklch(66% 0.22 260 / 0.65);
+  box-shadow: 0 6px 18px -8px rgba(75, 142, 255, 0.65); box-shadow: 0 6px 18px -8px oklch(66% 0.22 260 / 0.65);
 }
 
 /* Topbar brand spans (already inside .topbar-title) need to sit above the ::before badge cleanly */
@@ -149,7 +159,7 @@ body::before {
   left: 0; top: 8px; bottom: 8px;
   width: 3px;
   border-radius: 0 3px 3px 0;
-  background: linear-gradient(180deg, oklch(72% 0.22 250), oklch(64% 0.22 290));
-  box-shadow: 0 0 12px oklch(70% 0.22 260 / 0.6);
+  background: linear-gradient(180deg, #51a9ff, #8f6cff); background: linear-gradient(180deg, oklch(72% 0.22 250), oklch(64% 0.22 290));
+  box-shadow: 0 0 12px rgba(98, 157, 255, 0.6); box-shadow: 0 0 12px oklch(70% 0.22 260 / 0.6);
 }
 .sidebar-item { position: relative; }

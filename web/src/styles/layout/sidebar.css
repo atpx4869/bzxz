@@ -5,14 +5,14 @@
 .sidebar-nav { flex: 1; padding: 8px 0; }
 .sidebar-item { display: flex; align-items: center; gap: 10px; padding: 9px 16px; margin: 1px 8px; border-radius: var(--radius-sm); cursor: pointer; color: var(--text-2); font-size: 13px; font-weight: 500; transition: all 0.15s var(--ease-out); user-select: none; white-space: nowrap; border: none; background: none; width: calc(100% - 16px); text-align: left; }
 .sidebar-item:hover { background: var(--surface-h); color: var(--text); }
-.sidebar-item.active { background: oklch(66% 0.20 250 / 0.12); color: var(--accent); }
+.sidebar-item.active { background: rgba(0, 149, 254, 0.12); background: oklch(66% 0.20 250 / 0.12); color: var(--accent); }
 .sidebar-item .sidebar-icon { font-size: 16px; flex-shrink: 0; width: 20px; text-align: center; }
 .sidebar-item .sidebar-text { flex: 1; overflow: hidden; transition: opacity 0.2s var(--ease-out), width 0.2s var(--ease-out); }
 .sidebar-item .sidebar-desc { font-size: 11px; color: var(--text-3); font-weight: 400; display: block; margin-top: 1px; }
-.sidebar-sep { height: 1px; background: oklch(30% 0.012 255 / 0.4); margin: 4px 16px; }
+.sidebar-sep { height: 1px; background: rgba(42, 46, 52, 0.4); background: oklch(30% 0.012 255 / 0.4); margin: 4px 16px; }
 .sidebar-user { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; cursor: pointer; transition: background 0.15s; }
 .sidebar-user:hover { background: var(--surface-h); }
-.sidebar-user-avatar { width: 32px; height: 32px; border-radius: 50%; background: oklch(66% 0.20 250 / 0.15); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+.sidebar-user-avatar { width: 32px; height: 32px; border-radius: 50%; background: rgba(0, 149, 254, 0.15); background: oklch(66% 0.20 250 / 0.15); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
 .sidebar-user-info { flex: 1; min-width: 0; overflow: hidden; }
 .sidebar-user-name { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sidebar-user-role { font-size: 11px; color: var(--text-3); }

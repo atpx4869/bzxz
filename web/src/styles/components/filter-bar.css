@@ -3,13 +3,13 @@
 
 .filter-bar { display: none; align-items: center; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
 .filter-bar.visible { display: flex; }
-.filter-sep { width: 1px; height: 22px; background: oklch(30% 0.012 255 / 0.5); margin: 0 6px; }
+.filter-sep { width: 1px; height: 22px; background: rgba(42, 46, 52, 0.5); background: oklch(30% 0.012 255 / 0.5); margin: 0 6px; }
 .filter-chip { padding: 5px 14px; border-radius: 100px; font-size: 12px; font-weight: 500; cursor: pointer; user-select: none; border: 1px solid var(--border); background: transparent; color: var(--text-2); transition: all 0.18s var(--ease-out); }
 .filter-chip:hover { border-color: var(--text-2); color: var(--text); }
-.filter-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 2px 8px oklch(66% 0.20 250 / 0.2); }
+.filter-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(0, 149, 254, 0.2); box-shadow: 0 2px 8px oklch(66% 0.20 250 / 0.2); }
 .filter-chip .chip-count { opacity: 0.6; margin-left: 4px; font-weight: 400; }
 .filter-sort { margin-left: auto; display: inline-flex; align-items: center; gap: 7px; color: var(--text-3); font-size: 12px; }
-.filter-sort select { height: 30px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: oklch(18% 0.014 255 / 0.72); color: var(--text-2); padding: 0 10px; outline: none; font: 600 12px 'DM Sans', sans-serif; }
+.filter-sort select { height: 30px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: rgba(13, 18, 24, 0.72); background: oklch(18% 0.014 255 / 0.72); color: var(--text-2); padding: 0 10px; outline: none; font: 600 12px 'DM Sans', sans-serif; }
 .filter-sort select:focus { border-color: var(--accent); color: var(--text); }
 .filter-chip[data-filter-toggle] { border-style: dashed; }
 .filter-chip[data-filter-toggle].active { border-style: solid; }

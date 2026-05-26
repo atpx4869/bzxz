@@ -1,13 +1,13 @@
 /* Users page —— 原 public/styles.css 行 720–732。 */
 
 .users-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.users-table th { text-align: left; padding: 10px 12px; color: var(--text-3); font-weight: 500; border-bottom: 1px solid oklch(28% 0.014 255 / 0.4); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
-.users-table td { padding: 10px 12px; border-bottom: 1px solid oklch(25% 0.012 255 / 0.3); color: var(--text-2); }
+.users-table th { text-align: left; padding: 10px 12px; color: var(--text-3); font-weight: 500; border-bottom: 1px solid rgba(36, 41, 48, 0.4); border-bottom: 1px solid oklch(28% 0.014 255 / 0.4); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.users-table td { padding: 10px 12px; border-bottom: 1px solid rgba(30, 34, 39, 0.3); border-bottom: 1px solid oklch(25% 0.012 255 / 0.3); color: var(--text-2); }
 .users-table .badge { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 11px; font-weight: 500; }
-.badge-admin { background: oklch(66% 0.20 250 / 0.12); color: var(--accent); }
-.badge-user { background: oklch(50% 0.014 255 / 0.15); color: var(--text-2); }
-.badge-active { background: oklch(70% 0.16 158 / 0.12); color: var(--success); }
-.badge-inactive { background: oklch(60% 0.20 25 / 0.12); color: var(--danger); }
+.badge-admin { background: rgba(0, 149, 254, 0.12); background: oklch(66% 0.20 250 / 0.12); color: var(--accent); }
+.badge-user { background: rgba(94, 100, 107, 0.15); background: oklch(50% 0.014 255 / 0.15); color: var(--text-2); }
+.badge-active { background: rgba(21, 187, 119, 0.12); background: oklch(70% 0.16 158 / 0.12); color: var(--success); }
+.badge-inactive { background: rgba(222, 59, 61, 0.12); background: oklch(60% 0.20 25 / 0.12); color: var(--danger); }
 .users-actions { display: flex; gap: 6px; }
 .users-actions button { padding: 4px 10px; border-radius: 5px; border: 1px solid var(--border); background: transparent; color: var(--text-2); font-size: 11px; cursor: pointer; transition: all 0.12s; }
 .users-actions button:hover { border-color: var(--accent); color: var(--accent); }

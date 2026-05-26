@@ -2,33 +2,33 @@
  * 窄屏 grid 重排（行 907–908、914–916）归 responsive.css。 */
 
 .batch-workspace { display: grid; gap: 14px; }
-.batch-card { border: 1px solid oklch(26% 0.012 255 / 0.48); border-radius: var(--radius); background: oklch(17% 0.014 255 / 0.46); padding: 16px; }
+.batch-card { border: 1px solid rgba(32, 36, 42, 0.48); border: 1px solid oklch(26% 0.012 255 / 0.48); border-radius: var(--radius); background: rgba(11, 16, 21, 0.46); background: oklch(17% 0.014 255 / 0.46); padding: 16px; }
 .batch-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
 .batch-card-head h3 { font-size: 15px; font-weight: 650; color: var(--text); }
 .batch-kicker { color: var(--text-3); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
-.batch-mode-pill { max-width: 100%; padding: 5px 10px; border: 1px solid oklch(30% 0.012 255 / 0.6); border-radius: 999px; color: var(--text-2); background: oklch(20% 0.014 255 / 0.62); font-size: 11px; line-height: 1.5; text-align: right; }
+.batch-mode-pill { max-width: 100%; padding: 5px 10px; border: 1px solid rgba(42, 46, 52, 0.6); border: 1px solid oklch(30% 0.012 255 / 0.6); border-radius: 999px; color: var(--text-2); background: rgba(18, 22, 28, 0.62); background: oklch(20% 0.014 255 / 0.62); font-size: 11px; line-height: 1.5; text-align: right; }
 .batch-action-hint { color: var(--text-3); font-size: 12px; }
-.batch-results-empty { padding: 22px 16px; border: 1px dashed oklch(30% 0.012 255 / 0.55); border-radius: var(--radius-sm); color: var(--text-3); font-size: 13px; text-align: center; background: oklch(15% 0.014 255 / 0.42); }
-.batch-results-empty.fail { color: var(--danger); border-color: oklch(60% 0.20 25 / 0.34); }
+.batch-results-empty { padding: 22px 16px; border: 1px dashed rgba(42, 46, 52, 0.55); border: 1px dashed oklch(30% 0.012 255 / 0.55); border-radius: var(--radius-sm); color: var(--text-3); font-size: 13px; text-align: center; background: rgba(7, 11, 17, 0.42); background: oklch(15% 0.014 255 / 0.42); }
+.batch-results-empty.fail { color: var(--danger); border-color: rgba(222, 59, 61, 0.34); border-color: oklch(60% 0.20 25 / 0.34); }
 .batch-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
-.batch-stat { padding: 10px 12px; border: 1px solid oklch(26% 0.012 255 / 0.45); border-radius: var(--radius-sm); background: oklch(17% 0.014 255 / 0.55); }
+.batch-stat { padding: 10px 12px; border: 1px solid rgba(32, 36, 42, 0.45); border: 1px solid oklch(26% 0.012 255 / 0.45); border-radius: var(--radius-sm); background: rgba(11, 16, 21, 0.55); background: oklch(17% 0.014 255 / 0.55); }
 .batch-stat strong { display: block; font: 600 18px/1 'DM Sans', sans-serif; color: var(--text); }
 .batch-stat span { display: block; margin-top: 4px; font-size: 11px; color: var(--text-3); }
 .batch-stat.warn strong { color: var(--warning); }
 .batch-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0 8px; }
 .batch-results-list { display: grid; gap: 6px; }
-.batch-result-card { display: grid; grid-template-columns: 20px minmax(120px, 170px) minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid oklch(26% 0.012 255 / 0.4); border-radius: var(--radius-sm); background: oklch(21% 0.016 255 / 0.4); font-size: 13px; transition: border-color 0.15s, background 0.15s; }
-.batch-result-card:hover { border-color: oklch(34% 0.014 255 / 0.55); background: oklch(22% 0.016 255 / 0.55); }
+.batch-result-card { display: grid; grid-template-columns: 20px minmax(120px, 170px) minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid rgba(32, 36, 42, 0.4); border: 1px solid oklch(26% 0.012 255 / 0.4); border-radius: var(--radius-sm); background: rgba(19, 25, 32, 0.4); background: oklch(21% 0.016 255 / 0.4); font-size: 13px; transition: border-color 0.15s, background 0.15s; }
+.batch-result-card:hover { border-color: rgba(51, 56, 63, 0.55); border-color: oklch(34% 0.014 255 / 0.55); background: rgba(22, 27, 34, 0.55); background: oklch(22% 0.016 255 / 0.55); }
 .batch-result-card input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; width: 15px; height: 15px; }
 .batch-result-card .card-num { font: 500 12px 'DM Mono', monospace; color: var(--accent); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .batch-result-card .card-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
-.batch-result-card .card-src { font-size: 10px; color: var(--text-3); padding: 2px 8px; background: oklch(24% 0.016 255 / 0.5); border-radius: var(--radius-sm); flex-shrink: 0; font-weight: 600; }
+.batch-result-card .card-src { font-size: 10px; color: var(--text-3); padding: 2px 8px; background: rgba(26, 32, 39, 0.5); background: oklch(24% 0.016 255 / 0.5); border-radius: var(--radius-sm); flex-shrink: 0; font-weight: 600; }
 .batch-result-card.unmatched { grid-template-columns: minmax(120px, 170px) minmax(0, 1fr); opacity: 0.72; }
 .batch-result-card.unmatched .card-num { color: var(--text-3); }
 .batch-result-card.unmatched .card-title { color: var(--text-3); font-style: italic; }
 
-.batch-textarea { width: 100%; min-height: 170px; padding: 16px 18px; background: oklch(21% 0.016 255 / 0.5); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font: 400 13px/1.9 'DM Mono', monospace; resize: vertical; outline: none; transition: border-color 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out); }
-.batch-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px oklch(66% 0.20 250 / 0.10); }
+.batch-textarea { width: 100%; min-height: 170px; padding: 16px 18px; background: rgba(19, 25, 32, 0.5); background: oklch(21% 0.016 255 / 0.5); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font: 400 13px/1.9 'DM Mono', monospace; resize: vertical; outline: none; transition: border-color 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out); }
+.batch-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0, 149, 254, 0.1); box-shadow: 0 0 0 3px oklch(66% 0.20 250 / 0.10); }
 .batch-textarea::placeholder { color: var(--text-3); }
 .batch-actions { display: flex; gap: 8px; margin-top: 14px; align-items: center; flex-wrap: wrap; }
 .batch-summary { color: var(--text-2); font-size: 12px; text-align: right; }

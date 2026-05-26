@@ -12,7 +12,7 @@
 .shortcuts-overlay.open { display: flex; }
 .shortcuts-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 32px 36px; box-shadow: 0 24px 80px rgba(0,0,0,0.5); min-width: 400px; animation: toastIn 0.25s var(--ease-spring); }
 .shortcuts-panel h3 { font-size: 16px; font-weight: 600; margin-bottom: 18px; }
-.shortcuts-panel .kbd-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid oklch(26% 0.012 255 / 0.3); font-size: 13px; }
+.shortcuts-panel .kbd-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(32, 36, 42, 0.3); border-bottom: 1px solid oklch(26% 0.012 255 / 0.3); font-size: 13px; }
 .shortcuts-panel .kbd-row:last-child { border: none; }
 .shortcuts-panel .kbd-key { display: inline-flex; gap: 4px; }
 .shortcuts-panel .kbd-key kbd { display: inline-block; padding: 3px 10px; border-radius: 5px; background: var(--surface-h); border: 1px solid var(--border); font: 400 11px 'DM Mono', monospace; color: var(--text-2); box-shadow: 0 1px 2px rgba(0,0,0,0.2); }

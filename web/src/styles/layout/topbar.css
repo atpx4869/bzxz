@@ -10,21 +10,21 @@
 .topbar-btn { width: 36px; height: 36px; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--text-3); cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; transition: all 0.15s var(--ease-out); }
 .topbar-btn:hover { background: var(--surface-h); color: var(--text); }
 .topbar-btn.update-badge { display: none; width: auto; padding: 0 10px; color: var(--text-2); font-size: 12px; font-weight: 700; white-space: nowrap; }
-.topbar-btn.update-badge.has-update { display: inline-flex; color: var(--success); border: 1px solid oklch(70% 0.16 158 / 0.35); background: oklch(70% 0.16 158 / 0.08); }
+.topbar-btn.update-badge.has-update { display: inline-flex; color: var(--success); border: 1px solid rgba(21, 187, 119, 0.35); border: 1px solid oklch(70% 0.16 158 / 0.35); background: rgba(21, 187, 119, 0.08); background: oklch(70% 0.16 158 / 0.08); }
 .source-health-strip { display: flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0; max-width: 36vw; overflow: hidden; }
-.source-health-mini { height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border: 1px solid oklch(30% 0.012 255 / 0.5); border-radius: var(--radius-sm); background: oklch(17% 0.014 255 / 0.62); color: var(--text-2); font: 600 11px 'DM Sans', sans-serif; cursor: pointer; white-space: nowrap; transition: border-color 0.16s var(--ease-out), background 0.16s var(--ease-out), color 0.16s var(--ease-out); }
-.source-health-mini:hover { border-color: oklch(42% 0.016 255 / 0.65); color: var(--text); background: oklch(23% 0.016 255 / 0.72); }
+.source-health-mini { height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border: 1px solid rgba(42, 46, 52, 0.5); border: 1px solid oklch(30% 0.012 255 / 0.5); border-radius: var(--radius-sm); background: rgba(11, 16, 21, 0.62); background: oklch(17% 0.014 255 / 0.62); color: var(--text-2); font: 600 11px 'DM Sans', sans-serif; cursor: pointer; white-space: nowrap; transition: border-color 0.16s var(--ease-out), background 0.16s var(--ease-out), color 0.16s var(--ease-out); }
+.source-health-mini:hover { border-color: rgba(71, 78, 86, 0.65); border-color: oklch(42% 0.016 255 / 0.65); color: var(--text); background: rgba(24, 29, 36, 0.72); background: oklch(23% 0.016 255 / 0.72); }
 .source-health-mini b { color: var(--text); font-weight: 700; }
 .source-health-mini span { color: var(--text-3); font-weight: 600; }
-.source-health-mini.ok { border-color: oklch(70% 0.16 158 / 0.28); }
+.source-health-mini.ok { border-color: rgba(21, 187, 119, 0.28); border-color: oklch(70% 0.16 158 / 0.28); }
 .source-health-mini.ok span { color: var(--success); }
-.source-health-mini.bad { border-color: oklch(60% 0.20 25 / 0.36); }
+.source-health-mini.bad { border-color: rgba(222, 59, 61, 0.36); border-color: oklch(60% 0.20 25 / 0.36); }
 .source-health-mini.bad span { color: var(--danger); }
 .source-health-mini.loading span { color: var(--warning); }
 .source-health-mini.muted { color: var(--text-3); }
 .download-center-toggle { width: auto; min-width: 58px; gap: 7px; padding: 0 10px; font-size: 12px; font-weight: 700; }
-#downloadCenterBadge { min-width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; border-radius: 999px; background: oklch(66% 0.20 250 / 0.18); color: var(--accent-h); font-size: 10px; font-weight: 800; }
-#downloadCenterBadge.warn { background: oklch(60% 0.20 25 / 0.2); color: var(--danger); }
+#downloadCenterBadge { min-width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; border-radius: 999px; background: rgba(0, 149, 254, 0.18); background: oklch(66% 0.20 250 / 0.18); color: var(--accent-h); font-size: 10px; font-weight: 800; }
+#downloadCenterBadge.warn { background: rgba(222, 59, 61, 0.2); background: oklch(60% 0.20 25 / 0.2); color: var(--danger); }
 
 /* Brand tokens in the topbar —— 原行 686–689 */
 .topbar-title .topbar-brand { font-weight: 700; color: var(--text); letter-spacing: 0.02em; }

@@ -116,7 +116,12 @@ npm test                 # 运行测试
 npm run inspect:gbw:source   # gbw源搜索勘察
 npm run inspect:gbw:detail   # gbw源详情勘察
 npm run inspect:gbw:showgb   # gbw下载页勘察
+
+npm run oklch:fix        # 给所有 CSS 里 oklch() 注入 sRGB fallback（Win7 Chrome 兼容）
+npm run oklch:check      # 只检查，有未配对 oklch 退非零（CI 守门）
 ```
+
+> **写新 oklch() 后必跑 `npm run oklch:fix`**。oklch 要 Chrome 111+，Win7 Chrome 最高 109 整条 declaration 解析失败 → 主题崩。脚本扫 `public/styles.css` + `web/src/styles/**/*.css`，给每条 `xxx: oklch(...)` 插一条等价 `xxx: #RRGGBB` 在前面；幂等，可反复跑。色值经 OKLab → sRGB + gamut mapping（保 L、保 h、二分搜最大 C），不会偏色。
 
 ## API 快速参考
 

@@ -3,8 +3,8 @@
  * 内嵌 @media 与本组件耦合紧密，按 SECTIONS.md 保留在本文件，
  * 不并入 responsive.css。 */
 
-.skeleton-card { display: flex; align-items: center; gap: 16px; padding: 18px 22px; border-radius: var(--radius); background: oklch(19% 0.014 255 / 0.5); border: 1px solid oklch(26% 0.012 255 / 0.3); margin-bottom: 10px; }
-.skeleton-line { height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--surface-h) 25%, oklch(28% 0.014 255) 50%, var(--surface-h) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+.skeleton-card { display: flex; align-items: center; gap: 16px; padding: 18px 22px; border-radius: var(--radius); background: rgba(16, 20, 26, 0.5); background: oklch(19% 0.014 255 / 0.5); border: 1px solid rgba(32, 36, 42, 0.3); border: 1px solid oklch(26% 0.012 255 / 0.3); margin-bottom: 10px; }
+.skeleton-line { height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--surface-h) 25%, #242930 50%, var(--surface-h) 75%); background: linear-gradient(90deg, var(--surface-h) 25%, oklch(28% 0.014 255) 50%, var(--surface-h) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
 .skeleton-line.w60 { width: 60%; }
 .skeleton-line.w40 { width: 40%; }
 .skeleton-line.w80 { width: 80%; height: 14px; margin-bottom: 8px; }

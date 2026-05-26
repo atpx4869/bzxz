@@ -27,7 +27,7 @@
   display: flex; align-items: center; gap: 12px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
-  background: oklch(17% 0.014 255 / 0.6);
+  background: rgba(11, 16, 21, 0.6); background: oklch(17% 0.014 255 / 0.6);
 }
 .preview-title {
   flex: 1; min-width: 0;
@@ -67,7 +67,7 @@ body:not(.force-desktop) .preview-title { font-size: 13px; }
 .library-banner.err  { background: rgba(239, 68, 68, 0.12);  color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.35); }
 .library-row {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 8px 0; border-bottom: 1px solid oklch(26% 0.012 255 / 0.32);
+  padding: 8px 0; border-bottom: 1px solid rgba(32, 36, 42, 0.32); border-bottom: 1px solid oklch(26% 0.012 255 / 0.32);
 }
 .library-row:last-child { border-bottom: 0; }
 .library-row-label {
@@ -75,12 +75,12 @@ body:not(.force-desktop) .preview-title { font-size: 13px; }
 }
 .library-row-value { color: var(--text); font-size: 13px; overflow-wrap: anywhere; }
 .library-row code.library-row-value {
-  background: oklch(17% 0.014 255 / 0.5); padding: 4px 8px; border-radius: 6px;
+  background: rgba(11, 16, 21, 0.5); background: oklch(17% 0.014 255 / 0.5); padding: 4px 8px; border-radius: 6px;
   font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 .library-input {
   flex: 1; min-width: 240px; padding: 6px 10px;
-  background: oklch(17% 0.014 255 / 0.5); color: var(--text);
+  background: rgba(11, 16, 21, 0.5); background: oklch(17% 0.014 255 / 0.5); color: var(--text);
   border: 1px solid var(--border); border-radius: 6px;
   font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }

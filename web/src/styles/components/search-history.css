@@ -4,7 +4,7 @@
 .search-history { display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 16px 48px rgba(0,0,0,0.45); z-index: 350; overflow: hidden; }
 .search-history.open { display: block; animation: histIn 0.18s var(--ease-out); }
 @keyframes histIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
-.search-history-item { display: flex; align-items: center; gap: 10px; padding: 11px 18px; cursor: pointer; font-size: 14px; color: var(--text-2); border-bottom: 1px solid oklch(26% 0.012 255 / 0.3); transition: background 0.1s var(--ease-out); }
+.search-history-item { display: flex; align-items: center; gap: 10px; padding: 11px 18px; cursor: pointer; font-size: 14px; color: var(--text-2); border-bottom: 1px solid rgba(32, 36, 42, 0.3); border-bottom: 1px solid oklch(26% 0.012 255 / 0.3); transition: background 0.1s var(--ease-out); }
 .search-history-item:last-child { border: none; }
 .search-history-item:hover { background: var(--surface-h); color: var(--text); }
 .search-history-item .hist-icon { color: var(--text-3); font-size: 12px; }

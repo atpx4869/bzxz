@@ -132,7 +132,7 @@ start.bat
 ├── public/              # 前端 SPA (legacy index.html + styles.css，过渡期保留)
 ├── web/                 # 新前端：Vite + TypeScript（详见 web/README.md）
 │   └── src/styles/      # 模块化 CSS（base / layout / components / pages / responsive / theme）
-├── scripts/             # 勘察脚本 + 注册机 + OCR 桥接
+├── scripts/             # 勘察脚本 + 注册机 + OCR 桥接 + css-oklch-fallback.mjs（老浏览器兼容）
 ├── src/
 │   ├── api/             # Express 路由（含 auth/admin/stats/资质）
 │   ├── domain/          # 领域模型 + SourceAdapter 接口
@@ -365,6 +365,8 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **Win7 老浏览器全面兼容** — `scripts/css-oklch-fallback.mjs` 给 34 个 CSS 文件、773 条 `oklch()` declaration 一次性注入 sRGB hex / rgba fallback；新写 oklch 后跑 `npm run oklch:fix`，CI 用 `npm run oklch:check` 守门
+- **BZ 下载修复** — packaged Electron 跑 pdf-merge-worker 报 `Cannot find package 'pdf-lib'`：补 `pdf-lib` + `@pdf-lib` + `pako` + `tslib` 到 `asarUnpack`
 - **前端模块化（P1）** — `public/styles.css` 1179 行整体拆分为 31 个文件，
   布局在 `web/src/styles/{base,layout,components,pages,responsive,theme}/`。过渡期与原文件
   重复加载、cascade 等价，零视觉回归；详见 [`web/src/styles/SECTIONS.md`](./web/src/styles/SECTIONS.md)

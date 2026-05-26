@@ -39,6 +39,19 @@
 - Linux 沙箱常态化挂掉，Claude 一般跑不了 `git`。**生成 `git add / commit / push` 命令块** 让用户复制到本机执行。
 - commit message 用中文、第一行扼要描述、空行后展开 why + how，每点列清楚改了哪些文件 / 解决了什么。
 
+## OKLCh fallback 约定（**强制**）
+
+任何新写的 `oklch(...)` 都必须有 sRGB fallback。直接写 `xxx: oklch(...)` 在 Win7
+Chrome ≤109 上整条 declaration 解析失败，主题崩。
+
+**How to apply:**
+
+- 写完新 oklch 后跑 `npm run oklch:fix`，脚本会在前面注入一条 `xxx: #RRGGBB` 或
+  `xxx: rgba(R,G,B,a)` fallback（脚本幂等，可反复跑）
+- CI 用 `npm run oklch:check` 守门
+- 算法：OKLab → sRGB + gamut mapping（保 L、保 h、二分搜 sRGB 内最大 C），不偏色
+- 脚本只看 value 里的 oklch — 注释里写 `oklch()` 是文档说明、不会被误处理
+
 ## CSS 迁移期约定（**重要**）
 
 `public/styles.css` 与 `web/src/styles/*` **同时存在**，是有意为之的过渡态：
