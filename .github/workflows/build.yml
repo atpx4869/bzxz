@@ -95,12 +95,15 @@ jobs:
           name: bzxz-${{ env.APP_VERSION }}-nsis-win
           path: dist-nsis/
 
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2.4.1
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          name: bzxz ${{ env.APP_VERSION }}
-          make_latest: true
-          files: |
-            release/*.exe
-            source-backup/*.zip
+      # softprops/action-gh-release 在 codeload CDN 上下不下来（任何 SHA 都 404），
+      # 暂时禁用自动 Release。NSIS / portable / source 三个 artifact 仍正常上传，
+      # 从 Actions 页面右侧 Artifacts 直接下载。codeload 恢复后再启用。
+      # - name: Publish GitHub Release
+      #   uses: softprops/action-gh-release@v2.4.1
+      #   with:
+      #     tag_name: ${{ env.RELEASE_TAG }}
+      #     name: bzxz ${{ env.APP_VERSION }}
+      #     make_latest: true
+      #     files: |
+      #       release/*.exe
+      #       source-backup/*.zip
