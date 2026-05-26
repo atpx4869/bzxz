@@ -218,8 +218,16 @@ function buildQualColumn(title, color, colItems, opts) {
   }
   var html = '';
   var groupIdx = 0;
+  // 含"全部参数"/"部分参数"的记录置顶 —— 这类条目代表整张证书覆盖范围，比单项检测更
+  // 有信号价值（用户展开看的就是"这家有没有这个标准的能力"，是/否的判定看这一条最快）。
+  // 单调 stable 排序：判定关键字时给 0 / 1，命中的排前面，其它保持原顺序
+  function paramScopeRank(it) {
+    var s = (it.testItem || '') + ' ' + (it.testStandard || '');
+    return /全部参数|部分参数/.test(s) ? 0 : 1;
+  }
   for (var code in groups) {
     var grp = groups[code];
+    grp.items.sort(function (a, b) { return paramScopeRank(a) - paramScopeRank(b); });
     var gid = gidPrefix + title + '_' + (groupIdx++);
     var cleanName = cleanStdNameForQual(code, grp.stdName);
     var rows = grp.items.map(function (it) {
