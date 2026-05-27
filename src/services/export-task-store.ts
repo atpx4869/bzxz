@@ -59,13 +59,18 @@ export class ExportTaskStore {
     this.update(taskId, { status: 'running' });
   }
 
-  markSuccess(taskId: string, result: ExportResult): void {
+  markSuccess(
+    taskId: string,
+    result: ExportResult & { fileId?: number; libraryError?: string },
+  ): void {
     this.update(taskId, {
       status: 'success',
       filePath: result.filePath,
       fileName: result.fileName,
       fileSize: result.fileSize,
       totalPages: result.totalPages,
+      ...(result.fileId !== undefined ? { fileId: result.fileId } : {}),
+      ...(result.libraryError !== undefined ? { libraryError: result.libraryError } : {}),
     });
     this.releaseActive(taskId);
   }

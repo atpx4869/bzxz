@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **桌面端下载统一入库 + 绿点秒亮**：之前残留两个 UX 漏洞 —— ① Electron 用户下载完同一份 PDF 会出现两份（一份在 `<exe>\standards\` 由后端 `moveDownloadToLibrary` 写入，一份在 `Desktop/bzxz/` 由 `will-download` 钩子写入，因为前端 `triggerDownload` 又触发了一次 HTTP 下载）；② 下载成功后绿点不会立刻亮，要等下次搜索 / `library-check` 才更新。
+  - **前端 `triggerDownload` 在 Electron 早返回**：`public/js/app-detail-utils.js` 里检查 `window.bzxz?.isElectron`，是就 `return`，不再创建 `<a download>` 触发浏览器下载流。Web 浏览器侧（手机访问）逻辑不变，仍然走 `/api/downloads/:filename` 拿一份本地副本。
+  - **后端 BZ/BY `/export` 接 `moveDownloadToLibrary`**：原 `ExportTaskService.runTask` 跑完 adapter 就 `markSuccess`，文件停留在 `data/exports/`，与 `multi-download` / `auto-download` 走的入库路径不一致 → 桌面"下载"按钮按一下 BZ/BY PDF 不会到 `standards/` 库、绿点也无从亮起。现在 `runTask` 在 adapter 完成后立即调 `moveDownloadToLibrary`，把入库后的 `fileId` / 可能的 `libraryError` 透回 SSE 流的最终 frame。`ExportTask` 接口加 `fileId?: number; libraryError?: string`；`markSuccess` 签名扩展接受这两个字段；`ExportTaskService` 构造函数追加 `db / sourceRegistry / source` 参数，`standards-routes.ts:277` 调用点同步更新。失败不影响 task 成功状态 —— 文件下下来了就算成功，入库错把 `libraryError` 冒给前端按 `library_failed` 一样处理。
+  - **前端 4 个下载入口统一 `markLibraryHit`**：`public/js/app-download.js` 加 helper `markLibraryHit(resultId, fileId)`，下载成功后写入 `_libraryFileIds` Map 并调 `applyLibraryDots()` 刷新绿点。在 `downloadOne`（级联）/ `downloadSpecificSource`（指定源）/ `downloadSelected` worker（批量勾选）/ `doCascadeDownload` worker（批量级联）四个成功分支统一调用。BW 从 `data.fileId` 拿、BZ/BY 从 SSE `td.fileId` 拿、`multi-download` 从 `data.fileId` 拿 —— 三条响应路径的 `fileId` 字段都已经在后端补齐。下载完按钮右上角绿点几百毫秒内点亮。
 - **Popup 预览 AbortController 独立化**：修复连续点不同标准的预览时第一个 popup tab 卡在 loading 不动的 bug。
   - **原 bug**：`_previewPollAbort` 全局变量被 overlay 路径和 popup 路径共用。用户点预览 A → popup A 启动 poll，ctrl A 写入全局；回主页点预览 B → `runPreviewWithPopup` 头部 `_previewPollAbort.abort()` 把 A 的 poll 杀了 → A 标签页永远卡在 loading 骨架。
   - **修复**：`runPreviewWithPopup` 自己 `new AbortController()`，传给 `pollPreviewTaskForPopup`。每个 popup 独立 controller，互不干扰；fetch 也挂 signal 让网络层一并取消。

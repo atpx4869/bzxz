@@ -95,6 +95,21 @@ function findResultByAnyId(id) {
   return results.find(r => r.id === id || (r._sourceIds && Object.values(r._sourceIds).includes(id)));
 }
 
+/**
+ * 下载成功后把 fileId 写回 _libraryFileIds 并刷新绿点。
+ * 避免用户等到下次搜索 / library-check 才看到"已下载"提示 —— 现在按下载完按钮
+ * 几百毫秒内对应行的预览按钮右上角就亮绿点。
+ *
+ * resultId 是搜索结果上的 r.id（也是 DOM data-id），而非 source-specific 的 srcId。
+ * 4 个下载入口（单源 / 指定源 / 批量勾选 / 批量级联）拿到 winner.fileId 后统一调这里。
+ */
+function markLibraryHit(resultId, fileId) {
+  if (!resultId || !fileId) return;
+  if (typeof _libraryFileIds === 'undefined') return; // app-search.js 还没加载
+  _libraryFileIds.set(resultId, fileId);
+  if (typeof applyLibraryDots === 'function') applyLibraryDots();
+}
+
 function sourceFromStandardId(id) {
   return String(id || '').split(':')[0];
 }
@@ -173,6 +188,7 @@ async function downloadOne(id, btn) {
     const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
     updateLog(logId, `${r.standardNumber} ✅ ${srcLabel(winner.source)}完成 ${winner.fileName}${sizeStr}`, 'success');
     setRowDownloadState(r.id, 'success');
+    markLibraryHit(r.id, winner.fileId);
     if (winner.fileName) { triggerDownload(winner.fileName); recordDownload(winner.source, winner.fileName, r.standardNumber); }
     completeDownloadTask(taskId, 'success', { source: winner.source, fileName: winner.fileName, fileSize: winner.fileSize, progress: `${srcLabel(winner.source)} 下载完成` });
     showToast(`${srcLabel(winner.source)} 下载完成: ${winner.fileName || r.standardNumber}`);
@@ -211,6 +227,7 @@ async function downloadSpecificSource(id, source, btn) {
     const sizeStr = result.fileSize ? ` ${formatSize(result.fileSize)}` : '';
     updateLog(logId, `${label} ✅ ${srcLabel(result.source)} ${result.fileName || ''}${sizeStr}`, 'success');
     setRowDownloadState(rowId, 'success');
+    markLibraryHit(rowId, result.fileId);
     if (result.fileName) { triggerDownload(result.fileName); recordDownload(result.source, result.fileName, label); }
     completeDownloadTask(taskId, 'success', { source: result.source, fileName: result.fileName, fileSize: result.fileSize, progress: `${srcLabel(result.source)} 下载完成` });
     showToast(`${srcLabel(result.source)} 下载完成: ${result.fileName || label}`);
@@ -246,7 +263,9 @@ async function downloadGbw(id, onProgress) {
   if (!res.ok) throw new Error(downloadErrorMessage('BW', res, data));
   if (data.status === 'downloaded') {
     const meta = data.meta || {};
-    return { source: 'gbw', fileName: meta.fileName || data.fileName || '', fileSize: meta.fileSize };
+    // fileId 是入库后的库文件主键。后端 moveDownloadToLibrary 入库成功时填入响应；
+    // 入库失败（library_failed 分支）也会走 throw 不到这里。带出来给绿点 + 预览秒开复用。
+    return { source: 'gbw', fileName: meta.fileName || data.fileName || '', fileSize: meta.fileSize, fileId: data.fileId };
   }
   throw new Error(downloadErrorMessage('BW', res, data));
 }
@@ -264,7 +283,7 @@ async function downloadBz(id, onProgress) {
       if (!ev.ok) { clearTimeout(timeout); es.close(); reject(new Error(`BZ ${ev.error.message || '失败'}`)); return; }
       const td = ev.value;
       if (td.currentPage && td.totalPages && onProgress) onProgress(`BZ 下载 ${td.currentPage}/${td.totalPages} 页`);
-      if (td.status === 'success') { clearTimeout(timeout); es.close(); const elapsed = ((Date.now() - t0) / 1000).toFixed(1); const sizeStr = td.fileSize ? ` ${formatSize(td.fileSize)}` : ''; resolve({ source: 'bz', fileName: td.fileName || '', fileSize: td.fileSize, meta: `${elapsed}s${sizeStr}` }); }
+      if (td.status === 'success') { clearTimeout(timeout); es.close(); const elapsed = ((Date.now() - t0) / 1000).toFixed(1); const sizeStr = td.fileSize ? ` ${formatSize(td.fileSize)}` : ''; resolve({ source: 'bz', fileName: td.fileName || '', fileSize: td.fileSize, fileId: td.fileId, meta: `${elapsed}s${sizeStr}` }); }
       if (td.status === 'failed') { clearTimeout(timeout); es.close(); reject(new Error(`BZ ${td.errorMessage || '失败'}`)); }
     };
     es.onerror = () => { clearTimeout(timeout); es.close(); reject(new Error('BZ SSE连接失败')); };
@@ -284,7 +303,7 @@ async function downloadBy(id, onProgress) {
       if (!ev.ok) { clearTimeout(timeout); es.close(); reject(new Error(`BY ${ev.error.message || '失败'}`)); return; }
       const td = ev.value;
       if (td.status === 'running' && onProgress) onProgress('BY 下载中...');
-      if (td.status === 'success') { clearTimeout(timeout); es.close(); const elapsed = ((Date.now() - t0) / 1000).toFixed(1); const sizeStr = td.fileSize ? ` ${formatSize(td.fileSize)}` : ''; resolve({ source: 'by', fileName: td.fileName || '', fileSize: td.fileSize, meta: `${elapsed}s${sizeStr}` }); }
+      if (td.status === 'success') { clearTimeout(timeout); es.close(); const elapsed = ((Date.now() - t0) / 1000).toFixed(1); const sizeStr = td.fileSize ? ` ${formatSize(td.fileSize)}` : ''; resolve({ source: 'by', fileName: td.fileName || '', fileSize: td.fileSize, fileId: td.fileId, meta: `${elapsed}s${sizeStr}` }); }
       if (td.status === 'failed') { clearTimeout(timeout); es.close(); reject(new Error(`BY ${td.errorMessage || '失败'}`)); }
     };
     es.onerror = () => { clearTimeout(timeout); es.close(); reject(new Error('BY SSE连接失败')); };
@@ -334,6 +353,7 @@ document.getElementById('downloadSelected').addEventListener('click', async () =
         const sizeStr = winner.fileSize ? ` ${formatSize(winner.fileSize)}` : '';
         updateLog(logId, `${item.standardNumber} ✅ ${srcLabel(winner.source)}完成 ${winner.fileName}${sizeStr}`, 'success');
         setRowDownloadState(item.id, 'success');
+        markLibraryHit(item.id, winner.fileId);
         if (winner.fileName) { triggerDownload(winner.fileName); recordDownload(winner.source, winner.fileName, item.standardNumber); }
         completeDownloadTask(taskId, 'success', { source: winner.source, fileName: winner.fileName, fileSize: winner.fileSize, progress: `${srcLabel(winner.source)} 下载完成` });
       } catch (e) {
@@ -493,6 +513,7 @@ async function doCascadeDownload() {
           const sizeStr = data.fileSize ? ` ${formatSize(data.fileSize)}` : '';
           updateLog(logId, `${item.standardNumber} ✅ ${srcLabel(data.source)} ${data.fileName || ''}${sizeStr}`, 'success');
           setRowDownloadState(item.standardId, 'success');
+          markLibraryHit(item.standardId, data.fileId);
           success++; successItems.push(item);
           if (data.fileName) { triggerDownload(data.fileName); recordDownload(data.source, data.fileName, item.standardNumber); }
           completeDownloadTask(taskId, 'success', { source: data.source, fileName: data.fileName, fileSize: data.fileSize, progress: `${srcLabel(data.source)} 下载完成` });

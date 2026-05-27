@@ -54,6 +54,10 @@ export interface ExportTask {
   filePath?: string;
   fileName?: string;
   fileSize?: number;
+  /** 入库成功后的库文件 id；前端拿到这个就能写回 _libraryFileIds 点亮绿点 */
+  fileId?: number;
+  /** 文件下下来了但 move 进库失败时的诊断信息（同 multi-download 的 libraryError） */
+  libraryError?: string;
   currentPage?: number;
   totalPages?: number;
   errorMessage?: string;

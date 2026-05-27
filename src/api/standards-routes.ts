@@ -274,7 +274,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       const id = req.params.id as string;
       const parsed = parseStandardId(id);
       const adapter = sourceRegistry.get(parsed.source);
-      const exportTaskService = new ExportTaskService(adapter, exportTaskStore);
+      const exportTaskService = new ExportTaskService(adapter, exportTaskStore, db, sourceRegistry, parsed.source);
       const task = exportTaskService.createTask(id, req.user!.id);
       trackEvent(db, req.user!.id, 'download', parsed.source, id);
       respond(res, toCamelCase(task), 202);
