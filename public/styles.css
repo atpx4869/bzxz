@@ -245,6 +245,30 @@ body.sidebar-collapsed .env-warning { left: var(--sidebar-collapsed-w); }
 .result-card .card-actions button[disabled]:hover { background: rgba(19, 22, 27, 0.4); background: oklch(20% 0.01 255 / 0.4); color: var(--text-3); }
 .result-card .card-actions button .btn-spinner { display: none; width: 12px; height: 12px; border: 2px solid var(--text-3); border-top-color: transparent; border-radius: 50%; animation: btn-spin 0.6s linear infinite; vertical-align: middle; margin-right: 4px; }
 @keyframes btn-spin { to { transform: rotate(360deg); } }
+/* 「本地已有」绿点：搜索完成后批量查 /api/preview/library-check，命中的标准在「预览」
+   按钮右上角叠一个脉冲小绿点，提示用户「这条点开就是秒开」。规则镜像自
+   web/src/styles/components/result-card.css（迁移期 cascade 等价契约）。 */
+.card-actions [data-action="preview"] { position: relative; }
+.card-actions [data-action="preview"].dot-local::after {
+  content: '';
+  position: absolute;
+  top: 3px; right: 3px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #15bb77;
+  background: oklch(70% 0.16 158);
+  box-shadow: 0 0 0 2px rgba(8, 12, 18, 0.85);
+  box-shadow: 0 0 0 2px oklch(14% 0.012 255 / 0.85);
+  pointer-events: none;
+  animation: dot-local-pulse 2.4s var(--ease-out) infinite;
+}
+@keyframes dot-local-pulse {
+  0%, 100% { opacity: 0.7; transform: scale(0.9); }
+  50%      { opacity: 1;   transform: scale(1.05); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-actions [data-action="preview"].dot-local::after { animation: none; }
+}
 .result-card.downloading { border-color: var(--accent); box-shadow: 0 0 16px rgba(0, 149, 254, 0.2); box-shadow: 0 0 16px oklch(66% 0.20 250 / 0.2); }
 .result-card.downloading .card-number { color: #42a3fd; color: oklch(70% 0.16 250); }
 .result-card.download-success { border-color: var(--success); box-shadow: 0 0 16px rgba(21, 187, 119, 0.15); box-shadow: 0 0 16px oklch(70% 0.16 158 / 0.15); transition: all 0.2s var(--ease-out); }

@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **Hotfix：绿点 CSS 同步到 `public/styles.css`**：Phase 1 时把 `.dot-local::after` 规则只加到 `web/src/styles/components/result-card.css`，但 packaged 装机版 Electron 走 `public/index.html` 入口、只 `<link>` legacy `public/styles.css`，新文件根本不会被加载 → 用户看不到绿点。**本质是迁移期双写漏了一边**（CLAUDE.md 已明确"`public/styles.css` 仍是真相源"）。现在把那段 CSS 同步到 `public/styles.css` 的 `.result-card .card-actions button` 块之后，与 web/src/styles 端 cascade 等价。
 - **预览优化 Phase 3：轮询提速 + 移除 cache-buster 让浏览器走 304**：
   - **轮询前 5 次 300ms，之后退化 1500ms**：`pollPreviewTask` 和 `pollPreviewTaskForPopup` 都把固定 1500ms 间隔改成 `attempt <= 5 ? 300 : 1500`。CNAS/By 源命中本地缓存的标准 ~1-2s 就完成 export，原来 1500ms 步长意味着最坏 5 个完整间隔（7.5s）才感知到 ready；改后前 5 次密集采样最快 300ms 内捕获，超过 1.5s 没好就降到 1500ms 减负载。**前 5 次 = 1500ms 之内**，跟原版 1 个轮询周期等长，对后端是无 regression 改动；用户感知到的"下载到出现 PDF"延迟从 typical 2-3s 降到 ~500ms。
   - **移除 iframe URL 的 `?t=Date.now()` cache-buster**：原来在 `runPreviewWithOverlay` 和 `pollPreviewTask` 拿到 ready 后把 url 拼上一个时间戳避免 iframe 缓存 stale。但后端 `/api/preview/file/:id` 已经发了 `ETag` + `Cache-Control: private, max-age=0, must-revalidate`，浏览器每次都会带 `If-None-Match` 做条件请求，命中 → 304 + 复用内存里的 PDF。原来强制带 ts 让浏览器把每次都当不同 URL，跳过条件 GET = 每次重新下整个 PDF。改后用户连点同一标准的预览第二次起几乎瞬间渲染。
