@@ -1065,6 +1065,8 @@ async function runPreviewWithOverlay(id, stdCode, r) {
       }
       // 不再加 ?t=Date.now() cache-buster；后端发 ETag + must-revalidate，浏览器走 304 复用
       setPreviewBody(`<iframe class="preview-iframe" src="${escapeHtml(data.url)}" title="预览 ${escapeHtml(stdCode)}"></iframe>`);
+      // 多源 picker：仅当此 stdCode 在 ≥2 个源都有文件时显示
+      loadPreviewSourcePicker(stdCode, year, data.fileId);
     } else if (data.status === 'downloading' && data.taskId) {
       _previewCurrent = null;
       await pollPreviewTask(data.taskId, stdCode);
@@ -1110,6 +1112,8 @@ function closePreviewOverlay() {
   overlay.classList.remove('open');
   overlay.setAttribute('aria-hidden', 'true');
   setPreviewBody(''); // 卸载 iframe，停止后台流式下载
+  const picker = document.getElementById('previewSourcePicker');
+  if (picker) { picker.innerHTML = ''; picker.style.display = 'none'; }
   _previewCurrent = null;
   // Phase 2：用户主动关闭 → 取消 poll，避免后台继续抢请求
   if (_previewPollAbort) {
@@ -1145,6 +1149,61 @@ function setPreviewBody(html) {
     window.open(_previewCurrent.url, '_blank', 'noopener,noreferrer');
   });
 })();
+
+// ── 多源 preview picker ──
+// 后端 /api/preview/files 列出该 (stdCode, year) 在 gbw/bz/by/labr 4 源里能找到的所有文件，
+// 按 (year DESC, priority 排序) 给前端。≥2 个候选时显示 picker 让用户切源。
+//
+// 行为：
+// - 高亮当前正在预览的 fileId
+// - 点击其它源 → 直接换 iframe src 到 /api/preview/file/:fileId（不重新拉 /preview/request）
+// - 只有 1 个候选 → 不显示（picker container 保持 display:none）
+async function loadPreviewSourcePicker(stdCode, year, activeFileId) {
+  const picker = document.getElementById('previewSourcePicker');
+  if (!picker) return;
+  picker.innerHTML = '';
+  picker.style.display = 'none';
+  try {
+    const params = new URLSearchParams({ stdCode });
+    if (year) params.set('year', String(year));
+    const res = await fetch(`${API}/api/preview/files?${params.toString()}`);
+    const data = await readApiResponse(res);
+    if (!res.ok) return; // 静默失败，picker 不显示
+    const items = (data && data.items) || [];
+    if (items.length < 2) return; // 只有 1 个源不显示 picker
+    const sourceLabel = { gbw: 'GBW', bz: 'BZ', by: 'BY', labr: 'Labr' };
+    const html = items.map(it => {
+      const active = it.fileId === activeFileId ? 'active' : '';
+      const label = sourceLabel[it.source] || it.source;
+      const extBadge = it.ext && it.ext !== 'pdf'
+        ? `<span class="preview-source-ext">${escapeHtml(it.ext.toUpperCase())}</span>`
+        : '';
+      const yr = it.year ? `<span class="preview-source-year">${escapeHtml(it.year)}</span>` : '';
+      return `<button class="preview-source-btn ${active}" data-fid="${escapeHtml(it.fileId)}" data-source="${escapeHtml(it.source)}" title="${escapeHtml(label + (it.year ? ' / ' + it.year : '') + (it.ext ? ' / ' + it.ext : ''))}">
+        <span class="preview-source-name">${escapeHtml(label)}</span>${yr}${extBadge}
+      </button>`;
+    }).join('');
+    picker.innerHTML = `<span class="preview-source-label">源：</span>${html}`;
+    picker.style.display = '';
+    picker.querySelectorAll('.preview-source-btn').forEach(btn => {
+      btn.addEventListener('click', () => switchPreviewSource(btn.dataset.fid, stdCode));
+    });
+  } catch { /* 静默 */ }
+}
+
+function switchPreviewSource(fileId, stdCode) {
+  if (!fileId) return;
+  const url = `${API}/api/preview/file/${encodeURIComponent(fileId)}`;
+  _previewCurrent = { fileId, url, fileName: stdCode };
+  setPreviewBody(`<iframe class="preview-iframe" src="${escapeHtml(url)}" title="预览 ${escapeHtml(stdCode || '')}"></iframe>`);
+  // 高亮换到点中的按钮
+  const picker = document.getElementById('previewSourcePicker');
+  if (picker) {
+    picker.querySelectorAll('.preview-source-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.fid === fileId);
+    });
+  }
+}
 
 // ── Right-click context menu ──
 let _ctxMenuEl = null;
