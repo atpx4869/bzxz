@@ -414,8 +414,14 @@ function extractYearFromStdNumber(sn) {
   return m ? m[1] : null;
 }
 
+// 后端 zod 限定 items.max(500)。多源合并后 results > 500 时整包提交会 400 → 绿点全瞎。
+// 切 chunk 是前端响应；放宽后端上限会让单条 SQL IN(?,?,...) 参数过多（better-sqlite3
+// 有 SQLITE_MAX_VARIABLE_NUMBER 默认 32766）。两边约束都要尊重，切片是正确做法。
+const LIBRARY_CHECK_CHUNK = 400;
+
 /**
  * 批量查本地库命中并缓存。
+ * results > 400 时切片并发查询，结果合并写入 _libraryFileIds。
  * 失败静默 —— 绿点是 nice-to-have，搜索结果本身不依赖。
  */
 async function fetchLibraryAvailability(rs) {
@@ -423,33 +429,47 @@ async function fetchLibraryAvailability(rs) {
   if (_libraryCheckAbort) { try { _libraryCheckAbort.abort(); } catch {} }
   const ctrl = new AbortController();
   _libraryCheckAbort = ctrl;
-  const items = rs.map(r => ({
-    stdCode: r.standardNumber || '',
-    year: extractYearFromStdNumber(r.standardNumber) || undefined,
-  })).filter(x => x.stdCode);
-  if (!items.length) return;
-  try {
-    const res = await fetch(`${API}/api/preview/library-check`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items }),
-      signal: ctrl.signal,
+  // 同时建 items + 对应的 result（保留 r.id 对齐，跳过空 standardNumber）
+  const queryUnits = [];
+  for (const r of rs) {
+    if (!r.standardNumber) continue;
+    queryUnits.push({
+      result: r,
+      item: {
+        stdCode: r.standardNumber,
+        year: extractYearFromStdNumber(r.standardNumber) || undefined,
+      },
     });
-    const data = await readApiResponse(res);
-    const fileIds = (data && data.fileIds) || [];
-    // 写回到缓存：items 与 rs 顺序对齐（已过滤掉空 standardNumber 的项，要重新对齐）
-    let idx = 0;
-    for (const r of rs) {
-      if (!r.standardNumber) continue;
-      const fid = fileIds[idx];
-      if (fid) _libraryFileIds.set(r.id, fid);
-      idx++;
-    }
-    applyLibraryDots();
-  } catch (e) {
-    if (e && e.name === 'AbortError') return;
-    // 静默：失败不影响搜索结果本身展示
   }
+  if (!queryUnits.length) return;
+
+  // 切 chunk 并发查询。任一 chunk 失败不影响其他 chunk 的结果。
+  const chunks = [];
+  for (let i = 0; i < queryUnits.length; i += LIBRARY_CHECK_CHUNK) {
+    chunks.push(queryUnits.slice(i, i + LIBRARY_CHECK_CHUNK));
+  }
+
+  await Promise.all(chunks.map(async (chunk) => {
+    try {
+      const res = await fetch(`${API}/api/preview/library-check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: chunk.map(u => u.item) }),
+        signal: ctrl.signal,
+      });
+      const data = await readApiResponse(res);
+      const fileIds = (data && data.fileIds) || [];
+      for (let k = 0; k < chunk.length; k++) {
+        const fid = fileIds[k];
+        if (fid) _libraryFileIds.set(chunk[k].result.id, fid);
+      }
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      // 单 chunk 失败静默；其他 chunk 仍能给用户绘上绿点
+    }
+  }));
+
+  if (!ctrl.signal.aborted) applyLibraryDots();
 }
 
 /**

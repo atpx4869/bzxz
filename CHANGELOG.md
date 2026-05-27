@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **绿点批量查询切 chunk**：`fetchLibraryAvailability` 原来把整个 results 数组当一个 POST 提交。后端 `/api/preview/library-check` zod 限定 `items.max(500)`，多源搜索合并后 results 经常 > 500 → 400 错误 → catch 静默吞 → 绿点对所有结果全瞎。改成 400/批切片并发查询：每批独立 fetch，任一失败不影响其他 chunk 的命中。后端上限不放宽（better-sqlite3 `SQLITE_MAX_VARIABLE_NUMBER` 默认 32766，IN 参数过多 SQL 会被截或拒）—— 切片是正确的客户端响应。
 - **DB 自动备份 + 缺失自愈（防升级丢账号）**：commit `0bd54c4` 之前的 `installer.nsh` 没保留 `$INSTDIR\data`，从更早版本升级的用户会被旧卸载器 `RMDir /r` 把 `users` / 资质数据全部抹掉。装机版升级走的是「上一次安装时落盘的卸载器」 —— 即使现在 installer 修了，旧 exe 的卸载器逻辑无法追溯。所以再加一层 application-level 防御。
   - **备份位置选 `%APPDATA%\bzxz\bzxz-db-backups\`**：NSIS 永远不会动 userData，与 `$INSTDIR` 物理隔离。环境变量 `BZXZ_USER_DATA_DIR` 由 `electron/main.ts:524` 注入；backend 进程通过此环境变量拿到路径。
   - **启动自愈**：`src/services/db.ts::getDb` 在 `new Database(path)` 之前调一次 `tryRestoreDbBeforeOpen(path)` —— 检测 db 文件不存在或 < 100 字节（SQLite header 最小值），从最新备份 `copyFileSync` 过去，让上层照常 open。找不到备份时静默退让，让程序走「全新 db、首次注册即管理员」路径。
