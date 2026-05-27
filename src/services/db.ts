@@ -232,6 +232,17 @@ function migrate(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_standard_files_lookup ON standard_files(std_code_norm, year);
     CREATE INDEX IF NOT EXISTS idx_standard_files_source ON standard_files(source);
+
+    -- labr 临时 URL 缓存：preview2 API 返回的 PDF/图片 URL 自带短期签名（~分钟级），但
+    -- temp/<md5>.pdf 哈希跨 token 轮换稳定。把 (did, url, fetched_at) 落库后，下次同 did
+    -- 的"已知 kind=1 资源"先用旧 url 试一发 HTTP，404/403 再去 preview2 续。这把 5/日
+    -- Bearer 配额从"每次预览都消耗"摊薄到"实际过期才消耗"。
+    -- did = labr 资源 dataId（probe 里看到的 i.dataId / list[0].dataId），唯一键。
+    CREATE TABLE IF NOT EXISTS labr_temp_urls (
+      did         INTEGER PRIMARY KEY,
+      url         TEXT NOT NULL,
+      fetched_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   // Schema migrations: add columns that may be missing on older DBs.
@@ -286,9 +297,13 @@ function migrate(db: Database.Database): void {
     // - standards_library_dir 空字符串代表"使用默认值"，由 library-paths.ts 启动时
     //   填入 exe 同级 /standards。用户在设置里改成绝对路径会覆盖默认。
     // - library_filename_pattern 文件名模板，支持 {stdCode}/{source}/{year}/{title}。
-    //   默认 "{stdCode} - {source}" 始终带源后缀（决策见 CHANGELOG），不写扩展名（永远 .pdf）。
+    //   默认 "{stdCode} {title} - {source}" 带源后缀（决策见 CHANGELOG），不写扩展名（永远 .pdf）。
+    //   labr 接入后改默认含 {title}：labr 资源标题是检索结果唯一区分项（同一 stdCode 可能有
+    //   多份不同 title 的 PDF / 图片），文件名不带 title 会用 UNIQUE(std_code_norm, year, source)
+    //   把后下载的覆盖掉。BW/BZ/BY 由 renderLibraryFilename 对空 title 容错（连分隔符一起删），
+    //   旧文件名形态向后兼容。
     ['standards_library_dir', ''],
-    ['library_filename_pattern', '{stdCode} - {source}'],
+    ['library_filename_pattern', '{stdCode} {title} - {source}'],
     // library_source_priority：JSON 数组形式存储，源按优先级排列；preview-routes/admin-routes
     // 用 parseSourcePriority 解析。默认顺序与 DEFAULT_SOURCE_PRIORITY 对齐（gbw > bz > by）。
     ['library_source_priority', '["gbw","bz","by"]'],
@@ -300,6 +315,14 @@ function migrate(db: Database.Database): void {
     const existing = db.prepare('SELECT value FROM settings WHERE key = ?').get(k);
     if (!existing) db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(k, v);
   }
+
+  // 一次性默认值升级：原默认 '{stdCode} - {source}' → '{stdCode} {title} - {source}'。
+  // 只在 DB 里"现存值刚好是旧默认"时升（说明用户没动过设置）；用户在 admin 改过的
+  // pattern 不动 —— 即便他们改成空 title 形态也保留意愿。labr 资源依然能下，因为
+  // renderLibraryFilename 对空 title 容错。
+  db.prepare(`
+    UPDATE settings SET value = ? WHERE key = 'library_filename_pattern' AND value = ?
+  `).run('{stdCode} {title} - {source}', '{stdCode} - {source}');
 }
 
 function addColumnIfMissing(db: Database.Database, table: string, column: string, definition: string): void {
