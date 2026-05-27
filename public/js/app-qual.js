@@ -102,20 +102,17 @@ function renderQualVisual(queries, data) {
   const out = document.getElementById('qualVisualResults');
   const now = beijingDate();
 
-  // 全局统计：跨 query 跨 source；多机构时给 buildQualColumn 透传 showLabName，让能力行加 "机构 XXX"
-  const allLabNames = new Set();
+  // 全局统计：跨 query 跨 source 累计能力数 + 过期数
   let covered = 0, cnasCnt = 0, cmaCnt = 0, expiredCnt = 0;
   for (const query of queries) {
     const items = data[query] || [];
     if (items.length) covered++;
     for (const it of items) {
-      allLabNames.add(it.linkedLabName || it.labName || it.labNo || '未知机构');
       if (it.source === 'CNAS') cnasCnt++;
       if (it.source === 'CMA') cmaCnt++;
       if (it.expiryDate && it.expiryDate < now) expiredCnt++;
     }
   }
-  const showLabName = allLabNames.size > 1;
 
   stats.innerHTML = `
     <div><strong>${covered}/${queries.length}</strong><span>关键词命中</span></div>
@@ -128,14 +125,12 @@ function renderQualVisual(queries, data) {
     return;
   }
 
-  // 多 query 时按 query 分 section；每 section 内套用资质查询-搜索同款 buildQualColumn
-  // 结果（CMA / CNAS 两列、标准号分组、默认收起）
+  // 多 query 时按 query 分 section；每 section 内套用资质查询-搜索同款统一列表
+  // （标准号分组、CNAS 段 → CMA 段、默认收起）
   const sections = queries.map((query, qIdx) => {
     const items = data[query] || [];
-    const cnasItems = items.filter(it => it.source === 'CNAS');
-    const cmaItems = items.filter(it => it.source === 'CMA');
     const sectionId = `qvs_${qIdx}`;
-    const opts = { showLabName, gidPrefix: `qvg_${qIdx}_` };
+    const opts = { gidPrefix: `qvg_${qIdx}_` };
 
     const headerHtml = `<div class="qual-visual-query-head">
       <div class="qv-section-title"><strong>${escapeHtml(query)}</strong><span>${items.length ? items.length + ' 条' : '无结果'}</span></div>
@@ -146,7 +141,7 @@ function renderQualVisual(queries, data) {
     </div>`;
 
     const body = items.length
-      ? `<div class="qual-results-grid">${buildQualColumn('CMA', '#f59e0b', cmaItems, opts)}${buildQualColumn('CNAS', '#3b82f6', cnasItems, opts)}</div>`
+      ? buildQualUnifiedList(items, opts)
       : '<div class="qual-empty" style="padding:14px 0">该关键词无匹配</div>';
 
     return `<section class="qual-visual-query-section" id="${sectionId}">${headerHtml}${body}</section>`;
@@ -193,84 +188,114 @@ function cleanStdNameForQual(code, name) {
 }
 
 /**
- * 资质两列卡片渲染（CMA / CNAS 各一列）—— 资质查询-搜索和可视化-按关键词都共用这套样式。
- * gidPrefix 让两个 tab 的 group id 不冲突（搜索页用 'qg_'，可视化页 'qvg_<qIdx>_'）。
- * showLabName 当订阅了多个机构时打开，能力行加 "机构 XXX" 一行；单机构时省略。
+ * 资质统一列表渲染 —— 资质查询-搜索和可视化-按关键词都共用这套样式。
+ *
+ * 布局规则（v3，2026-05-27）：
+ * 1) 不再分 CMA / CNAS 两列，而是按 (stdCode + source) 分组、所有分组单列纵向排列
+ * 2) 全局严格 CNAS 段在前、CMA 段在后，段间画一条 <hr> 分割
+ * 3) 同 source 内按 stdCode 升序自然聚类；组内 items 含"全部参数"→ 0、"部分参数"→ 1、其它 → 2
+ * 4) 单条记录字段：类别 chip + 检测项目 + 生效/到期；不显示机构名、不显示 limitDesc
+ * 5) 含"全部参数 / 部分参数"的 item 整张卡加粗 + 淡背景，凸显"覆盖范围"信号
+ *
+ * gidPrefix 让多个 tab 的 group id 不冲突（搜索页用 'qg_'，可视化页 'qvg_<qIdx>_'）
  */
-function buildQualColumn(title, color, colItems, opts) {
+function paramScopeRank(it) {
+  // 0 = 全部参数（最顶）；1 = 部分参数；2 = 其它
+  // 这类条目代表整张证书覆盖范围，比单项检测更有信号价值
+  var s = (it.testItem || '') + ' ' + (it.testStandard || '');
+  if (/全部参数/.test(s)) return 0;
+  if (/部分参数/.test(s)) return 1;
+  return 2;
+}
+
+function buildQualUnifiedList(items, opts) {
   opts = opts || {};
-  var showLabName = !!opts.showLabName;
   var gidPrefix = opts.gidPrefix || 'qg_';
   var now = beijingDate();
-  if (!colItems.length) {
-    return '<div class="qual-col"><div class="qual-col-header" style="border-left:3px solid ' + color + '">' + title + '</div><div class="qual-empty" style="padding:20px 0">无匹配结果</div></div>';
+  if (!items.length) {
+    return '<div class="qual-empty" style="padding:20px 0">无匹配结果</div>';
   }
-  // Group by stdCode
-  var groups = {};
-  for (var i = 0; i < colItems.length; i++) {
-    var it = colItems[i];
-    if (!groups[it.stdCode]) groups[it.stdCode] = { stdName: it.stdName, items: [], seen: new Set() };
-    var g = groups[it.stdCode];
-    var key = (it.category || '') + '|' + (it.testItem || '') + '|' + (it.testStandard || '');
-    if (g.seen.has(key)) continue;
-    g.seen.add(key);
+
+  // Group by stdCode + source
+  var groupMap = {}; // key = source + '|' + stdCode
+  var groupOrder = []; // 保留出现顺序，稳定排序
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i];
+    var key = (it.source || '') + '|' + (it.stdCode || '');
+    if (!groupMap[key]) {
+      groupMap[key] = { source: it.source, stdCode: it.stdCode, stdName: it.stdName, items: [], seen: new Set() };
+      groupOrder.push(key);
+    }
+    var g = groupMap[key];
+    var dedupKey = (it.category || '') + '|' + (it.testItem || '') + '|' + (it.testStandard || '');
+    if (g.seen.has(dedupKey)) continue;
+    g.seen.add(dedupKey);
     g.items.push(it);
   }
+
+  // 排序：CNAS(0) < CMA(1) < 其它(2)；同 source 内按 stdCode
+  function sourceRank(s) { return s === 'CNAS' ? 0 : s === 'CMA' ? 1 : 2; }
+  groupOrder.sort(function (a, b) {
+    var ga = groupMap[a], gb = groupMap[b];
+    var sd = sourceRank(ga.source) - sourceRank(gb.source);
+    if (sd !== 0) return sd;
+    return (ga.stdCode || '').localeCompare(gb.stdCode || '');
+  });
+
   var html = '';
+  var prevSource = null;
   var groupIdx = 0;
-  // 含"全部参数"/"部分参数"的记录置顶 —— 这类条目代表整张证书覆盖范围，比单项检测更
-  // 有信号价值（用户展开看的就是"这家有没有这个标准的能力"，是/否的判定看这一条最快）。
-  // 单调 stable 排序：判定关键字时给 0 / 1，命中的排前面，其它保持原顺序
-  function paramScopeRank(it) {
-    var s = (it.testItem || '') + ' ' + (it.testStandard || '');
-    return /全部参数|部分参数/.test(s) ? 0 : 1;
-  }
-  for (var code in groups) {
-    var grp = groups[code];
+  for (var k = 0; k < groupOrder.length; k++) {
+    var grp = groupMap[groupOrder[k]];
     grp.items.sort(function (a, b) { return paramScopeRank(a) - paramScopeRank(b); });
-    var gid = gidPrefix + title + '_' + (groupIdx++);
-    var cleanName = cleanStdNameForQual(code, grp.stdName);
+
+    // 段间分割线（CNAS → CMA 等切换 source 时插入，但首段不插）
+    if (prevSource !== null && grp.source !== prevSource) {
+      html += '<hr class="qual-source-divider">';
+    }
+    prevSource = grp.source;
+
+    var gid = gidPrefix + grp.source + '_' + (groupIdx++);
+    var cleanName = cleanStdNameForQual(grp.stdCode, grp.stdName);
+    var sourceCls = grp.source === 'CNAS' ? 'qual-source-chip-cnas' : (grp.source === 'CMA' ? 'qual-source-chip-cma' : '');
+    var sourceChip = grp.source
+      ? '<span class="qual-source-chip ' + sourceCls + '">' + escapeHtml(grp.source) + '</span>'
+      : '';
+
     var rows = grp.items.map(function (it) {
       var expired = it.expiryDate && it.expiryDate < now;
+      var highlight = paramScopeRank(it) < 2; // 全部参数 / 部分参数 → 高亮
       var parts = [];
       if (it.category) {
         var cats = it.category.split('-').map(function (s) { return s.trim(); }).filter(Boolean);
         parts.push('<div style="margin-bottom:3px">' + cats.map(function (c) { return '<span style="display:inline-block;padding:1px 5px;background:var(--surface-h);border-radius:3px;font-size:10px;color:var(--text-2);margin-right:3px;margin-bottom:2px">' + escapeHtml(c) + '</span>'; }).join('') + '</div>');
       }
-      if (showLabName && (it.linkedLabName || it.labName || it.labNo)) {
-        parts.push('<div style="font-size:11px;color:var(--text-3);margin-bottom:3px">机构 ' + escapeHtml(it.linkedLabName || it.labName || it.labNo) + '</div>');
-      }
       if (it.testItem) {
         parts.push('<div style="font-size:12px;color:var(--text);line-height:1.4"><span style="color:var(--text-3);font-size:10px">检测项目 </span>' + escapeHtml(it.testItem.length > 80 ? it.testItem.slice(0, 80) + '…' : it.testItem) + '</div>');
-      }
-      if (it.limitDesc && it.limitDesc !== '/' && it.limitDesc !== '—') {
-        parts.push('<div style="font-size:11px;color:var(--warning);margin-top:2px">限定: ' + escapeHtml(it.limitDesc.length > 60 ? it.limitDesc.slice(0, 60) + '…' : it.limitDesc) + '</div>');
       }
       var dates = [];
       if (it.effectiveDate) dates.push('<span style="color:' + (expired ? 'var(--danger)' : 'var(--success)') + '">生效 ' + escapeHtml(it.effectiveDate) + '</span>');
       if (it.expiryDate) dates.push('<span style="color:' + (expired ? 'var(--danger)' : 'var(--text-2)') + '">' + (expired ? '已过期 ' : '到期 ') + escapeHtml(it.expiryDate) + '</span>');
       if (dates.length) parts.push('<div style="font-size:11px;margin-top:3px">' + dates.join(' · ') + '</div>');
-      return '<div class="qual-result-item">' + parts.join('') + '</div>';
+      return '<div class="qual-result-item' + (highlight ? ' qual-result-item-scope' : '') + '">' + parts.join('') + '</div>';
     }).join('');
+
     html += '<div class="qual-result-group">'
       + '<div class="qual-result-std" onclick="toggleQualGroup(\'' + gid + '\')" style="cursor:pointer">'
       + '<span class="qual-group-arrow" id="' + gid + '_arrow" style="display:inline-block;width:16px;font-size:10px;color:var(--text-3);transition:transform 0.2s">▶</span>'
-      + escapeHtml(code) + '<span class="qual-std-name">' + escapeHtml(cleanName) + '</span>'
-      + '<span style="float:right;font-size:11px;color:var(--text-3)">' + grp.items.length + ' 项</span>'
+      + sourceChip
+      + '<span class="qual-std-code">' + escapeHtml(grp.stdCode || '') + '</span>'
+      + '<span class="qual-std-name">' + escapeHtml(cleanName) + '</span>'
+      + '<span style="margin-left:auto;font-size:11px;color:var(--text-3)">' + grp.items.length + ' 项</span>'
       + '</div>'
       + '<div id="' + gid + '_body" style="display:none">' + rows + '</div>'
       + '</div>';
   }
-  return '<div class="qual-col"><div class="qual-col-header" style="border-left:3px solid ' + color + '">' + title + ' <span style="font-size:11px;color:var(--text-3)">' + Object.keys(groups).length + ' 个标准 · ' + colItems.length + ' 条</span></div>' + html + '</div>';
+  return '<div class="qual-unified-list">' + html + '</div>';
 }
 
 function renderQualSearchResults(items) {
   if (!items.length) { document.getElementById('qualResults').innerHTML = '<div class="qual-empty">未找到匹配的资质信息</div>'; return; }
-
-  // Split by source
-  const cnasItems = items.filter(it => it.source === 'CNAS');
-  const cmaItems = items.filter(it => it.source === 'CMA');
-  const showLabName = new Set(items.map(it => it.linkedLabName || it.labName || it.labNo || '未知机构')).size > 1;
 
   const totalCount = items.length;
   const header = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
@@ -279,11 +304,7 @@ function renderQualSearchResults(items) {
     + '<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px" onclick="toggleAllQualGroups(true)">全部展开</button>'
     + '<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px" onclick="toggleAllQualGroups(false)">全部收起</button>'
     + '</span></div>';
-  const opts = { showLabName: showLabName, gidPrefix: 'qg_' };
-  const content = '<div class="qual-results-grid">'
-    + buildQualColumn('CMA', '#f59e0b', cmaItems, opts)
-    + buildQualColumn('CNAS', '#3b82f6', cnasItems, opts)
-    + '</div>';
+  const content = buildQualUnifiedList(items, { gidPrefix: 'qg_' });
   document.getElementById('qualResults').innerHTML = header + content;
 }
 

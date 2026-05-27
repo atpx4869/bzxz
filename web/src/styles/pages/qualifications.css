@@ -39,6 +39,16 @@
 .qual-col { min-width: 0; }
 .qual-col-header { font-size: 13px; font-weight: 600; color: var(--text); padding: 6px 10px; margin-bottom: 8px; }
 
+/* 统一列表（v3）：CNAS / CMA 不再分两栏，按 stdCode+source 分组单列纵排 */
+.qual-unified-list { display: flex; flex-direction: column; gap: 0; }
+.qual-source-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 46px; padding: 1px 7px; border-radius: 3px; font: 600 10px 'DM Sans', sans-serif; letter-spacing: 0.04em; color: #fff; }
+.qual-source-chip-cnas { background: #3b82f6; background: oklch(60% 0.18 255); }
+.qual-source-chip-cma  { background: #f59e0b; background: oklch(70% 0.17 70); }
+.qual-source-divider { border: none; border-top: 1px dashed rgba(140, 148, 165, 0.25); border-top: 1px dashed oklch(60% 0.012 255 / 0.25); margin: 6px 0 10px; }
+/* 含「全部参数 / 部分参数」的条目 —— 加粗 + 淡背景填充，强化"覆盖范围"信号 */
+.qual-result-item-scope { background: rgba(79, 109, 240, 0.10); background: oklch(66% 0.20 250 / 0.10); border-color: rgba(79, 109, 240, 0.25); border-color: oklch(66% 0.20 250 / 0.25); }
+.qual-result-item-scope > div { font-weight: 600; }
+
 .qual-lab-card { background: rgba(11, 16, 21, 0.4); background: oklch(17% 0.014 255 / 0.4); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 16px; margin-bottom: 8px; font-size: 12px; }
 .qual-lab-card .qual-lab-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .qual-lab-card .qual-lab-name { font-weight: 500; color: var(--text); font-size: 13px; }
@@ -184,7 +194,7 @@
 .qual-visual-more-btn:hover { background: rgba(22, 27, 33, 0.5); background: oklch(22% 0.014 255 / 0.5); color: var(--text); }
 
 /* ===== Step 8 —— 可视化 tab 改用搜索页同款布局 =====
- * renderQualVisual 现在按 query 分 section，每 section 内调 buildQualColumn
+ * renderQualVisual 现在按 query 分 section，每 section 内调 buildQualUnifiedList
  * （跟资质查询-搜索完全同一函数 / 同一视觉）。section head 头单独 style 一下。
  * Step 7 引入的 .qv2-* 全部废弃，markup 也已停用，CSS 不再需要。 */
 .qual-visual-query-head .qv-section-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }

@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **资质查询展示重构：CMA / CNAS 不再分两栏**：搜索页 + 可视化页统一改为单列纵排，按 `(标准号 + 资质类型)` 分组，全局严格 **CNAS 段在前、CMA 段在后**，段间一条虚线分割。每组标题行布局：`▶ [CNAS / CMA 徽章] 标准号 标准名 ... N 项`，徽章蓝/橙色块、占位居中。
+  - **buildQualUnifiedList 替代 buildQualColumn**：`public/js/app-qual.js`。组内 items 按 `paramScopeRank` 三档排序 —— `0 = 全部参数`、`1 = 部分参数`、`2 = 其它`，确保"全部参数"那一条永远顶在该组最上面（产品标准用户最关心"这家整张证书是否覆盖此标准"的判定）。
+  - **删除冗余信息**：不再渲染机构名「机构 XXX」（即使多机构也不显示）、不再渲染 `limitDesc`「限定 ...」。展开后每条记录字段只剩：类别 chip + `检测项目 xxx` + `生效 / 到期`。
+  - **「全部参数 / 部分参数」高亮**：含这两个关键字的 item 整张卡 `qual-result-item-scope` 类，淡蓝背景 + 文字加粗，扫读时一眼锁定。
+  - **CSS 双写**：`public/styles.css` + `web/src/styles/pages/qualifications.css` 同步新增 `.qual-source-chip` / `-cnas` / `-cma`、`.qual-source-divider`、`.qual-result-item-scope`。`.qual-results-grid / .qual-col / .qual-col-header` 保留兜底（手机端 responsive 仍有引用），新方案不再产出这些类。
 - **桌面端下载统一入库 + 绿点秒亮**：之前残留两个 UX 漏洞 —— ① Electron 用户下载完同一份 PDF 会出现两份（一份在 `<exe>\standards\` 由后端 `moveDownloadToLibrary` 写入，一份在 `Desktop/bzxz/` 由 `will-download` 钩子写入，因为前端 `triggerDownload` 又触发了一次 HTTP 下载）；② 下载成功后绿点不会立刻亮，要等下次搜索 / `library-check` 才更新。
   - **前端 `triggerDownload` 在 Electron 早返回**：`public/js/app-detail-utils.js` 里检查 `window.bzxz?.isElectron`，是就 `return`，不再创建 `<a download>` 触发浏览器下载流。Web 浏览器侧（手机访问）逻辑不变，仍然走 `/api/downloads/:filename` 拿一份本地副本。
   - **后端 BZ/BY `/export` 接 `moveDownloadToLibrary`**：原 `ExportTaskService.runTask` 跑完 adapter 就 `markSuccess`，文件停留在 `data/exports/`，与 `multi-download` / `auto-download` 走的入库路径不一致 → 桌面"下载"按钮按一下 BZ/BY PDF 不会到 `standards/` 库、绿点也无从亮起。现在 `runTask` 在 adapter 完成后立即调 `moveDownloadToLibrary`，把入库后的 `fileId` / 可能的 `libraryError` 透回 SSE 流的最终 frame。`ExportTask` 接口加 `fileId?: number; libraryError?: string`；`markSuccess` 签名扩展接受这两个字段；`ExportTaskService` 构造函数追加 `db / sourceRegistry / source` 参数，`standards-routes.ts:277` 调用点同步更新。失败不影响 task 成功状态 —— 文件下下来了就算成功，入库错把 `libraryError` 冒给前端按 `library_failed` 一样处理。
