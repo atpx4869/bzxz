@@ -72,7 +72,7 @@ labr 账号密码与 token 在以下两个文件里（已 gitignore 或本地文
 | 50 | parseLibraryFilename 兼容新旧文件名 + 单测 | [x] | _待填_ | 2026-05-27 | `src/services/library-index.ts` 新增 `STD_CODE_HEAD_RE` + 输出 `title` 字段；`library-index.test.ts` 21 用例覆盖老格式回归 / 含 title / stdCode 形状 (DB44T/JBT 4730.5/2010A/ISO/无年份) / 拒绝。watcher 仅消费 stdCodeNorm/year/source，title 纯增字段无下游回归 |
 | 51 | 域类型 labr + library-index 映射 + semaphore | [x] | _待填_ | 2026-05-27 | SourceName 加 `'labr'`；VALID_SOURCES、source-semaphore DEFAULTS (labr=2)、library-index 的 SUPPORTED_SOURCES/SOURCE_LABEL_TO_CANONICAL (LB+LABR)/CANONICAL_TO_LABEL (labr→LB)、library-naming SOURCE_LABELS 全部加 labr 项。`source-registry` 的 FACTORIES 改 `Partial<Record<...>>`（labr 不实现 SourceAdapter，故意空缺）。admin-routes/preview-routes 的 sourceEnum 与 db.ts 的 library_source_priority 默认值 **不动**——labr 与主搜索 preview fallback 隔离 |
 | 52 | db.ts 表迁移 + filename_pattern 默认值 | [x] | _待填_ | 2026-05-27 | `db.ts` 加 `labr_temp_urls (did PK, url, fetched_at)` 表；seed 默认 `library_filename_pattern` 改 `'{stdCode} {title} - {source}'`；一次性 UPDATE 把旧默认值升级到新默认（仅当用户没改过 setting），用户自定义保留。renderLibraryFilename 已对空 title 容错（BW/BZ/BY 旧形态不破） |
-| 53 | labr-client（登录 / List / Detail / Download） | [ ] | | | `src/sources/labr/labr-client.ts` + `labr-client.test.ts`（nock 录放）。验收：login → ssoToken cookie 写入；rec-list 翻页正确；download(info,detail) kind 0/1 双分支 |
+| 53 | labr-client（登录 / List / Detail / Download） | [x] | _待填_ | 2026-05-27 | `labr-client.ts` 协议层（无 token 持久化、无编排）：`login` / `bridgeSso` / `searchInline` / `recList` / `getDetail` / `preview2`（识别 LabrRateLimitError + LabrAuthError）/ `downloadDirect`（kind=0 直拉 + temp/<md5>.pdf 同方法）。pure-func 测 21 用例已含；nock 录放推到 #54 跟 live integration 一起，避免空转 mock |
 | 54 | labr-service（编排 + batch 退避） | [ ] | | | `src/sources/labr/labr-service.ts`。LabrRateLimitError 触发后续 kind=1 short-circuit、kind=0 继续 |
 | 55 | labr API routes + /api/preview/files | [ ] | | | `src/api/labr-routes.ts` 新建；`src/api/preview-routes.ts` 加 /files；`src/api/index.ts` 挂载 |
 | 56 | sidebar Labr库检索 tab 骨架 | [ ] | | | `web/index.html` 加 button + page-labr 容器。可与后端并行做 |
@@ -88,6 +88,12 @@ labr 账号密码与 token 在以下两个文件里（已 gitignore 或本地文
 | 日期 | commit | 事项 |
 |---|---|---|
 | | | _示例：发现 labr 的 dataList[2] 字段 `truename` 可能是 null，要做兜底_ |
+
+### 本地测试约定（**强制**）
+
+**不在本地跑测试**。Claude 不要给"先跑 npm run web:test"的预检步骤，commit 命令块直接 `git add` + commit + push，让 GitHub Actions 跑 typecheck/test/build。本机不跑构建/测试是用户工程约定（GH Actions 已是单一真相源），同样适用于单测。
+
+跨节点判断：plan 里凡是写"先本地跑 ... 验绿"的步骤都按本约定剔除，commit 命令块只列必要的 git 动作。
 
 ### 工作流约定（CLAUDE.md 强制，再点一下）
 
