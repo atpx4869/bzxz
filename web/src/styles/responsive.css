@@ -179,4 +179,29 @@
   body:not(.force-desktop) .card-meta-line .qual-badges { margin-left: 0; }
   body:not(.force-desktop) .result-card .card-actions,
   body:not(.force-desktop) .batch-result-card .card-actions {
-    display: flex; gap: 6px; flex-wrap: nowrap; justify-conte}}
+    display: flex; gap: 6px; flex-wrap: nowrap; justify-content: stretch;
+  }
+  body:not(.force-desktop) .result-card .card-actions .btn,
+  body:not(.force-desktop) .result-card .card-actions button,
+  body:not(.force-desktop) .batch-result-card .card-actions .btn,
+  body:not(.force-desktop) .batch-result-card .card-actions button {
+    flex: 1 1 0; min-width: 0; min-height: 44px; padding: 8px 4px; font-size: 13px;
+  }
+
+  /* 手机端隐藏下载 / 收藏入口 ——
+     Why: 手机端定位是「查阅」而非「管理」。下载和收藏依赖本地库 + 桌面 IPC，
+     在手机浏览器里没有 standards 库目录可写、收藏列表也只是 localStorage 单端孤岛，
+     不如直接收掉避免误点。详情 / 预览弹窗里的 #previewDownloadBtn 保留，
+     方便临时复制单个链接到外部浏览器。
+     How to apply: 顶栏下载中心入口、结果卡片 / 上下文菜单里的下载和收藏按钮、
+     筛选条「只看收藏」chip、"我"页"下载历史"行全部隐掉。JS 端再加快捷键 +
+     toggleSavedStandard early-return 防键盘走捷径。 */
+  body:not(.force-desktop) #downloadCenterToggle { display: none; }
+  body:not(.force-desktop) .result-card [data-action="download"],
+  body:not(.force-desktop) .result-card [data-action="save"],
+  body:not(.force-desktop) .batch-result-card [data-action="download"],
+  body:not(.force-desktop) .batch-result-card [data-action="save"] { display: none; }
+  body:not(.force-desktop) [data-filter-toggle="saved"] { display: none; }
+  body:not(.force-desktop) #meRowHistory,
+  body:not(.force-desktop) .sidebar-item[data-tab="history"] { display: none; }
+}

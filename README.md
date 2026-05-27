@@ -384,6 +384,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **手机端去掉下载 / 收藏入口** — 手机定位是「查阅」场景。顶栏下载中心、结果卡下载/收藏按钮、长按菜单对应项、"我"页"下载历史"行、sidebar 历史 tab 全 `display:none`；`toggleSavedStandard` 加 `isMobile()` early-return 防快捷键绕过。详情/预览弹窗 `#previewDownloadBtn` 保留。`?desktop=1` 仍可一键还原桌面布局
 - **下载入库加固 + 失败可见性** — `addFileToLibrary` 加 `EBUSY/EPERM/EACCES` retry（4 次指数 backoff，覆盖 Windows AV 锁窗口）+ 跨卷 `.part` 中转。`moveDownloadToLibrary` 失败原因冒到 API 响应 `libraryError` 字段，前端识别 `status:'library_failed'` 标 ⚠ 显示具体 errno，根治"日志报 8/8 成功但库里只有 5 个"灵异。
 - **多用户并发适配** — 跨用户下载去重（同标准只跑一次底层 export，subscribers 共享 SSE 流）+ 源级全局信号量（bz=2/gbw=4/by=4，跟前端 `downloadConcurrency` 解耦）+ 删除竞速模式（多用户共享出口 IP 时放大频控风险）。诊断 `/api/diagnostics/sources` 看实时 `{active,limit,waiting}`
 - **资质匹配三层防御** — `cleanStdCode` 抓取入库前清洗 + `std_code_norm`/`std_code_base` 归一化列与索引等值匹配；启动时自动回填旧数据 + 清洗历史脏 `std_code`。覆盖全角/无空格/脏空格/ISO 冒号/修订标记变体，根除"搜 `GB/T 3325-2024` 匹不到 `GB/T 3325 -2024` 脏空格变体"等已知 bug。诊断 `/api/admin/qual/diagnose?code=` 一键定位漏命中

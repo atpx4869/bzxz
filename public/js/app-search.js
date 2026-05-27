@@ -933,6 +933,8 @@ document.getElementById('results').addEventListener('contextmenu', e => {
   const id = card.dataset.sid;
   const r = findResultByAnyId ? findResultByAnyId(id) : results.find(x => x.id === id);
   if (!r) return;
+  // 手机端长按触发的右键菜单去掉「下载该标准」「加入收藏」，与 CSS 隐藏入口对齐
+  const onMobile = typeof window.isMobile === 'function' && window.isMobile();
   const items = [
     { label: '复制标准号', icon: '#', action: () => copyToClipboard(r.standardNumber || '') },
     { label: '复制名称', icon: 'T', action: () => copyToClipboard(r.title || '') },
@@ -940,8 +942,10 @@ document.getElementById('results').addEventListener('contextmenu', e => {
     { divider: true },
     { label: '查看详情', icon: '👁', action: () => showDetail(id) },
     { label: '预览（本地）', icon: '🗎', action: () => previewStandard(id) },
-    { label: r.previewAvailable ? '下载该标准' : '下载该标准（无文本）', icon: '↓', action: () => { const btn = card.querySelector('[data-action="download"]'); if (btn && !btn.disabled) downloadOne(id, btn); else showToast('该标准无可用文本', 'fail'); } },
-    { label: isStandardSaved(r) ? '取消收藏' : '加入收藏', icon: '★', action: () => toggleSavedStandard(id) },
+    ...(onMobile ? [] : [
+      { label: r.previewAvailable ? '下载该标准' : '下载该标准（无文本）', icon: '↓', action: () => { const btn = card.querySelector('[data-action="download"]'); if (btn && !btn.disabled) downloadOne(id, btn); else showToast('该标准无可用文本', 'fail'); } },
+      { label: isStandardSaved(r) ? '取消收藏' : '加入收藏', icon: '★', action: () => toggleSavedStandard(id) },
+    ]),
     { divider: true },
     { label: '复制为 JSON', icon: '{}', action: () => copyToClipboard(JSON.stringify(r, null, 2)) },
   ];
@@ -1020,6 +1024,8 @@ document.getElementById('exportResults').addEventListener('click', () => {
 });
 
 function toggleSavedStandard(id) {
+  // 手机端禁用收藏：CSS 已经隐掉触发入口，这里再防一道键盘 / 外部脚本绕过
+  if (typeof window !== 'undefined' && typeof window.isMobile === 'function' && window.isMobile()) return;
   const r = findResultByAnyId(id);
   if (!r) return;
   const key = standardSaveKey(r);
