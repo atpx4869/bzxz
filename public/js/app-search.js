@@ -808,14 +808,197 @@ function renderPreviewFailedUi(errorMsg) {
   if (cls) cls.addEventListener('click', closePreviewOverlay);
 }
 
+/**
+ * 预览入口（Phase 2 — 新 tab 流）。
+ *
+ * 三条路径：
+ * 1. **热路径**（_libraryFileIds 已知命中 = 绿点亮）：直接 `window.open` 新 tab 跳
+ *    `/api/preview/file/:fileId`，跳过 `/api/preview/request` 整轮 RTT。浏览器原生
+ *    PDF viewer 比 iframe-in-overlay 快得多（少 overlay layout + iframe sandbox）。
+ * 2. **冷路径 + 弹窗 OK**：在 click 同一调用栈里先 `window.open('about:blank')` 占位
+ *    （popup blocker 只拦截非用户手势的 open），写个 loading 骨架；主页 POST request
+ *    + poll，ready 时 `popup.location.replace(file)`，failed 时写错误页。
+ * 3. **冷路径 + 弹窗被拦**：fallback 走原 overlay 路径，避免极端环境完全用不了预览。
+ *
+ * Phase 1 的 _libraryFileIds 缓存是热路径的关键。预览成功后会把新拿到的 fileId
+ * 也写回缓存，下次再点同一标准走热路径。
+ */
 async function previewStandard(id) {
   const r = findResultByAnyId ? findResultByAnyId(id) : results.find(x => x.id === id);
   if (!r) { showToast('未找到该标准', 'fail'); return; }
   const stdCode = r.standardNumber || '';
   if (!stdCode) { showToast('该结果缺少标准号，无法预览', 'fail'); return; }
-  // 记录最近一次预览的 id，供失败弹层的「重试」按钮使用
   _previewLastId = id;
-  // 若上一次 poll 还活着（用户连点 / 重试场景），先停掉旧的
+
+  // 热路径：本地命中已知 → 直接跳新 tab
+  const cachedFid = _libraryFileIds.get(id);
+  if (cachedFid) {
+    window.open(`${API}/api/preview/file/${encodeURIComponent(cachedFid)}`, '_blank');
+    return;
+  }
+
+  // 冷路径：先在 click tick 里占一个 about:blank tab（popup blocker safe）
+  let popup = null;
+  try { popup = window.open('about:blank', '_blank'); } catch { /* blocked */ }
+
+  if (popup && !popup.closed) {
+    writePreviewLoadingPage(popup, stdCode);
+    runPreviewWithPopup(id, stdCode, popup);
+    return;
+  }
+
+  // 弹窗被拦 → fallback 走原 overlay 流程
+  await runPreviewWithOverlay(id, stdCode, r);
+}
+
+/**
+ * 把简陋的 loading 骨架写进 about:blank 弹窗。
+ * 用 popup.document.write 而非 innerHTML 因为新 about:blank 没有 body 节点。
+ * 跨同源 origin (about:blank 继承 opener)，写权限 OK；之后 `location.replace`
+ * 走掉新 URL 后，我们就再也访问不到这个 document 了 —— 但那时我们也不需要了。
+ */
+function writePreviewLoadingPage(win, stdCode) {
+  try {
+    const t = escapeHtml(stdCode);
+    win.document.open();
+    win.document.write(
+      '<!doctype html><html lang="zh"><head><meta charset="utf-8">'
+      + '<title>预览 ' + t + '…</title>'
+      + '<style>html,body{height:100%;margin:0;background:#0a0d12;color:#c8cfd9;'
+      + 'font-family:-apple-system,"Segoe UI",system-ui,sans-serif}'
+      + '.box{display:flex;flex-direction:column;align-items:center;justify-content:center;'
+      + 'height:100%;gap:14px;padding:24px;text-align:center}'
+      + '.ttl{font-size:16px;font-weight:600}.hint{font-size:13px;color:#7c8696;max-width:480px;line-height:1.55}'
+      + '.spin{width:38px;height:38px;border:3px solid #2a3140;border-top-color:#59aaf8;'
+      + 'border-radius:50%;animation:s .9s linear infinite}'
+      + '@keyframes s{to{transform:rotate(360deg)}}</style></head><body>'
+      + '<div class="box"><div class="spin"></div>'
+      + '<div class="ttl">正在自动下载 ' + t + '…</div>'
+      + '<div class="hint" id="hint">首次入库 5~30 秒，受源站速度影响。该标签页会自动跳转到 PDF。</div>'
+      + '</div></body></html>'
+    );
+    win.document.close();
+  } catch { /* about:blank navigated away / cross-origin —— 忽略 */ }
+}
+
+/**
+ * 把错误页写进弹窗（自动下载失败时）。
+ * 给一个「关闭」按钮 + 错误文字。重试入口故意不放在弹窗里 —— 失败后用户回主页重点
+ * 一次 预览按钮即可，避免把状态机搬到弹窗里。
+ */
+function writePreviewErrorPage(win, stdCode, msg) {
+  try {
+    const t = escapeHtml(stdCode);
+    const m = escapeHtml(msg || '未能下载到此标准。');
+    win.document.open();
+    win.document.write(
+      '<!doctype html><html lang="zh"><head><meta charset="utf-8">'
+      + '<title>预览失败 - ' + t + '</title>'
+      + '<style>html,body{height:100%;margin:0;background:#0a0d12;color:#c8cfd9;'
+      + 'font-family:-apple-system,"Segoe UI",system-ui,sans-serif}'
+      + '.box{display:flex;flex-direction:column;align-items:center;justify-content:center;'
+      + 'height:100%;gap:14px;padding:24px;text-align:center}'
+      + '.ttl{font-size:18px;font-weight:600;color:#ee5a5a}'
+      + '.hint{font-size:13px;color:#7c8696;max-width:520px;line-height:1.55}'
+      + 'button{padding:8px 18px;border-radius:6px;border:1px solid #2a3140;background:#161b22;'
+      + 'color:#c8cfd9;cursor:pointer;font-size:14px}button:hover{background:#1c222d}</style></head><body>'
+      + '<div class="box"><div class="ttl">' + t + ' 预览失败</div>'
+      + '<div class="hint">' + m + '</div>'
+      + '<button onclick="window.close()">关闭此标签</button>'
+      + '</div></body></html>'
+    );
+    win.document.close();
+  } catch { /* 弹窗已关 —— 忽略 */ }
+}
+
+/**
+ * 弹窗模式：发请求 → 命中直跳 / 未命中轮询任务 → 命中后 navigate 弹窗。
+ * 任何阶段失败 → writePreviewErrorPage。
+ */
+async function runPreviewWithPopup(id, stdCode, popup) {
+  if (_previewPollAbort) {
+    try { _previewPollAbort.abort(); } catch { /* ignore */ }
+    _previewPollAbort = null;
+  }
+  const yearMatch = stdCode.match(/-\s*(\d{4})\s*$/);
+  const year = yearMatch ? yearMatch[1] : undefined;
+  const body = year ? { stdCode, year } : { stdCode };
+  try {
+    const res = await fetch(`${API}/api/preview/request`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await readApiResponse(res);
+    if (popup.closed) return;
+    if (data.status === 'ready' && data.fileId) {
+      _libraryFileIds.set(id, data.fileId);
+      applyLibraryDots();
+      popup.location.replace(`${API}/api/preview/file/${encodeURIComponent(data.fileId)}`);
+      return;
+    }
+    if (data.status === 'downloading' && data.taskId) {
+      await pollPreviewTaskForPopup(data.taskId, stdCode, popup, id);
+      return;
+    }
+    writePreviewErrorPage(popup, stdCode, '后端返回未知状态：' + JSON.stringify(data));
+  } catch (e) {
+    if (popup.closed) return;
+    writePreviewErrorPage(popup, stdCode, e?.message || String(e));
+  }
+}
+
+/**
+ * 弹窗版任务轮询。
+ * - popup.closed → 取消轮询（用户关掉标签 = 不想要了）
+ * - ready → navigate popup 到 file URL，同时回填 _libraryFileIds 缓存
+ * - failed / 404 → 写错误页
+ * 间隔 1500ms 跟原 overlay 版一致；Phase 3 会统一降到「前 5 次 300ms」
+ */
+async function pollPreviewTaskForPopup(taskId, stdCode, popup, resultId) {
+  const ctrl = new AbortController();
+  _previewPollAbort = ctrl;
+  let attempt = 0;
+  while (!ctrl.signal.aborted) {
+    if (popup.closed) { ctrl.abort(); return; }
+    attempt++;
+    await new Promise(r => setTimeout(r, 1500));
+    if (ctrl.signal.aborted || popup.closed) return;
+    let data, ok = true;
+    try {
+      const res = await fetch(`${API}/api/preview/task/${encodeURIComponent(taskId)}`, { signal: ctrl.signal });
+      ok = res.ok;
+      data = await readApiResponse(res);
+    } catch (e) {
+      if (ctrl.signal.aborted || popup.closed) return;
+      continue;
+    }
+    if (!ok || !data || data.status === undefined) {
+      writePreviewErrorPage(popup, stdCode, data?.error || '任务已过期或不存在，请重试');
+      return;
+    }
+    if (data.status === 'ready' && data.fileId) {
+      if (resultId) { _libraryFileIds.set(resultId, data.fileId); applyLibraryDots(); }
+      popup.location.replace(`${API}/api/preview/file/${encodeURIComponent(data.fileId)}`);
+      return;
+    }
+    if (data.status === 'failed') {
+      writePreviewErrorPage(popup, stdCode, data.error || '所有源都未能下载到此标准。');
+      return;
+    }
+    // pending / downloading → 更新弹窗 hint 文案让用户感知到进度
+    try {
+      const hint = popup.document?.getElementById?.('hint');
+      if (hint) hint.textContent = `轮询中… 已 ${attempt} 次（首次入库通常 5~30 秒）`;
+    } catch { /* 弹窗已 navigate 走或关闭 —— 忽略 */ }
+  }
+}
+
+/**
+ * 老 overlay 路径（popup blocker 拦截时 fallback）。
+ * 行为与 Phase 2 之前的 previewStandard 完全一致。
+ */
+async function runPreviewWithOverlay(id, stdCode, r) {
   if (_previewPollAbort) {
     try { _previewPollAbort.abort(); } catch { /* ignore */ }
     _previewPollAbort = null;
@@ -834,10 +1017,10 @@ async function previewStandard(id) {
     const data = await readApiResponse(res);
     if (data.status === 'ready') {
       _previewCurrent = { fileId: data.fileId, url: data.url, fileName: stdCode };
+      if (data.fileId) { _libraryFileIds.set(id, data.fileId); applyLibraryDots(); }
       const safeUrl = data.url + (data.url.includes('?') ? '&' : '?') + 't=' + Date.now();
       setPreviewBody(`<iframe class="preview-iframe" src="${escapeHtml(safeUrl)}" title="预览 ${escapeHtml(stdCode)}"></iframe>`);
     } else if (data.status === 'downloading' && data.taskId) {
-      // Phase 2：后端已经在后台拉，前端 poll 状态到 ready / failed
       _previewCurrent = null;
       await pollPreviewTask(data.taskId, stdCode);
     } else if (data.status === 'not_in_library') {

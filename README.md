@@ -384,6 +384,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **预览优化 Phase 2：预览直跳新 tab** — 热路径（绿点命中）`window.open('/api/preview/file/:fileId')` 跳过 `/api/preview/request` 整轮 RTT，浏览器走 304 缓存即可秒开；冷路径在 click 同一 tick 里 `window.open('about:blank')` 占住新 tab（popup blocker safe），写入 loading 骨架，异步拿到 fileId 后 `popup.location.replace` 跳过去，原生 PDF viewer 接管 = 全屏 / 缩放 / 打印不受 overlay 限制。失败写错误页 + 关闭按钮；popup 被拦截降级到原 overlay+iframe 流程，零功能退化
 - **预览优化 Phase 1：本地库批量扫描 + 绿点指示器** — 搜索完成后非阻塞 POST `/api/preview/library-check`（单条 SQL 跑在 `idx_standard_files_lookup` 上，200 条 ≤ 5ms），命中的标准在「预览」按钮右上角叠一个脉冲绿点。用户一眼区分「秒开 vs 要下载」。`_libraryFileIds` 缓存供 Phase 2 复用
 - **回退手机端「资质标准号头点击直跳标准搜索」** — 点标准号头应该展开下面的检测项目列表（用户预期），而不是丢上下文跳搜索页。`onQualGroupClick` 函数删掉，onclick 改回 `toggleQualGroup(gid)`，手机端与桌面端行为重新统一
 - **手机端去掉下载 / 收藏入口** — 手机定位是「查阅」场景。顶栏下载中心、结果卡下载/收藏按钮、长按菜单对应项、"我"页"下载历史"行、sidebar 历史 tab 全 `display:none`；`toggleSavedStandard` 加 `isMobile()` early-return 防快捷键绕过。详情/预览弹窗 `#previewDownloadBtn` 保留。`?desktop=1` 仍可一键还原桌面布局

@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **预览优化 Phase 2：预览直跳新 tab（热路径秒开 / 冷路径 about:blank 占位 + 自动跳转）**：解决 overlay iframe 模式的两个老问题 —— ① 命中本地的标准也要走 `/api/preview/request` 一轮 RTT 才能渲染；② iframe 内 PDF 缩放 / 全屏受 overlay 容器限制、键盘快捷键被劫持。
+  - **热路径**：`previewStandard` 开头查 `_libraryFileIds.get(id)`（Phase 1 已经预填好的缓存）。命中 → 直接 `window.open('/api/preview/file/:fileId', '_blank')`，**完全跳过 API 调用**，浏览器直接走 304 缓存渲染。绿点 = 秒开承诺，体感非常好。
+  - **冷路径（同步开占位 tab）**：未命中时，先在 `previewStandard` 同一个 click tick 内 `window.open('about:blank', '_blank')` —— 这一步必须在用户手势调用栈里、否则 popup blocker 拦死。立刻 `popup.document.write` 一个 loading 骨架（暗色背景 + spinner + "正在自动下载 XXX…"），再异步发 `/api/preview/request` 拿 fileId / taskId。`writePreviewLoadingPage` 用 `document.write` 而非 innerHTML，因为 `about:blank` 刚开时还没有 body 节点；origin 通过 opener 继承同源，写入权限 OK。
+  - **拿到 fileId → `popup.location.replace(/api/preview/file/:fileId)`**：浏览器原生 PDF viewer 接管整个 tab，可以全屏 / 双指缩放 / 打印 / 另存为，完全没有 overlay 限制。任务还在 downloading 时 `pollPreviewTaskForPopup` 每 1500ms 拉一次，每轮检查 `popup.closed` 让用户关 tab 等于取消；同时刷新弹窗里的 hint 文字「轮询中… 已 N 次」让用户感知到进度。
+  - **失败 → `writePreviewErrorPage`**：弹窗变红色错误页 + 关闭按钮。重试入口故意不放在弹窗里 —— 用户回主页重点一次预览按钮即可，避免把状态机搬到弹窗里。
+  - **Popup 被拦兜底**：`window.open` 返回 null / popup.closed === true 时（用户开了浏览器拦截器、企业策略屏蔽弹窗），降级到 `runPreviewWithOverlay` —— 行为与 Phase 2 之前完全一致的 overlay + iframe 流程，零功能退化。
+  - **缓存回填**：`runPreviewWithPopup` 和 `pollPreviewTaskForPopup` 拿到 fileId 后都会 `_libraryFileIds.set(id, fileId) + applyLibraryDots()`，**第二次点同标准的预览就走热路径**。配合 Phase 1 已经有的「搜索完批量扫库」，绿点 → window.open 秒开的覆盖率会越用越高。
+  - **行为变化**：原先 overlay 内嵌 iframe 现在大多数走新 tab；用户预期变化 = "看完关 tab 而不是按 ESC"。`closePreviewOverlay` 现在主要在 popup blocker 兜底 / 桌面端某些隐藏入口里触发。
 - **预览优化 Phase 1：搜索后台扫描本地库 + 绿点指示器**：搜索完成后非阻塞批量查 `/api/preview/library-check`，命中的标准在「预览」按钮右上角叠一个脉冲小绿点（`.dot-local::after`），用户一眼能区分「点开就秒开」vs「点开要下 5-30 秒」。
   - **后端**：`src/services/library-index.ts` 加 `bulkLookup(db, items, sources?)` 函数，一条 `WHERE std_code_norm IN (?, ?, ...)` 拼参数 SQL 拿全部候选，JS 端按 sources 优先级挑首条命中。**不做 fs.access**：watcher 已经维护表的真实存在性，绿点容忍极少数 stale 误指，省下 200 次 stat。`src/api/preview-routes.ts` 加 `POST /api/preview/library-check`，body `{items: [{stdCode, year?}], sources?}`，响应 `{fileIds: Array<number|null>}` 与 items 同序平行数组（避免前端镜像 `extractBaseCode` 归一化逻辑）。
   - **前端**：`public/js/app-search.js` 加模块级 `_libraryFileIds` 缓存（`resultId → fileId`）、`_libraryCheckAbort` controller、`fetchLibraryAvailability` 异步函数、`applyLibraryDots` DOM 应用函数。`doSearch` 开头清缓存 + 末尾 fire-and-forget 调一次接口；`renderResults` / `appendNextResultsBatch` 每次都调 `applyLibraryDots` 让过滤排序后的新 DOM 也能涂上绿点。失败静默，绿点是 nice-to-have，不影响搜索结果展示。
