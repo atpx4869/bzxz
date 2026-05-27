@@ -215,7 +215,7 @@ function switchTab(tab) {
 // initRouter 解析 URL 的 ?tab=xxx，缺省走 search。
 // ?desktop=1 / layout 切换由 app-mobile.js 的 applyLayoutMode 单独处理，与本函数解耦。
 function initRouter() {
-  var KNOWN_TABS = ['search', 'batch', 'complete', 'qual', 'local', 'history', 'settings', 'users', 'stats', 'me'];
+  var KNOWN_TABS = ['search', 'batch', 'complete', 'qual', 'labr', 'local', 'history', 'settings', 'users', 'stats', 'me'];
   var requested = 'search';
   try {
     var params = new URLSearchParams(window.location.search);

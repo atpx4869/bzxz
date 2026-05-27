@@ -56,6 +56,10 @@
       <span class="sidebar-icon">🛡</span>
       <span class="sidebar-text">资质查询<span class="sidebar-desc">CNAS/CMA 资质</span></span>
     </button>
+    <button class="sidebar-item" data-tab="labr" onclick="switchTab('labr')">
+      <span class="sidebar-icon">📚</span>
+      <span class="sidebar-text">Labr库检索<span class="sidebar-desc">labr.cc 标准库补给</span></span>
+    </button>
     <div class="sidebar-sep"></div>
     <button class="sidebar-item" data-tab="stats" onclick="switchTab('stats')">
       <span class="sidebar-icon">📊</span>
@@ -288,6 +292,21 @@
         </section>
       </div>
       <div id="qualVisualResults"></div>
+    </div>
+  </div>
+
+  <!-- Page: Labr -->
+  <div class="page" id="page-labr">
+    <h2 style="font-size:20px;font-weight:600;margin-bottom:18px">Labr库检索</h2>
+    <p style="font-size:12px;color:var(--text-3);margin-bottom:14px">labr.cc 第四源 — 用于补充本地标准库。下载后落地到当前 standards_library_dir。</p>
+    <div style="display:flex;flex-direction:column;height:calc(100vh - var(--topbar-h) - 140px)">
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <input class="qual-search-input" id="labrSearchInput" type="text" placeholder="输入标准号 / 关键词 搜索 labr.cc…" style="flex:1" onkeydown="if(event.key==='Enter')doLabrSearch()">
+        <button class="btn btn-primary" onclick="doLabrSearch()">搜索</button>
+        <button class="btn btn-ghost" id="labrBatchBtn" onclick="doLabrBatchDownload()" disabled>批量下载选中</button>
+      </div>
+      <div id="labrResults" style="flex:1;overflow-y:auto"><div class="qual-empty">输入关键词检索 labr.cc 标准</div></div>
+      <div id="labrPager" style="display:flex;justify-content:center;gap:8px;padding:8px 0"></div>
     </div>
   </div>
 
