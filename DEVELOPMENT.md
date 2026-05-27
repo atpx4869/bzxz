@@ -13,6 +13,38 @@ npm run dev
 
 服务启动后访问 `http://localhost:3000/api/health` 确认可用。
 
+## 新机器 / 新 shell 第一次提交前 —— PowerShell UTF-8 配置（**强制**）
+
+Windows PowerShell 5.1 默认 `$OutputEncoding` 是 GBK，**直接 `git commit -m "中文"` 会被转成 `??`** 写进 commit object，事后看 `git log` 永远是问号、无法恢复。新机器或新开的 PS 窗口里第一次提交前先跑：
+
+```powershell
+chcp 65001 | Out-Null
+$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+[Console]::InputEncoding  = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+git config --global i18n.commitencoding utf-8
+git config --global i18n.logoutputencoding utf-8
+git config --global core.quotepath false
+```
+
+后三条 `git config --global` 写一次就永久生效。前四条 `chcp` / `$OutputEncoding` 每次新开 PS 窗口都要重跑 —— 推荐塞进 `$PROFILE`。
+
+**长 commit message**（带 why / how 多段）用 here-string + 写临时文件 + `git commit -F` 最稳：
+
+```powershell
+$msg = @"
+第一行扼要
+（空行）
+Why: ...
+How: ...
+"@
+[System.IO.File]::WriteAllText("$PWD\.git\COMMIT_EDITMSG_tmp", $msg, (New-Object System.Text.UTF8Encoding $false))
+git commit -F .git\COMMIT_EDITMSG_tmp
+Remove-Item .git\COMMIT_EDITMSG_tmp
+```
+
+`Set-Content -Encoding utf8NoBOM` 只在 PS 7+ 可用，PS 5.1 会报「无法绑定参数 Encoding」—— 用上面 `[System.IO.File]::WriteAllText` 兜底。
+
 ## 项目架构
 
 ### 后端（src/）
