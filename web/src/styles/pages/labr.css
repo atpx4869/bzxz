@@ -1,0 +1,145 @@
+/* ─── Labr库检索 page (#page-labr) ───────────────────────────────────────
+ *
+ * 列表行：checkbox + 标准号徽章 + 标题（含 hl_title sanitize 后的 <font>/<mark> 高亮）
+ *      + kind/ext/付费 徽章 + pubdt + 下载按钮
+ *
+ * kind 徽章：
+ *   labr-kind-0 = 直拉路径（绿，无配额）
+ *   labr-kind-1 = 需登录走 preview2（橙，消耗 5/天）
+ *
+ * ext 徽章按类型上色，让用户在结果列表里就能识别"这条是 PDF 还是 docx/pptx"。
+ * 配色取自常见办公套件主色（Word 蓝 / Excel 绿 / PPT 橙 / PDF 红 / TXT 灰）。
+ */
+
+.labr-results-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 4px; margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 12px; color: var(--text-3);
+}
+.labr-select-all { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.labr-select-all input { accent-color: var(--accent); width: 14px; height: 14px; }
+.labr-results-count { font-size: 11px; color: var(--text-3); }
+
+.labr-rows {
+  display: flex; flex-direction: column; gap: 4px;
+}
+
+.labr-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.15s, border-color 0.15s;
+}
+.labr-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.labr-row-check input {
+  accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;
+}
+
+.labr-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.labr-row-title {
+  font-size: 13px; color: var(--text);
+  line-height: 1.45; overflow-wrap: anywhere;
+}
+/* hl_title 里 sanitize 后保留的 <font color> 高亮 — 全局也让其它颜色生效 */
+.labr-row-title font[color] { font-weight: 600; }
+.labr-row-meta {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  font-size: 11px; color: var(--text-3);
+  align-items: center;
+}
+
+.labr-row-actions { flex-shrink: 0; }
+.labr-row-actions .spinner { display: inline-block; width: 12px; height: 12px; }
+
+/* 标准号徽章：突出，紧贴标题 */
+.labr-std-code {
+  display: inline-block;
+  padding: 2px 6px;
+  background: rgba(59, 130, 246, 0.16);
+  background: oklch(60% 0.18 250 / 0.16);
+  color: #93c5fd;
+  color: oklch(80% 0.13 250);
+  border-radius: 4px;
+  font-size: 11px; font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  margin-right: 4px;
+}
+
+/* kind 徽章 —— 0=绿（直拉无消耗），1=橙（需登录消耗配额） */
+.labr-kind-badge {
+  display: inline-block; padding: 1px 6px;
+  border-radius: 3px; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.labr-kind-0 {
+  background: rgba(34, 197, 94, 0.16);
+  background: oklch(70% 0.17 145 / 0.16);
+  color: #4ade80;
+  color: oklch(78% 0.18 145);
+}
+.labr-kind-1 {
+  background: rgba(245, 158, 11, 0.16);
+  background: oklch(76% 0.17 75 / 0.16);
+  color: #fbbf24;
+  color: oklch(82% 0.17 80);
+}
+
+/* 文件类型徽章 —— PDF 红 / DOC* 蓝 / XLS* 绿 / PPT* 橙 / TXT 灰 */
+.labr-ext-badge {
+  display: inline-block; padding: 1px 5px;
+  border-radius: 3px; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.labr-ext-pdf {
+  background: rgba(239, 68, 68, 0.16);
+  background: oklch(64% 0.22 25 / 0.16);
+  color: #f87171; color: oklch(72% 0.20 25);
+}
+.labr-ext-doc, .labr-ext-docx {
+  background: rgba(37, 99, 235, 0.16);
+  background: oklch(55% 0.18 260 / 0.16);
+  color: #60a5fa; color: oklch(75% 0.16 260);
+}
+.labr-ext-xls, .labr-ext-xlsx, .labr-ext-xsxl {
+  background: rgba(22, 163, 74, 0.16);
+  background: oklch(60% 0.18 145 / 0.16);
+  color: #4ade80; color: oklch(78% 0.18 145);
+}
+.labr-ext-ppt, .labr-ext-pptx {
+  background: rgba(234, 88, 12, 0.16);
+  background: oklch(64% 0.20 50 / 0.16);
+  color: #fb923c; color: oklch(76% 0.19 50);
+}
+.labr-ext-txt {
+  background: rgba(148, 163, 184, 0.16);
+  background: oklch(70% 0.02 255 / 0.16);
+  color: #cbd5e1; color: oklch(85% 0.02 255);
+}
+
+/* 付费徽章 —— 罕见但 labr 极少数条目带价格，标橙提示"可能下载失败" */
+.labr-paid-badge {
+  display: inline-block; padding: 1px 5px;
+  border-radius: 3px; font-size: 10px; font-weight: 600;
+  background: rgba(245, 158, 11, 0.16);
+  background: oklch(76% 0.17 75 / 0.16);
+  color: #fbbf24; color: oklch(82% 0.17 80);
+}
+
+.labr-pubdt { font-size: 10px; color: var(--text-3); margin-left: auto; }
+
+/* 翻页器：上一页 / 第 N 页 / 下一页 —— 横向 flex 居中 */
+#labrPager { font-size: 12px; color: var(--text-3); }
+
+/* 手机端：行内距收紧，actions 换到主区下面 */
+@media (max-width: 640px) {
+  .labr-row { padding: 8px 10px; gap: 8px; }
+  .labr-row-title { font-size: 12px; }
+  .labr-row-meta { font-size: 10px; gap: 4px; }
+  .labr-pubdt { margin-left: 0; }
+}
