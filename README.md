@@ -384,6 +384,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **预览优化 Phase 1：本地库批量扫描 + 绿点指示器** — 搜索完成后非阻塞 POST `/api/preview/library-check`（单条 SQL 跑在 `idx_standard_files_lookup` 上，200 条 ≤ 5ms），命中的标准在「预览」按钮右上角叠一个脉冲绿点。用户一眼区分「秒开 vs 要下载」。`_libraryFileIds` 缓存供 Phase 2 复用
 - **回退手机端「资质标准号头点击直跳标准搜索」** — 点标准号头应该展开下面的检测项目列表（用户预期），而不是丢上下文跳搜索页。`onQualGroupClick` 函数删掉，onclick 改回 `toggleQualGroup(gid)`，手机端与桌面端行为重新统一
 - **手机端去掉下载 / 收藏入口** — 手机定位是「查阅」场景。顶栏下载中心、结果卡下载/收藏按钮、长按菜单对应项、"我"页"下载历史"行、sidebar 历史 tab 全 `display:none`；`toggleSavedStandard` 加 `isMobile()` early-return 防快捷键绕过。详情/预览弹窗 `#previewDownloadBtn` 保留。`?desktop=1` 仍可一键还原桌面布局
 - **下载入库加固 + 失败可见性** — `addFileToLibrary` 加 `EBUSY/EPERM/EACCES` retry（4 次指数 backoff，覆盖 Windows AV 锁窗口）+ 跨卷 `.part` 中转。`moveDownloadToLibrary` 失败原因冒到 API 响应 `libraryError` 字段，前端识别 `status:'library_failed'` 标 ⚠ 显示具体 errno，根治"日志报 8/8 成功但库里只有 5 个"灵异。

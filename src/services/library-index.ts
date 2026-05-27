@@ -269,6 +269,88 @@ export async function lookupFile(
   return null;
 }
 
+/**
+ * 批量本地命中检查（搜索结果绿点指示用）。
+ *
+ * 给一组 (stdCode, year?) 一次性查 standard_files，返回 key → 首个匹配 fileId 的 map。
+ * Key 格式：`<extractBaseCode(stdCode)>|<year>`，year 缺失时用空串。
+ *
+ * Why: 搜索结果 20-50 条逐个 lookupFile 太费（每条 1 SQL + 1 fs.access）。这里：
+ * - 用 `WHERE std_code_norm IN (?, ?, ...)` 一条 SQL 拿全部候选
+ * - **不做 fs.access**：watcher 已经维护表的真实存在性，绿点容忍极少数 stale
+ *   误指；用户真点了发现文件没了 → 自动 fallback 走老下载路径
+ * - 在 JS 端按 sources 优先级挑首个，跟 lookupFile 单条版本口径一致
+ *
+ * 入参 items 不限长但调用方应该自己分批（200 是经验上限，再大 SQL 变量数会撑爆）。
+ */
+export function bulkLookup(
+  db: Database.Database,
+  items: Array<{ stdCode: string; year?: string }>,
+  sources?: SourceName[],
+): Map<string, number> {
+  const result = new Map<string, number>();
+  if (!items.length) return result;
+
+  const effectiveSources = sources && sources.length > 0
+    ? sources.filter((s): s is SourceName => SUPPORTED_SOURCES.includes(s as SourceName))
+    : [...SUPPORTED_SOURCES];
+  if (effectiveSources.length === 0) return result;
+
+  // 归一化 + 去重，记下 norm → 原始请求项的反向映射（一个 norm 可能对应多个 year 查询）
+  const normSet = new Set<string>();
+  const requestKeys: Array<{ norm: string; year: string; key: string }> = [];
+  for (const it of items) {
+    const norm = extractBaseCode(it.stdCode);
+    if (!norm) continue;
+    normSet.add(norm);
+    const year = it.year || '';
+    requestKeys.push({ norm, year, key: `${norm}|${year}` });
+  }
+  if (normSet.size === 0) return result;
+
+  const placeholders = Array.from(normSet, () => '?').join(',');
+  const rows = db.prepare(`
+    SELECT id, std_code_norm, year, source
+    FROM standard_files
+    WHERE std_code_norm IN (${placeholders})
+  `).all(...normSet) as Array<{ id: number; std_code_norm: string; year: string; source: string }>;
+  if (rows.length === 0) return result;
+
+  // 按 (norm, year) 分桶。每桶里再按 sources 优先级挑首条命中。
+  const buckets = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const k = `${row.std_code_norm}|${row.year || ''}`;
+    let bucket = buckets.get(k);
+    if (!bucket) { bucket = []; buckets.set(k, bucket); }
+    bucket.push(row);
+  }
+
+  for (const { norm, year, key } of requestKeys) {
+    if (result.has(key)) continue;
+    // 精确匹配优先：(norm, year)；若用户没传 year，退化成"该 norm 任意 year"——
+    // 与 lookupFile(year=undefined) 行为一致，返回任意源命中里 sources 优先级最高的
+    const candidates: typeof rows = [];
+    if (year) {
+      const exact = buckets.get(`${norm}|${year}`);
+      if (exact) candidates.push(...exact);
+    } else {
+      for (const [k, bucket] of buckets) {
+        if (k.startsWith(`${norm}|`)) candidates.push(...bucket);
+      }
+    }
+    if (candidates.length === 0) continue;
+    for (const src of effectiveSources) {
+      const hit = candidates.find(r => r.source === src);
+      if (hit) {
+        result.set(key, hit.id);
+        break;
+      }
+    }
+  }
+
+  return result;
+}
+
 /** 按 id 查行（预览 file 端点用）。同样做 fs.access 校验。 */
 export async function getFileById(db: Database.Database, id: number): Promise<LibraryFileRow | null> {
   const row = db.prepare(`

@@ -16,7 +16,8 @@ import { promises as fs, createReadStream } from 'node:fs';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
 import type { Request, Response, NextFunction } from 'express';
-import { lookupFile, getFileById } from '../services/library-index';
+import { lookupFile, getFileById, bulkLookup } from '../services/library-index';
+import { extractBaseCode } from '../services/qualification-service';
 import { resolveLibraryDir, isInsideLibrary } from '../shared/library-paths';
 import { respond, respondError } from '../shared/response';
 import { normalizeError } from '../shared/errors';
@@ -123,6 +124,40 @@ export function createPreviewRoutes(
     }
     updateTask(taskId, { status: 'failed', error: '所有源都未能下载到此标准' });
   }
+
+  /**
+   * 批量本地命中检查（搜索结果绿点用）。
+   * Body: { items: [{stdCode, year?}], sources?: SourceName[] }
+   * Resp: { fileIds: Array<number|null> } —— 与 items 同长度同序，命中给 fileId、未命中给 null
+   *
+   * 单条 SQL（不做 fs.access），跑在 idx_standard_files_lookup 上。200 条 ≤ 5ms。
+   * 平行数组返回避免前端需要镜像归一化逻辑（extractBaseCode）才能取 key。
+   */
+  router.post('/api/preview/library-check', requireAuth, (req, res, next) => {
+    try {
+      const schema = z.object({
+        items: z.array(z.object({
+          stdCode: z.string().trim().min(1).max(64),
+          year: z.string().regex(/^\d{4}$/).optional(),
+        })).max(500),
+        sources: z.array(sourceEnum).optional(),
+      });
+      const { items, sources } = schema.parse(req.body);
+      const effectiveSources = sources && sources.length > 0
+        ? sources
+        : getConfiguredSourcePriority(db);
+      const map = bulkLookup(db, items, effectiveSources);
+      // 重建平行数组：每个 item 重新算一次 key，去 map 查
+      const fileIds = items.map((it) => {
+        const norm = extractBaseCode(it.stdCode);
+        if (!norm) return null;
+        return map.get(`${norm}|${it.year || ''}`) ?? null;
+      });
+      respond(res, { fileIds });
+    } catch (error) {
+      next(normalizeError(error));
+    }
+  });
 
   router.post('/api/preview/request', requireAuth, async (req, res, next) => {
     try {

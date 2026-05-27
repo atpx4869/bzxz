@@ -114,3 +114,31 @@ body.compact-results .results-table-head { padding-bottom: 6px; }
 /* Card entrance —— 原行 587–590 */
 .result-card.card-enter { opacity: 0; transform: translateY(20px); animation: cardIn 0.45s var(--ease-spring) forwards; }
 @keyframes cardIn { to { opacity: 1; transform: none; } }
+
+/* 「本地已有」绿点指示器 ——
+   搜索完成后批量查 /api/preview/library-check，命中的标准会在「预览」按钮右上角
+   叠一个小绿点，告诉用户「这条点开就是秒开，不用再走下载链路」。
+   仅在 [data-action="preview"][data-file-id] 时才显示，data-file-id 缺失时圆点不出现。
+   ::after 用绝对定位，按钮本身要标 position:relative 才不脱离上下文。
+   绿色用 --success（与「现行」状态色同源），动画做轻微脉冲提升注意力（无 prefers-reduced-motion）。 */
+.card-actions [data-action="preview"] { position: relative; }
+.card-actions [data-action="preview"].dot-local::after {
+  content: '';
+  position: absolute;
+  top: 3px; right: 3px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #15bb77;
+  background: oklch(70% 0.16 158);
+  box-shadow: 0 0 0 2px rgba(8, 12, 18, 0.85);
+  box-shadow: 0 0 0 2px oklch(14% 0.012 255 / 0.85);
+  pointer-events: none;
+  animation: dot-local-pulse 2.4s var(--ease-out) infinite;
+}
+@keyframes dot-local-pulse {
+  0%, 100% { opacity: 0.7; transform: scale(0.9); }
+  50%      { opacity: 1;   transform: scale(1.05); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-actions [data-action="preview"].dot-local::after { animation: none; }
+}

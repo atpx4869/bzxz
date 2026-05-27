@@ -120,6 +120,7 @@ async function doSearch() {
   document.getElementById('searchBtn').innerHTML = '<span class="spinner"></span>取消';
   document.getElementById('searchBtn').disabled = false;
   results = []; selectedIds.clear(); updateToolbar(); searchAborted = false; qualData = {};
+  _libraryFileIds.clear();
   showSearchStatus('正在搜索...', true);
   // Initialize per-source progress chips
   const _sourceProgress = {};
@@ -206,6 +207,8 @@ async function doSearch() {
   }
   // Final poll for GBW text availability
   pollGbwTextAvailability();
+  // 后台批量查本地库命中（非阻塞 / 失败静默）：填 _libraryFileIds + 涂绿点
+  if (results.length > 0) fetchLibraryAvailability(results);
   filterState.sources.clear(); filterState.statuses.clear();
   filterState.onlyDownloadable = false; filterState.onlyQualified = false; filterState.onlySaved = false; filterState.sort = 'smart';
   renderFilterBar();
@@ -399,6 +402,77 @@ const RESULTS_NEXT_BATCH = 200;
 let _resultsRenderedCount = 0;
 let _resultsLastFilteredCache = null;
 
+// 本地库命中缓存：搜索完成后批量查一次 /api/preview/library-check，
+// 这里只缓存 resultId → fileId。绿点 + Phase 2 的"秒开"路径都靠它判定。
+// 每次 doSearch 开头会被清掉；之后无论怎么过滤排序 renderResults，都按缓存重涂。
+let _libraryFileIds = new Map();
+let _libraryCheckAbort = null;
+
+function extractYearFromStdNumber(sn) {
+  if (!sn) return null;
+  const m = /-\s*(\d{4})\s*$/.exec(String(sn));
+  return m ? m[1] : null;
+}
+
+/**
+ * 批量查本地库命中并缓存。
+ * 失败静默 —— 绿点是 nice-to-have，搜索结果本身不依赖。
+ */
+async function fetchLibraryAvailability(rs) {
+  if (!rs || !rs.length) return;
+  if (_libraryCheckAbort) { try { _libraryCheckAbort.abort(); } catch {} }
+  const ctrl = new AbortController();
+  _libraryCheckAbort = ctrl;
+  const items = rs.map(r => ({
+    stdCode: r.standardNumber || '',
+    year: extractYearFromStdNumber(r.standardNumber) || undefined,
+  })).filter(x => x.stdCode);
+  if (!items.length) return;
+  try {
+    const res = await fetch(`${API}/api/preview/library-check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items }),
+      signal: ctrl.signal,
+    });
+    const data = await readApiResponse(res);
+    const fileIds = (data && data.fileIds) || [];
+    // 写回到缓存：items 与 rs 顺序对齐（已过滤掉空 standardNumber 的项，要重新对齐）
+    let idx = 0;
+    for (const r of rs) {
+      if (!r.standardNumber) continue;
+      const fid = fileIds[idx];
+      if (fid) _libraryFileIds.set(r.id, fid);
+      idx++;
+    }
+    applyLibraryDots();
+  } catch (e) {
+    if (e && e.name === 'AbortError') return;
+    // 静默：失败不影响搜索结果本身展示
+  }
+}
+
+/**
+ * 把缓存的命中状态涂到当前 DOM 上。
+ * 每次 renderResults / appendNextResultsBatch 调一次，便于刷新过滤后新出现的行。
+ * 命中：按钮加 .dot-local + data-file-id；未命中：移除（防 stale）。
+ */
+function applyLibraryDots() {
+  document.querySelectorAll('#results [data-action="preview"][data-id]').forEach(btn => {
+    const id = btn.getAttribute('data-id');
+    const fid = _libraryFileIds.get(id);
+    if (fid) {
+      btn.classList.add('dot-local');
+      btn.setAttribute('data-file-id', String(fid));
+      btn.setAttribute('title', '本地已有，秒开');
+    } else {
+      btn.classList.remove('dot-local');
+      btn.removeAttribute('data-file-id');
+      btn.setAttribute('title', '本地预览（已下载的标准）');
+    }
+  });
+}
+
 function resolveTextState(r) {
   // 废止 standards never have preview text — final state, no checking
   if (r.status && r.status.includes('废止')) return 'no_text';
@@ -548,6 +622,7 @@ function renderResults() {
   });
   const moreBtn = document.getElementById('resultsLoadMoreBtn');
   if (moreBtn) moreBtn.addEventListener('click', appendNextResultsBatch);
+  applyLibraryDots();
 }
 
 function appendNextResultsBatch() {
@@ -599,6 +674,7 @@ function appendNextResultsBatch() {
     const remaining = filtered.length - _resultsRenderedCount;
     moreEl.querySelector('button').textContent = `显示更多（还剩 ${remaining} 条）`;
   }
+  applyLibraryDots();
 }
 
 // Filter bar chip clicks
