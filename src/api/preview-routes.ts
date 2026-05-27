@@ -29,8 +29,10 @@ import { createTask, updateTask, getTask, findActiveTaskByKey } from '../service
 import { trackEvent } from '../services/usage-tracker';
 import { StandardService } from '../services/standard-service';
 
-const sourceEnum = z.enum(['gbw', 'bz', 'by']);
+const sourceEnum = z.enum(['gbw', 'bz', 'by', 'labr']);
 const DEFAULT_SOURCE_PRIORITY: SourceName[] = ['gbw', 'bz', 'by'];
+// labr 默认不进 lookupFile 自动选源（多源 picker 显式选才用），但允许 library_source_priority
+// 配置里写。getConfiguredSourcePriority 会用 'gbw'|'bz'|'by'|'labr' 全集过滤。
 
 /**
  * 从 settings.library_source_priority 读全局优先级；坏数据 / 缺设置 → 用默认。
@@ -43,7 +45,7 @@ function getConfiguredSourcePriority(db: Database.Database): SourceName[] {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return DEFAULT_SOURCE_PRIORITY;
     const filtered = parsed.filter((s): s is SourceName =>
-      s === 'gbw' || s === 'bz' || s === 'by');
+      s === 'gbw' || s === 'bz' || s === 'by' || s === 'labr');
     return filtered.length > 0 ? filtered : DEFAULT_SOURCE_PRIORITY;
   } catch {
     return DEFAULT_SOURCE_PRIORITY;
@@ -154,6 +156,73 @@ export function createPreviewRoutes(
         return map.get(`${norm}|${it.year || ''}`) ?? null;
       });
       respond(res, { fileIds });
+    } catch (error) {
+      next(normalizeError(error));
+    }
+  });
+
+  /**
+   * GET /api/preview/files?stdCode=...&year=...
+   *
+   * 列出库内**所有**匹配 (stdCode, year?) 的文件，按 library_source_priority 排序。
+   * 给"多源 picker"用：搜索结果里同一标准号可能在 BW/BZ/BY/LB 多份都存在，前端
+   * 让用户挑要看哪份。
+   *
+   * 与 /api/preview/request 的区别：request 只返回优先级最高的那个 (single best)，
+   * 用于"点详情自动打开预览"场景；files 返回全部候选，用于"切换源"。
+   *
+   * 不做 fs.access（与 bulkLookup 同口径），watcher 维护表的真实存在；预览 file
+   * 端点点开时再做 stat + 缺失清行。
+   */
+  router.get('/api/preview/files', requireAuth, (req, res, next) => {
+    try {
+      const schema = z.object({
+        stdCode: z.string().trim().min(2).max(64),
+        year: z.string().regex(/^\d{4}$/).optional(),
+      });
+      const { stdCode, year } = schema.parse(req.query);
+      const norm = extractBaseCode(stdCode);
+      if (!norm) {
+        respond(res, { files: [] });
+        return;
+      }
+      const priority = getConfiguredSourcePriority(db);
+      // labr 没在默认优先级里但库里可能有 → 把所有源列出，priority 内的按其顺序，外的尾随
+      const allSources: SourceName[] = ['gbw', 'bz', 'by', 'labr'];
+      const ordered: SourceName[] = [
+        ...priority,
+        ...allSources.filter(s => !priority.includes(s)),
+      ];
+
+      const yearClause = year ? 'AND year = ?' : '';
+      const args: any[] = [norm];
+      if (year) args.push(year);
+      const rows = db.prepare(`
+        SELECT id, year, source, size, mime, indexed_at
+        FROM standard_files
+        WHERE std_code_norm = ? ${yearClause}
+      `).all(...args) as Array<{
+        id: number; year: string; source: SourceName;
+        size: number; mime: string; indexed_at: string;
+      }>;
+
+      // 按 (year DESC, source 优先级) 排：跨年混查时新版优先；同年内按 priority
+      const files = rows
+        .map(r => ({
+          fileId: r.id,
+          source: r.source,
+          year: r.year || null,
+          size: r.size,
+          mime: r.mime || 'application/pdf',
+          indexedAt: r.indexed_at,
+          url: `/api/preview/file/${r.id}`,
+        }))
+        .sort((a, b) => {
+          const yearDiff = (b.year || '').localeCompare(a.year || '');
+          if (yearDiff !== 0) return yearDiff;
+          return ordered.indexOf(a.source) - ordered.indexOf(b.source);
+        });
+      respond(res, { files });
     } catch (error) {
       next(normalizeError(error));
     }

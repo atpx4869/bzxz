@@ -14,6 +14,7 @@ import { createStatsRoutes } from './stats-routes';
 import { createQualificationRoutes } from './cnas-routes';
 import { createStandardsRoutes } from './standards-routes';
 import { createPreviewRoutes } from './preview-routes';
+import { createLabrRoutes } from './labr-routes';
 import { scanLibrary, startLibraryWatcher } from '../services/library-index';
 import { getSetting } from '../services/db';
 import { AppError } from '../shared/errors';
@@ -218,6 +219,8 @@ export function createApp() {
   app.use(qualRouter);
   // 预览：requireAuth 在路由内部应用，挂在根上即可（端点路径里已带 /api/preview 前缀）。
   app.use(createPreviewRoutes(db, requireAuth, sourceRegistry));
+  // labr：独立 sidebar，与 SourceRegistry 解耦；路径自带 /api/labr 前缀
+  app.use(createLabrRoutes(requireAuth));
 
   app.get('/api/health', (_req, res) => {
     const version = process.env.npm_package_version || process.env.BZXZ_APP_VERSION || '';
