@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **Popup 预览 AbortController 独立化**：修复连续点不同标准的预览时第一个 popup tab 卡在 loading 不动的 bug。
+  - **原 bug**：`_previewPollAbort` 全局变量被 overlay 路径和 popup 路径共用。用户点预览 A → popup A 启动 poll，ctrl A 写入全局；回主页点预览 B → `runPreviewWithPopup` 头部 `_previewPollAbort.abort()` 把 A 的 poll 杀了 → A 标签页永远卡在 loading 骨架。
+  - **修复**：`runPreviewWithPopup` 自己 `new AbortController()`，传给 `pollPreviewTaskForPopup`。每个 popup 独立 controller，互不干扰；fetch 也挂 signal 让网络层一并取消。
+  - **`_previewPollAbort` 现在只服务 overlay 模式**：`pollPreviewTask` 写入、`closePreviewOverlay` / 失败重试按钮 abort 它。Popup 模式完全脱钩。变量声明处也加注释说明 scope。
 - **Electron 桌面端预览跳系统浏览器**：解决 Phase 2 `window.open` 在 Electron 里被默认行为接管（弹出无菜单的裸 BrowserWindow，PDF 全屏 / 缩放 / 另存为体验都差）的问题。
   - **`electron/main.ts:391` 注册 `mainWindow.webContents.setWindowOpenHandler`**：拦截所有渲染进程的 `window.open(url, '_blank')`，对 `http:` / `https:` URL 调 `shell.openExternal(url)` 让系统默认浏览器（Edge / Chrome）打开 —— PDF 用浏览器原生 viewer，全屏 / 缩放 / 打印 / 另存为全部到位。`about:` / `file:` / `javascript:` 等非 http(s) 协议直接 deny 不放行，安全收紧。
   - **`public/js/app-search.js` 两处 ready 分支接入 Electron 检测**：`runPreviewWithOverlay` 和 `pollPreviewTask` 拿到 ready 状态后，若 `window.bzxz.isElectron` 为 true（preload 注入），改成 `window.open(file_url) + closePreviewOverlay()` —— overlay 仅作 loading 占位，PDF 用系统浏览器展示。Web 浏览器侧（手机访问局域网）仍然在 overlay 内 iframe 渲染。

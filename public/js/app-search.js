@@ -754,7 +754,10 @@ document.getElementById('results').addEventListener('click', e => {
 // - 失败 UI 加「重试」按钮，触发新的 /api/preview/request（后端按 stdCode+year 去重，
 //   若旁路还有 pending/downloading 任务会复用；否则起新任务）
 let _previewCurrent = null; // { fileId, url, fileName }
-let _previewPollAbort = null; // 取消正在进行的 poll（用户关弹窗或换标准时）
+// 仅服务 overlay 模式的 pollPreviewTask；closePreviewOverlay 会 abort 它。
+// Popup 模式（pollPreviewTaskForPopup）每个 popup 用自己的局部 AbortController，
+// 不共享这个全局变量 —— 避免连续点 A→B 时把 A 的 poll 误杀。
+let _previewPollAbort = null;
 let _previewLastId = null;   // 缓存最近一次预览的结果 id，用于失败重试
 
 async function pollPreviewTask(taskId, stdCode) {
@@ -945,10 +948,10 @@ function writePreviewErrorPage(win, stdCode, msg) {
  * 任何阶段失败 → writePreviewErrorPage。
  */
 async function runPreviewWithPopup(id, stdCode, popup) {
-  if (_previewPollAbort) {
-    try { _previewPollAbort.abort(); } catch { /* ignore */ }
-    _previewPollAbort = null;
-  }
+  // 每个 popup 独立 AbortController，不共享全局 _previewPollAbort（那个只服务
+  // overlay 路径）。这样连续点不同标准的预览时，第一个 popup 的 poll 不会被第二个
+  // 意外终结。popup.closed 检测仍然保留 —— 用户主动关 tab 就停 poll。
+  const ctrl = new AbortController();
   const yearMatch = stdCode.match(/-\s*(\d{4})\s*$/);
   const year = yearMatch ? yearMatch[1] : undefined;
   const body = year ? { stdCode, year } : { stdCode };
@@ -957,9 +960,10 @@ async function runPreviewWithPopup(id, stdCode, popup) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: ctrl.signal,
     });
     const data = await readApiResponse(res);
-    if (popup.closed) return;
+    if (popup.closed) { ctrl.abort(); return; }
     if (data.status === 'ready' && data.fileId) {
       _libraryFileIds.set(id, data.fileId);
       applyLibraryDots();
@@ -967,12 +971,12 @@ async function runPreviewWithPopup(id, stdCode, popup) {
       return;
     }
     if (data.status === 'downloading' && data.taskId) {
-      await pollPreviewTaskForPopup(data.taskId, stdCode, popup, id);
+      await pollPreviewTaskForPopup(data.taskId, stdCode, popup, id, ctrl);
       return;
     }
     writePreviewErrorPage(popup, stdCode, '后端返回未知状态：' + JSON.stringify(data));
   } catch (e) {
-    if (popup.closed) return;
+    if (popup.closed || ctrl.signal.aborted) return;
     writePreviewErrorPage(popup, stdCode, e?.message || String(e));
   }
 }
@@ -982,11 +986,13 @@ async function runPreviewWithPopup(id, stdCode, popup) {
  * - popup.closed → 取消轮询（用户关掉标签 = 不想要了）
  * - ready → navigate popup 到 file URL，同时回填 _libraryFileIds 缓存
  * - failed / 404 → 写错误页
- * 间隔 1500ms 跟原 overlay 版一致；Phase 3 会统一降到「前 5 次 300ms」
+ *
+ * ctrl 由调用方（runPreviewWithPopup）传入，每个 popup 一个独立 AbortController，
+ * 不再写全局 _previewPollAbort —— 历史 bug：用户连点 A→B 时，B 的入口 abort 全局
+ * controller 把 A 的 poll 也杀了，导致 A 标签卡死。
  */
-async function pollPreviewTaskForPopup(taskId, stdCode, popup, resultId) {
-  const ctrl = new AbortController();
-  _previewPollAbort = ctrl;
+async function pollPreviewTaskForPopup(taskId, stdCode, popup, resultId, ctrl) {
+  if (!ctrl) ctrl = new AbortController();
   let attempt = 0;
   while (!ctrl.signal.aborted) {
     if (popup.closed) { ctrl.abort(); return; }
