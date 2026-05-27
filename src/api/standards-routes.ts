@@ -320,6 +320,9 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         : {};
       respond(res, toCamelCase({
         ...result,
+        // 入库失败：把 status 降级 + 把原因冒到 libraryError 给前端用。文件其实还在
+        // exports/ 里，/api/downloads/:filename 兜底路径仍能给用户拉。
+        ...(moved.error ? { status: 'library_failed', libraryError: moved.error } : {}),
         ...(moved.fileName ? { fileName: moved.fileName, filePath: moved.absPath } : {}),
         ...(moved.libraryUrl ? { downloadUrl: moved.libraryUrl, fileId: moved.fileId } : {}),
       }));
@@ -357,6 +360,8 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
               respond(res, toCamelCase({
                 ...result,
                 source: src,
+                // 文件下下来了但 move 进库失败：降级 status，前端按失败处理同时显示具体原因。
+                ...(moved.error ? { status: 'library_failed', libraryError: moved.error } : {}),
                 ...(moved.fileName ? { fileName: moved.fileName, filePath: moved.absPath } : {}),
                 ...(moved.libraryUrl ? { downloadUrl: moved.libraryUrl, fileId: moved.fileId } : {}),
               }));
@@ -372,9 +377,10 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
             });
             respond(res, {
               source: src,
-              status: 'downloaded',
+              status: moved.error ? 'library_failed' : 'downloaded',
               fileName: moved.fileName || exportResult.fileName,
               fileSize: exportResult.fileSize,
+              ...(moved.error ? { libraryError: moved.error } : {}),
               ...(moved.libraryUrl ? { downloadUrl: moved.libraryUrl, fileId: moved.fileId } : {}),
             });
             return;

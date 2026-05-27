@@ -110,7 +110,11 @@ function getSourceIdForDownload(result, source, fallbackId) {
 
 function downloadErrorMessage(label, res, data) {
   const meta = data?.meta || {};
-  const base = meta.error || data?.message || data?.error || data?.status || `HTTP${res.status}`;
+  // libraryError 优先 —— 后端 status:'library_failed' 时这是唯一能解释「下下来但没入库」
+  // 的字段；如果用 data.status 兜底用户只会看到 "BW library_failed" 这种没营养的提示。
+  const base = data?.libraryError
+    ? `入库失败: ${data.libraryError}`
+    : meta.error || data?.message || data?.error || data?.status || `HTTP${res.status}`;
   const suffix = res.ok ? '' : ` (HTTP${res.status})`;
   return `${label} ${base}${suffix}`;
 }
@@ -492,6 +496,15 @@ async function doCascadeDownload() {
           success++; successItems.push(item);
           if (data.fileName) { triggerDownload(data.fileName); recordDownload(data.source, data.fileName, item.standardNumber); }
           completeDownloadTask(taskId, 'success', { source: data.source, fileName: data.fileName, fileSize: data.fileSize, progress: `${srcLabel(data.source)} 下载完成` });
+        } else if (resp.ok && data.status === 'library_failed') {
+          // 文件下下来了但没进库（留在 data/exports/），算失败让用户能在结果弹窗里看到原因。
+          // /api/downloads/:filename 兜底仍能拉到，所以 triggerDownload 还是给用户一份本地副本。
+          const errMsg = `入库失败: ${data.libraryError || '未知'}`;
+          updateLog(logId, `${item.standardNumber} ⚠ ${srcLabel(data.source)} ${errMsg}`, 'fail');
+          setRowDownloadState(item.standardId, 'fail');
+          if (data.fileName) { triggerDownload(data.fileName); recordDownload(data.source, data.fileName, item.standardNumber); }
+          allFailedItems.push({ ...item, _failReason: errMsg });
+          completeDownloadTask(taskId, 'fail', { error: errMsg, progress: errMsg });
         } else {
           const perSource = data.details?.perSource || data.errors;
           const errMsg = data.message || (perSource ? Object.values(perSource).join('; ') : '下载失败');

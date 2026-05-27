@@ -3,6 +3,13 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **下载入库加固 + 失败可见性**：解决"批量下载日志报 8/8 成功，但 library 目录里只有 5 个"的灵异 bug。根因是 `addFileToLibrary` 偶发抛错（Windows `EBUSY`/`EPERM` 锁竞争、跨卷 race 等），被 `moveDownloadToLibrary` 静默 `console.error` 吞掉、API 响应里仍带 `status: 'downloaded'` → 前端记一笔成功、用户却看不到库里没文件。
+  - **A: `moveIntoLibrary` helper（`src/services/library-index.ts`）**：抽出从 `addFileToLibrary` 中的「rename + 撞名 + 跨卷」逻辑。`renameWithRetry` 对 `EBUSY`/`EPERM`/`EACCES` 做 4 次指数 backoff 重试（累计 ~1.4s，覆盖典型 AV 锁窗口）；跨卷 `EXDEV` 走 `copy → .part → rename → unlink src` 中转，保留原子可见性（`.part` 后缀已在 watcher `ignored()` 里）；同名 PDF 用 `access` 预检 + `(1)/(2)` 后缀避免静默覆盖用户手放进来的文件。
+  - **B: 失败原因冒到 API 响应**：`moveDownloadToLibrary` 返回值新增 `error: string` 字段（`src/services/download-to-library.ts`）。`/api/standards/multi-download` 与 `/auto-download` 在 `moved.error` 存在时把 `status` 降级为 `'library_failed'` + 带 `libraryError` 字段（`src/api/standards-routes.ts`）。日志同时打到 `console.error`（ring buffer 拦截 → `/api/diagnostics/logs` 可查）+ 响应体。
+  - **C: 前端区分「入库成功」vs「下到 exports 但没入库」**：`public/js/app-download.js` 批量级联分支新增 `library_failed` 处理：UI 标 ⚠ 失败 + 原因显式展示 + 失败结果弹窗能看到具体 errno。`downloadErrorMessage` fallback 链补 `libraryError`，单源下载也能看到 `入库失败: rename 失败 (EBUSY)` 这种具体诊断。
+  - **不动 preview-routes**：预览自动下载用 `moved.fileId` 判断成功，无 fileId 自动 fallback 到下一源；UI 上只有最终的「所有源都未能下载」消息，具体 errno 走 `/api/diagnostics/logs`。
+  - **行为兼容**：库不可写 / 入库失败时文件仍在 `data/exports/`，`/api/downloads/:filename` fallback（先看 exports/ 再走索引）保证 `triggerDownload(fileName)` 能拉到本地副本。
+
 - **下载架构：多用户并发适配（A+B+C 组合）** —— 把单机部署 + 多用户共享出口 IP 这个物理约束闭环掉。
   - **A: 跨用户下载去重**：`ExportTask` 加 `subscribers: number[]`，`ExportTaskStore` 加 `activeByStandard: Map<standardId, taskId>` 索引。两个用户同时点同标准下载 → 第二个调用 `createTask` 时把 userId 追加到 subscribers 拿现有 task 的 SSE 进度流，**底层 adapter.exportStandard 只跑一次**。task 进入终态（success/failed）时摘除活跃索引，下次同标准下载能起新任务。owner 校验从 `userId ===` 改成 `isSubscriber(taskId, userId)`，两个用户都能读同 task。
   - **B: 删除竞速模式**：`downloadMode = 'race'` 全链路移除（`app-core.js` / `app-download.js` / `app-settings.js` / `web/src/main.ts` / 设置页 UI）。理由：竞速假设源独立，但实际整个系统是同一个出口 IP，对源站是一个客户，3 源同时打反而放大频控触发概率。`doRaceDownload` / `setDownloadMode` 留 thin wrapper 防旧 onclick / localStorage 报错。

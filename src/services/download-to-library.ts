@@ -3,6 +3,10 @@
 //
 // 失败容忍：addFileToLibrary 抛错只记日志，不动响应 —— 用户的下载体验不能因
 // "入库逻辑出问题"而崩。失败的文件会留在 exports/，/api/downloads 仍可服务。
+// 但失败原因会通过返回值的 `error` 字段冒到 API 响应，让前端区分「成功入库」
+// vs「下下来但没进库」 —— 用户报告过"日志说成功 8 个、库里只有 5 个"的灵异，
+// 不暴露 error 字段就只能让人去翻 /api/diagnostics/logs。
+//
 // 返回值带回新的 absPath / fileName / fileId，便于上层把 downloadUrl 改成
 // /api/preview/file/:id 而非旧的 /api/downloads/:filename，省一次磁盘 IO。
 //
@@ -13,13 +17,23 @@ import type { SourceRegistry } from './source-registry';
 import type { SourceName } from '../domain/standard';
 import { addFileToLibrary } from './library-index';
 
+export interface MoveDownloadResult {
+  fileId?: number;
+  absPath?: string;
+  fileName?: string;
+  libraryUrl?: string;
+  /** 入库失败时填入的诊断信息（包含 err.code + path）。调用方据此决定是否把 API
+   *  status 降级成 'library_failed' 并把原因冒给前端。 */
+  error?: string;
+}
+
 export async function moveDownloadToLibrary(
   db: Database.Database,
   sourceRegistry: SourceRegistry,
   source: SourceName,
   standardId: string,
   result: { filePath?: string; fileName?: string; fileSize?: number },
-): Promise<{ fileId?: number; absPath?: string; fileName?: string; libraryUrl?: string }> {
+): Promise<MoveDownloadResult> {
   if (!result.filePath) return {};
   try {
     let stdCode = '';
@@ -33,7 +47,7 @@ export async function moveDownloadToLibrary(
     if (!stdCode && result.fileName) {
       stdCode = result.fileName.replace(/\.pdf$/i, '');
     }
-    if (!stdCode) return {};
+    if (!stdCode) return { error: '无法确定 stdCode（detail 拉不到 + 没有 fileName）' };
 
     const moved = await addFileToLibrary(db, {
       srcPath: result.filePath,
@@ -48,7 +62,12 @@ export async function moveDownloadToLibrary(
       libraryUrl: `/api/preview/file/${moved.fileId}?attachment=1`,
     };
   } catch (e) {
-    console.error('[library] moveDownloadToLibrary failed:', e);
-    return {};
+    // 同时打到 console.error（ring buffer 会拦截写到 /api/diagnostics/logs）和返回值
+    // —— 用户排查时哪条路径都能看到。带上 source/standardId/srcPath 让日志能定位是哪一次。
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(
+      `[library] moveDownloadToLibrary failed: source=${source} standardId=${standardId} srcPath=${result.filePath} err=${msg}`,
+    );
+    return { error: msg };
   }
 }

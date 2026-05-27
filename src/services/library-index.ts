@@ -306,6 +306,83 @@ export function getIndexStats(db: Database.Database): { count: number; lastIndex
 // Phase 2: 下载入库 + 文件系统监听
 // ──────────────────────────────────────────────────────────────
 
+/** sleep helper —— retry backoff 用。不引共享工具是因为这里只需要单点用一次。 */
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * 把 srcPath move 到 dst。撞名 → 加 (1)/(2)... 后缀（access 预检）；Windows 锁竞争
+ * （EBUSY/EPERM/EACCES）retry 4 次带指数 backoff；跨卷（EXDEV）走 copy + .part 中转。
+ *
+ * 返回最终落地的绝对路径。失败时抛错且库目录里不留半成品（.part 文件失败时会被清理）。
+ *
+ * 为什么仍用 access 预检：fs.rename 在 Windows + POSIX 上撞 dst 都是**默默覆盖**而非抛
+ * EEXIST，没有预检的话用户手动放进库的同名 PDF 会被静默覆盖。access 预检在 8 并发场景
+ * 有 TOCTOU 但伤害有限 —— 不同 stdCode 走到这里 dst 也不同；同 (norm, year, source)
+ * 早被上层 reused 分支拦截了。真正高频出错的 EBUSY 由下面 renameWithRetry 兜底。
+ */
+async function moveIntoLibrary(srcPath: string, dst: string): Promise<string> {
+  let target = dst;
+  const parsed = path.parse(dst);
+  for (let counter = 1; counter <= 50; counter++) {
+    try {
+      await fs.access(target);
+      // 撞名（同 stdCode 不同源 sanitize 后撞 / 用户手动放进来的同名）→ 加后缀重试
+      target = path.join(parsed.dir, `${parsed.name} (${counter})${parsed.ext}`);
+    } catch {
+      break; // ENOENT —— target 可用
+    }
+    if (counter === 50) throw new Error(`文件名去重次数超过 50，疑似配置错误：${dst}`);
+  }
+
+  try {
+    await renameWithRetry(srcPath, target);
+    return target;
+  } catch (e: any) {
+    if (e?.code !== 'EXDEV') {
+      throw new Error(`rename 失败 (${e?.code || 'UNKNOWN'}): ${e?.message || e} → ${target}`);
+    }
+  }
+
+  // 跨卷：copy 到 .part → rename .part → 最终名（保留原子可见性，避免半写文件被
+  // chokidar add 事件抓到。chokidar 已配 awaitWriteFinish 但 .part 后缀是双保险，
+  // 上面 watcher 的 ignored() 也明确忽略 .part）
+  const partPath = `${target}.part`;
+  try {
+    await fs.copyFile(srcPath, partPath);
+    await renameWithRetry(partPath, target);
+    await fs.unlink(srcPath).catch(() => { /* 源已不可达就算了 */ });
+    return target;
+  } catch (xe: any) {
+    await fs.unlink(partPath).catch(() => { /* 清理半成品，忽略二次错 */ });
+    throw new Error(`copy+rename 失败 (${xe?.code || 'UNKNOWN'}): ${xe?.message || xe} → ${target}`);
+  }
+}
+
+/**
+ * fs.rename 带 EBUSY/EPERM/EACCES 重试。Windows 上杀毒实时扫描 + chokidar polling
+ * + 跨用户并发 batch 都会偶发 EBUSY；不重试会让 1 / N 个文件直接失败，体感差。
+ *
+ * EXDEV 不在这里 retry（跨卷不可能因为时间过去就变同卷），直接抛给上层走 copy 分支。
+ * EEXIST 也直接抛，上层会改 target 文件名再调一次。
+ */
+async function renameWithRetry(src: string, dst: string): Promise<void> {
+  const RETRY_CODES = new Set(['EBUSY', 'EPERM', 'EACCES']);
+  const delays = [50, 150, 400, 800]; // 4 次重试，累计 ~1.4s。Windows AV 锁通常 < 500ms。
+  let lastErr: any;
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    try {
+      await fs.rename(src, dst);
+      return;
+    } catch (e: any) {
+      lastErr = e;
+      if (!RETRY_CODES.has(e?.code)) throw e;
+      if (attempt === delays.length) break;
+      await sleep(delays[attempt]);
+    }
+  }
+  throw lastErr;
+}
+
 interface AddFileParams {
   srcPath: string;
   stdCode: string;          // 原始号（含 `/T`/`/Z` 等）
@@ -331,7 +408,12 @@ interface AddFileResult {
  *   srcPath 也会被 unlink 掉避免残留。若用户想强制刷新，应该走 admin 重扫 + 手动删旧文件。
  * - 库不可写 → 抛 Error。调用方应该 catch + 仅记日志，并把 srcPath 留在原地不删，
  *   /api/downloads/:filename 还能从那里兜底下载。
- * - rename 跨卷失败 (EXDEV) → 自动 fallback 到 copy+unlink。
+ * - 跨卷 (EXDEV) → 自动 fallback 到 copy + 临时 .part + rename，保留原子可见性。
+ * - Windows EBUSY/EPERM/EACCES：杀毒实时扫描、chokidar awaitWriteFinish polling、跨用户
+ *   并发 batch download 都会偶发占文件，加 retry-with-backoff 兜底。
+ *
+ * 出错原则：抛错时把 err.code + 上下文路径塞进 message，调用方（download-to-library）
+ * 会把 message 冒到 API 响应里给前端看 —— 不要再让用户面对"日志说成功但库里没有"的灵异。
  */
 export async function addFileToLibrary(
   db: Database.Database,
@@ -380,33 +462,9 @@ export async function addFileToLibrary(
     throw new Error('渲染后的文件名越出库目录');
   }
 
-  // 同名但不同 (norm, year, source) 已经存在 → 加 (1)/(2)... 后缀
-  let finalPath = targetPath;
-  let counter = 1;
-  while (true) {
-    try {
-      await fs.access(finalPath);
-      const parsed = path.parse(targetPath);
-      finalPath = path.join(parsed.dir, `${parsed.name} (${counter})${parsed.ext}`);
-      counter++;
-      if (counter > 50) throw new Error('文件名去重次数过多，疑似配置错误');
-    } catch {
-      break;
-    }
-  }
-
-  // 优先 rename（原子、零拷贝）；跨卷或 Windows 锁竞争失败时回退到 copy+unlink。
-  // 入库后 srcPath 不再保留 —— 用户要的就是"下载一份只在 library"。
-  try {
-    await fs.rename(params.srcPath, finalPath);
-  } catch (e: any) {
-    if (e?.code === 'EXDEV' || e?.code === 'EPERM' || e?.code === 'EACCES') {
-      await fs.copyFile(params.srcPath, finalPath);
-      await fs.unlink(params.srcPath).catch(() => { /* 源已不可达就算了 */ });
-    } else {
-      throw e;
-    }
-  }
+  // 走 moveIntoLibrary：内部做 access 预检 + EBUSY/EPERM/EACCES retry + 跨卷 .part 中转。
+  // 旧实现里 rename 失败直接抛错被上层吞掉，是「下载日志成功 8 但库里只有 5」的根因。
+  const finalPath = await moveIntoLibrary(params.srcPath, targetPath);
   const stat = await fs.stat(finalPath);
   const mtimeMs = Math.floor(stat.mtimeMs);
 
