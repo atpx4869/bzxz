@@ -3,7 +3,9 @@ import { BadRequestError } from '../shared/errors';
 
 type AdapterFactory = () => SourceAdapter;
 
-const FACTORIES: Record<SourceName, AdapterFactory> = {
+// Partial 而非 Record：labr 不实现 SourceAdapter（独立 sidebar + kind 双路径），
+// 所以 FACTORIES 不应该被 TS 要求列出 'labr' 键。get() 自带 missing-factory 抛错。
+const FACTORIES: Partial<Record<SourceName, AdapterFactory>> = {
   bz: () => {
     const { BzZhengguiAdapter } = require('../sources/bz-zhenggui/bz-zhenggui-adapter');
     return new BzZhengguiAdapter();

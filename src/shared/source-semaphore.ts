@@ -12,6 +12,10 @@
  *   先要过 ddddocr 识别验证码（CPU 50-200ms），4 个并发足以打满 CPU 又不至于把
  *   ocr-worker 队列堆死。
  * - BY = 4：内网直 PDF，跟 GBW 同量级。
+ * - LABR = 2：kind=0 直拉是单 HTTP 请求（同 GBW 量级可以 4），但 kind=1 走 preview2
+ *   每天有 5 次硬上限（Bearer token 维度），并发开高了瞬间打穿配额、后面整批退避也救不回。
+ *   保守起步 2，让用户主动批量下载时给 kind=0 留余量、kind=1 串行触发 LabrRateLimitError
+ *   后能让 labr-service 优雅 short-circuit。后续若 kind=0 占比高可以调到 4。
  *
  * 不暴露给前端配置（暂时）。未来如发现 admin 需要在线调，加个 settings 项 +
  * SemaphoreRegistry.setLimit() 即可（Semaphore 本身已支持运行时改容量）。
@@ -24,6 +28,7 @@ const DEFAULTS: Record<SourceName, number> = {
   bz: 2,
   gbw: 4,
   by: 4,
+  labr: 2,
 };
 
 const registry = new Map<SourceName, Semaphore>();

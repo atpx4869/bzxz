@@ -20,19 +20,22 @@ import { renderLibraryFilenameWithExt } from './library-naming';
 import { getSetting } from './db';
 import type { SourceName } from '../domain/standard';
 
-const SUPPORTED_SOURCES: ReadonlyArray<SourceName> = ['gbw', 'bz', 'by'];
+const SUPPORTED_SOURCES: ReadonlyArray<SourceName> = ['gbw', 'bz', 'by', 'labr'];
 
 // 文件名后缀里写的源名（用户可见标签）↔ 内部 canonical source。
 // 命名时用 LABEL（"BW 国标网"出现在 UI），索引和 API 用 canonical。
+// LB = labr 库（独立 sidebar 入口，但产出落到统一 standards_library_dir）
 const SOURCE_LABEL_TO_CANONICAL: Record<string, SourceName> = {
   BW: 'gbw', GBW: 'gbw',
   BZ: 'bz',
   BY: 'by',
+  LB: 'labr', LABR: 'labr',
 };
 const CANONICAL_TO_LABEL: Record<SourceName, string> = {
   gbw: 'BW',
   bz: 'BZ',
   by: 'BY',
+  labr: 'LB',
 };
 
 export function sourceLabel(source: SourceName): string {
