@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **回退「手机端点资质标准号头直跳标准搜索」**：commit `721cda3` 引入的 `onQualGroupClick` 把手机端点击行为劫持成 `switchTab('search') + doSearch`，但用户反馈这破坏了"看资质详情"的正常预期 —— 点标准号头本来应该展开下面的检测项目列表（CMA/CNAS 几十条能力），而不是丢掉当前上下文跳到搜索页。`public/js/app-qual.js` 删掉 `onQualGroupClick` 整个函数 + onclick 改回 `toggleQualGroup(gid)`，手机端与桌面端行为重新统一为 expand / collapse。
 - **手机端隐藏下载 / 收藏入口**：手机定位是「查阅」场景，下载依赖本地 standards 库目录 + 桌面 IPC（手机浏览器没有），收藏只是 localStorage 单端孤岛、跨端不同步。把所有触发面收掉避免误点：顶栏「下载中心」按钮、结果卡 `[data-action="download"]` / `[data-action="save"]`、筛选条「只看收藏」chip、长按右键菜单的"下载该标准"/"加入收藏"项、"我"页"下载历史"行、sidebar 历史 tab 全部 `display:none`。详情 / 预览弹窗里的 `#previewDownloadBtn` 保留（临时复制单个链接到外部浏览器仍然有用）。`toggleSavedStandard` 入口加 `window.isMobile()` early-return，防快捷键 / 外部脚本绕过 CSS。`?desktop=1` 逃生通道仍可走 `body.force-desktop` 还原所有功能。`web/src/styles/responsive.css` 顺手修了 78d940f oklch 脚本造成的尾部截断（`.card-actions` 规则及 4 按钮等宽样式被吃掉了 8 行）。
 - **下载入库加固 + 失败可见性**：解决"批量下载日志报 8/8 成功，但 library 目录里只有 5 个"的灵异 bug。根因是 `addFileToLibrary` 偶发抛错（Windows `EBUSY`/`EPERM` 锁竞争、跨卷 race 等），被 `moveDownloadToLibrary` 静默 `console.error` 吞掉、API 响应里仍带 `status: 'downloaded'` → 前端记一笔成功、用户却看不到库里没文件。
   - **A: `moveIntoLibrary` helper（`src/services/library-index.ts`）**：抽出从 `addFileToLibrary` 中的「rename + 撞名 + 跨卷」逻辑。`renameWithRetry` 对 `EBUSY`/`EPERM`/`EACCES` 做 4 次指数 backoff 重试（累计 ~1.4s，覆盖典型 AV 锁窗口）；跨卷 `EXDEV` 走 `copy → .part → rename → unlink src` 中转，保留原子可见性（`.part` 后缀已在 watcher `ignored()` 里）；同名 PDF 用 `access` 预检 + `(1)/(2)` 后缀避免静默覆盖用户手放进来的文件。
