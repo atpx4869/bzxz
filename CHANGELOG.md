@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **DB 自动备份 + 缺失自愈（防升级丢账号）**：commit `0bd54c4` 之前的 `installer.nsh` 没保留 `$INSTDIR\data`，从更早版本升级的用户会被旧卸载器 `RMDir /r` 把 `users` / 资质数据全部抹掉。装机版升级走的是「上一次安装时落盘的卸载器」 —— 即使现在 installer 修了，旧 exe 的卸载器逻辑无法追溯。所以再加一层 application-level 防御。
+  - **备份位置选 `%APPDATA%\bzxz\bzxz-db-backups\`**：NSIS 永远不会动 userData，与 `$INSTDIR` 物理隔离。环境变量 `BZXZ_USER_DATA_DIR` 由 `electron/main.ts:524` 注入；backend 进程通过此环境变量拿到路径。
+  - **启动自愈**：`src/services/db.ts::getDb` 在 `new Database(path)` 之前调一次 `tryRestoreDbBeforeOpen(path)` —— 检测 db 文件不存在或 < 100 字节（SQLite header 最小值），从最新备份 `copyFileSync` 过去，让上层照常 open。找不到备份时静默退让，让程序走「全新 db、首次注册即管理员」路径。
+  - **启动后异步备份**：用 `better-sqlite3` 的 `db.backup()` API（SQLite Online Backup，对 WAL 模式安全）拷一份 `bzxz-<YYYYMMDD-HHmmss>.db`。保留最近 7 份，更老的删掉。失败静默不阻塞启动。
+  - **管理员接口**：`GET /api/admin/db/backups` 列出所有备份元数据（name / size / mtime），`POST /api/admin/db/backups` 手动触发一次备份（打补丁前主动留一份）。
+  - **行为兼容**：现有用户首次启动后立刻得到一份基线备份；下次升级即使踩旧卸载器逻辑也能自愈。**已经丢账号的用户没法回溯历史 —— 这是版本切换的一次性伤害**，只能重新注册管理员；未来不再发生。
 - **Hotfix：绿点 CSS 同步到 `public/styles.css`**：Phase 1 时把 `.dot-local::after` 规则只加到 `web/src/styles/components/result-card.css`，但 packaged 装机版 Electron 走 `public/index.html` 入口、只 `<link>` legacy `public/styles.css`，新文件根本不会被加载 → 用户看不到绿点。**本质是迁移期双写漏了一边**（CLAUDE.md 已明确"`public/styles.css` 仍是真相源"）。现在把那段 CSS 同步到 `public/styles.css` 的 `.result-card .card-actions button` 块之后，与 web/src/styles 端 cascade 等价。
 - **预览优化 Phase 3：轮询提速 + 移除 cache-buster 让浏览器走 304**：
   - **轮询前 5 次 300ms，之后退化 1500ms**：`pollPreviewTask` 和 `pollPreviewTaskForPopup` 都把固定 1500ms 间隔改成 `attempt <= 5 ? 300 : 1500`。CNAS/By 源命中本地缓存的标准 ~1-2s 就完成 export，原来 1500ms 步长意味着最坏 5 个完整间隔（7.5s）才感知到 ready；改后前 5 次密集采样最快 300ms 内捕获，超过 1.5s 没好就降到 1500ms 减负载。**前 5 次 = 1500ms 之内**，跟原版 1 个轮询周期等长，对后端是无 regression 改动；用户感知到的"下载到出现 PDF"延迟从 typical 2-3s 降到 ~500ms。

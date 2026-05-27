@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'node:path';
 import { getRootDir } from '../shared/fs';
 import { extractBaseCode, extractFullCode, cleanStdCode } from '../shared/std-code';
+import { tryRestoreDbBeforeOpen, backupDbAsync } from './db-backup';
 
 let _db: Database.Database | null = null;
 
@@ -13,6 +14,10 @@ export function getDb(dbPath?: string): Database.Database {
   if (_db && !dbPath) return _db;
 
   const resolved = dbPath || path.join(getRootDir(), 'data', 'bzxz.db');
+  // 升级 / 重装可能让 $INSTDIR\data\bzxz.db 被旧卸载器抹掉（commit 0bd54c4
+  // 之前的 NSIS 没保留 data/）。打开前先看一眼能不能从 userData 还原最新备份。
+  // 注入路径只在生产构造路径（无显式 dbPath）时才走 —— 测试用例不应被副作用打断。
+  if (!dbPath) tryRestoreDbBeforeOpen(resolved);
   const db = new Database(resolved);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
@@ -23,6 +28,8 @@ export function getDb(dbPath?: string): Database.Database {
     _db = db;
     // Clean up expired sessions on startup
     db.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')").run();
+    // 异步备份当前 db 到 userData，保留最近 7 份。失败静默不阻塞启动。
+    void backupDbAsync(db);
   }
   return db;
 }

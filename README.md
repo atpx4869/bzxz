@@ -240,6 +240,8 @@ start.bat
 | GET | `/api/admin/users/:id/events` | 用户使用明细 |
 | POST | `/api/admin/library/rescan` | 全量重扫标准库目录 |
 | GET | `/api/admin/qual/diagnose?code=` | 资质漏命中诊断：返回 DB 行的归一化列状态、Phase1/Phase2/索引等值各路径命中情况 |
+| GET | `/api/admin/db/backups` | 列出所有 db 自动备份（userData/bzxz-db-backups/*）：name / size / mtime |
+| POST | `/api/admin/db/backups` | 手动触发一次 db 备份（打补丁 / 升级前主动留底） |
 
 ### 诊断（需登录）
 
@@ -384,6 +386,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **DB 自动备份 + 缺失自愈** — 启动时把 `data/bzxz.db` 用 SQLite Online Backup 复制到 `%APPDATA%\bzxz\bzxz-db-backups\bzxz-<时间戳>.db`（NSIS 永远不动 userData，物理隔离），保留最近 7 份。下次启动若 db 缺失或 < 100 字节自动从最新备份还原 —— 防 commit `0bd54c4` 之前的旧 installer 卸载器 RMDir 把 `data\bzxz.db` 抹掉导致 admin 账号丢失。`GET/POST /api/admin/db/backups` 用于查询 / 手动触发
 - **预览优化 Phase 3：轮询提速 + 移除 cache-buster** — 预览自动下载轮询从固定 1500ms 改为「前 5 次 300ms + 之后 1500ms」，CNAS 缓存命中场景从 typical 2-3s 降到 ~500ms。同时移除 iframe URL 的 `?t=Date.now()` cache-buster，让后端 `ETag + must-revalidate` 生效 = 第二次预览同一标准走浏览器 304 缓存几乎瞬间渲染
 - **预览优化 Phase 2：预览直跳新 tab** — 热路径（绿点命中）`window.open('/api/preview/file/:fileId')` 跳过 `/api/preview/request` 整轮 RTT，浏览器走 304 缓存即可秒开；冷路径在 click 同一 tick 里 `window.open('about:blank')` 占住新 tab（popup blocker safe），写入 loading 骨架，异步拿到 fileId 后 `popup.location.replace` 跳过去，原生 PDF viewer 接管 = 全屏 / 缩放 / 打印不受 overlay 限制。失败写错误页 + 关闭按钮；popup 被拦截降级到原 overlay+iframe 流程，零功能退化
 - **预览优化 Phase 1：本地库批量扫描 + 绿点指示器** — 搜索完成后非阻塞 POST `/api/preview/library-check`（单条 SQL 跑在 `idx_standard_files_lookup` 上，200 条 ≤ 5ms），命中的标准在「预览」按钮右上角叠一个脉冲绿点。用户一眼区分「秒开 vs 要下载」。`_libraryFileIds` 缓存供 Phase 2 复用

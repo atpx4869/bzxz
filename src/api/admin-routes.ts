@@ -9,6 +9,7 @@ import { toCamelCase } from '../shared/case';
 import { resolveLibraryDir, setLibraryDir } from '../shared/library-paths';
 import { scanLibrary, getIndexStats, startLibraryWatcher, stopLibraryWatcher } from '../services/library-index';
 import { extractBaseCode, extractFullCode, buildFuzzyLikePattern } from '../services/qualification-service';
+import { listBackupInfo, backupDbAsync } from '../services/db-backup';
 
 const sourceEnum = z.enum(['gbw', 'bz', 'by']);
 const DEFAULT_SOURCE_PRIORITY = ['gbw', 'bz', 'by'] as const;
@@ -278,6 +279,28 @@ export function createAdminRoutes(db: Database.Database) {
         cnas: { totalRows: cnasRows.length, rows: annotate(cnasRows) },
         cma: { totalRows: cmaRows.length, rows: annotate(cmaRows) },
       });
+    } catch (error) {
+      next(normalizeError(error));
+    }
+  });
+
+  // GET /api/admin/db/backups
+  // 列出所有 db 备份（userData/bzxz-db-backups/*）。管理员设置页可以展示用于
+  // 验证「升级保护链路是否生效」。
+  router.get('/db/backups', (_req, res, next) => {
+    try {
+      respond(res, { backups: listBackupInfo() });
+    } catch (error) {
+      next(normalizeError(error));
+    }
+  });
+
+  // POST /api/admin/db/backups
+  // 手动触发一次备份。打补丁前 / 大改之前管理员可以主动留一份。
+  router.post('/db/backups', async (_req, res, next) => {
+    try {
+      await backupDbAsync(db);
+      respond(res, { backups: listBackupInfo() });
     } catch (error) {
       next(normalizeError(error));
     }
