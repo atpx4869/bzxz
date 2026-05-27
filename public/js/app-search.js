@@ -747,7 +747,9 @@ async function pollPreviewTask(taskId, stdCode) {
   while (!ctrl.signal.aborted) {
     attempt++;
     setPreviewBody(`<div class="preview-loading">正在自动下载…（${attempt}）<br><span class="preview-empty-hint">首次入库可能 5~30 秒，受源站速度影响</span></div>`);
-    await new Promise(r => setTimeout(r, 1500));
+    // 前 5 次 300ms 快速捕获缓存命中（CNAS/By 源 ~1-2s 就完成），之后退化到 1500ms 减负载
+    const wait = attempt <= 5 ? 300 : 1500;
+    await new Promise(r => setTimeout(r, wait));
     if (ctrl.signal.aborted) return;
     let data;
     let httpOk = true;
@@ -767,8 +769,9 @@ async function pollPreviewTask(taskId, stdCode) {
     }
     if (data.status === 'ready') {
       _previewCurrent = { fileId: data.fileId, url: data.url, fileName: stdCode };
-      const safeUrl = data.url + (data.url.includes('?') ? '&' : '?') + 't=' + Date.now();
-      setPreviewBody(`<iframe class="preview-iframe" src="${escapeHtml(safeUrl)}" title="预览 ${escapeHtml(stdCode)}"></iframe>`);
+      if (data.fileId && _previewLastId) { _libraryFileIds.set(_previewLastId, data.fileId); applyLibraryDots(); }
+      // 不再加 ?t=Date.now() cache-buster；后端发 ETag + must-revalidate，浏览器走 304 复用
+      setPreviewBody(`<iframe class="preview-iframe" src="${escapeHtml(data.url)}" title="预览 ${escapeHtml(stdCode)}"></iframe>`);
       return;
     }
     if (data.status === 'failed') {
@@ -962,7 +965,9 @@ async function pollPreviewTaskForPopup(taskId, stdCode, popup, resultId) {
   while (!ctrl.signal.aborted) {
     if (popup.closed) { ctrl.abort(); return; }
     attempt++;
-    await new Promise(r => setTimeout(r, 1500));
+    // 前 5 次 300ms 快速捕获，之后 1500ms 减负载（与 pollPreviewTask 一致）
+    const wait = attempt <= 5 ? 300 : 1500;
+    await new Promise(r => setTimeout(r, wait));
     if (ctrl.signal.aborted || popup.closed) return;
     let data, ok = true;
     try {
@@ -1018,8 +1023,8 @@ async function runPreviewWithOverlay(id, stdCode, r) {
     if (data.status === 'ready') {
       _previewCurrent = { fileId: data.fileId, url: data.url, fileName: stdCode };
       if (data.fileId) { _libraryFileIds.set(id, data.fileId); applyLibraryDots(); }
-      const safeUrl = data.url + (data.url.includes('?') ? '&' : '?') + 't=' + Date.now();
-      setPreviewBody(`<iframe class="preview-iframe" src="${escapeHtml(safeUrl)}" title="预览 ${escapeHtml(stdCode)}"></iframe>`);
+      // 不再加 ?t=Date.now() cache-buster；后端发 ETag + must-revalidate，浏览器走 304 复用
+      setPreviewBody(`<iframe class="preview-iframe" src="${escapeHtml(data.url)}" title="预览 ${escapeHtml(stdCode)}"></iframe>`);
     } else if (data.status === 'downloading' && data.taskId) {
       _previewCurrent = null;
       await pollPreviewTask(data.taskId, stdCode);

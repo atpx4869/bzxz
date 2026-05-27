@@ -384,6 +384,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **预览优化 Phase 3：轮询提速 + 移除 cache-buster** — 预览自动下载轮询从固定 1500ms 改为「前 5 次 300ms + 之后 1500ms」，CNAS 缓存命中场景从 typical 2-3s 降到 ~500ms。同时移除 iframe URL 的 `?t=Date.now()` cache-buster，让后端 `ETag + must-revalidate` 生效 = 第二次预览同一标准走浏览器 304 缓存几乎瞬间渲染
 - **预览优化 Phase 2：预览直跳新 tab** — 热路径（绿点命中）`window.open('/api/preview/file/:fileId')` 跳过 `/api/preview/request` 整轮 RTT，浏览器走 304 缓存即可秒开；冷路径在 click 同一 tick 里 `window.open('about:blank')` 占住新 tab（popup blocker safe），写入 loading 骨架，异步拿到 fileId 后 `popup.location.replace` 跳过去，原生 PDF viewer 接管 = 全屏 / 缩放 / 打印不受 overlay 限制。失败写错误页 + 关闭按钮；popup 被拦截降级到原 overlay+iframe 流程，零功能退化
 - **预览优化 Phase 1：本地库批量扫描 + 绿点指示器** — 搜索完成后非阻塞 POST `/api/preview/library-check`（单条 SQL 跑在 `idx_standard_files_lookup` 上，200 条 ≤ 5ms），命中的标准在「预览」按钮右上角叠一个脉冲绿点。用户一眼区分「秒开 vs 要下载」。`_libraryFileIds` 缓存供 Phase 2 复用
 - **回退手机端「资质标准号头点击直跳标准搜索」** — 点标准号头应该展开下面的检测项目列表（用户预期），而不是丢上下文跳搜索页。`onQualGroupClick` 函数删掉，onclick 改回 `toggleQualGroup(gid)`，手机端与桌面端行为重新统一

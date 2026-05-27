@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **预览优化 Phase 3：轮询提速 + 移除 cache-buster 让浏览器走 304**：
+  - **轮询前 5 次 300ms，之后退化 1500ms**：`pollPreviewTask` 和 `pollPreviewTaskForPopup` 都把固定 1500ms 间隔改成 `attempt <= 5 ? 300 : 1500`。CNAS/By 源命中本地缓存的标准 ~1-2s 就完成 export，原来 1500ms 步长意味着最坏 5 个完整间隔（7.5s）才感知到 ready；改后前 5 次密集采样最快 300ms 内捕获，超过 1.5s 没好就降到 1500ms 减负载。**前 5 次 = 1500ms 之内**，跟原版 1 个轮询周期等长，对后端是无 regression 改动；用户感知到的"下载到出现 PDF"延迟从 typical 2-3s 降到 ~500ms。
+  - **移除 iframe URL 的 `?t=Date.now()` cache-buster**：原来在 `runPreviewWithOverlay` 和 `pollPreviewTask` 拿到 ready 后把 url 拼上一个时间戳避免 iframe 缓存 stale。但后端 `/api/preview/file/:id` 已经发了 `ETag` + `Cache-Control: private, max-age=0, must-revalidate`，浏览器每次都会带 `If-None-Match` 做条件请求，命中 → 304 + 复用内存里的 PDF。原来强制带 ts 让浏览器把每次都当不同 URL，跳过条件 GET = 每次重新下整个 PDF。改后用户连点同一标准的预览第二次起几乎瞬间渲染。
+  - **`pollPreviewTask` 也回填 `_libraryFileIds` 缓存**：原本只在 popup 路径回填，现在 overlay 路径走完 ready 也写一笔。两条路径都贡献绿点 + 第二次秒开。
+  - **行为兼容**：UI 仍然显示「正在自动下载…（N）」计数，N 现在最大可能是 ~6-10（前 5 次密集采样后再几次 1.5s），用户语义不变。
 - **预览优化 Phase 2：预览直跳新 tab（热路径秒开 / 冷路径 about:blank 占位 + 自动跳转）**：解决 overlay iframe 模式的两个老问题 —— ① 命中本地的标准也要走 `/api/preview/request` 一轮 RTT 才能渲染；② iframe 内 PDF 缩放 / 全屏受 overlay 容器限制、键盘快捷键被劫持。
   - **热路径**：`previewStandard` 开头查 `_libraryFileIds.get(id)`（Phase 1 已经预填好的缓存）。命中 → 直接 `window.open('/api/preview/file/:fileId', '_blank')`，**完全跳过 API 调用**，浏览器直接走 304 缓存渲染。绿点 = 秒开承诺，体感非常好。
   - **冷路径（同步开占位 tab）**：未命中时，先在 `previewStandard` 同一个 click tick 内 `window.open('about:blank', '_blank')` —— 这一步必须在用户手势调用栈里、否则 popup blocker 拦死。立刻 `popup.document.write` 一个 loading 骨架（暗色背景 + spinner + "正在自动下载 XXX…"），再异步发 `/api/preview/request` 拿 fileId / taskId。`writePreviewLoadingPage` 用 `document.write` 而非 innerHTML，因为 `about:blank` 刚开时还没有 body 节点；origin 通过 opener 继承同源，写入权限 OK。
