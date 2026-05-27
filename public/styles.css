@@ -1590,4 +1590,193 @@ body:not(.force-desktop) .preview-title { font-size: 13px; }
 }
 .library-row:last-child { border-bottom: 0; }
 .library-row-label {
-  flex: 0 0 84px; font-size: 12px; color: var(--}
+  flex: 0 0 84px; font-size: 12px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em;
+}
+.library-row-value { color: var(--text); font-size: 13px; overflow-wrap: anywhere; }
+.library-row code.library-row-value {
+  background: rgba(11, 16, 21, 0.5); background: oklch(17% 0.014 255 / 0.5); padding: 4px 8px; border-radius: 6px;
+  font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.library-input {
+  flex: 1; min-width: 240px; padding: 6px 10px;
+  background: rgba(11, 16, 21, 0.5); background: oklch(17% 0.014 255 / 0.5); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.library-hint { font-size: 11px; color: var(--text-3); }
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * 多源 preview picker —— 镜像 web/src/styles/components/preview.css 同名段落。
+ * 两步切换时（legacy public/index.html 入口废弃后）连同上面 .preview-* 段一起删。
+ * ════════════════════════════════════════════════════════════════════════════ */
+.preview-source-picker {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 6px 14px;
+  background: rgba(11, 16, 21, 0.4);
+  background: oklch(17% 0.014 255 / 0.4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 11px;
+}
+.preview-source-label { color: var(--text-3); font-size: 11px; margin-right: 2px; }
+.preview-source-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text-2); font-size: 11px; font-weight: 500;
+  cursor: pointer; transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.preview-source-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+}
+.preview-source-btn.active {
+  background: rgba(59, 130, 246, 0.18);
+  background: oklch(60% 0.18 250 / 0.18);
+  border-color: rgba(59, 130, 246, 0.4);
+  border-color: oklch(60% 0.18 250 / 0.4);
+  color: #93c5fd; color: oklch(80% 0.13 250);
+}
+.preview-source-name { font-weight: 600; }
+.preview-source-year, .preview-source-ext {
+  font-size: 9px; padding: 0 4px; border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-3); font-weight: 700; letter-spacing: 0.04em;
+}
+.preview-source-btn.active .preview-source-year,
+.preview-source-btn.active .preview-source-ext {
+  background: rgba(59, 130, 246, 0.25);
+  background: oklch(60% 0.18 250 / 0.25);
+  color: #bfdbfe; color: oklch(85% 0.10 250);
+}
+@media (max-width: 640px) {
+  .preview-source-picker { padding: 5px 10px; gap: 4px; overflow-x: auto; flex-wrap: nowrap; }
+  .preview-source-btn { padding: 2px 7px; font-size: 10px; flex-shrink: 0; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * Labr库检索 page (#page-labr) —— 镜像 web/src/styles/pages/labr.css。
+ * 两步切换时连同本段一起删。
+ * ════════════════════════════════════════════════════════════════════════════ */
+.labr-results-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 4px; margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 12px; color: var(--text-3);
+}
+.labr-select-all { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.labr-select-all input { accent-color: var(--accent); width: 14px; height: 14px; }
+.labr-results-count { font-size: 11px; color: var(--text-3); }
+
+.labr-rows { display: flex; flex-direction: column; gap: 4px; }
+
+.labr-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.15s, border-color 0.15s;
+}
+.labr-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.labr-row-check input { accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer; }
+
+.labr-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.labr-row-title {
+  font-size: 13px; color: var(--text);
+  line-height: 1.45; overflow-wrap: anywhere;
+}
+.labr-row-title font[color] { font-weight: 600; }
+.labr-row-meta {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  font-size: 11px; color: var(--text-3);
+  align-items: center;
+}
+
+.labr-row-actions { flex-shrink: 0; }
+.labr-row-actions .spinner { display: inline-block; width: 12px; height: 12px; }
+
+.labr-std-code {
+  display: inline-block;
+  padding: 2px 6px;
+  background: rgba(59, 130, 246, 0.16);
+  background: oklch(60% 0.18 250 / 0.16);
+  color: #93c5fd;
+  color: oklch(80% 0.13 250);
+  border-radius: 4px;
+  font-size: 11px; font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  margin-right: 4px;
+}
+
+.labr-kind-badge {
+  display: inline-block; padding: 1px 6px;
+  border-radius: 3px; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.labr-kind-0 {
+  background: rgba(34, 197, 94, 0.16);
+  background: oklch(70% 0.17 145 / 0.16);
+  color: #4ade80;
+  color: oklch(78% 0.18 145);
+}
+.labr-kind-1 {
+  background: rgba(245, 158, 11, 0.16);
+  background: oklch(76% 0.17 75 / 0.16);
+  color: #fbbf24;
+  color: oklch(82% 0.17 80);
+}
+
+.labr-ext-badge {
+  display: inline-block; padding: 1px 5px;
+  border-radius: 3px; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.labr-ext-pdf {
+  background: rgba(239, 68, 68, 0.16);
+  background: oklch(64% 0.22 25 / 0.16);
+  color: #f87171; color: oklch(72% 0.20 25);
+}
+.labr-ext-doc, .labr-ext-docx {
+  background: rgba(37, 99, 235, 0.16);
+  background: oklch(55% 0.18 260 / 0.16);
+  color: #60a5fa; color: oklch(75% 0.16 260);
+}
+.labr-ext-xls, .labr-ext-xlsx, .labr-ext-xsxl {
+  background: rgba(22, 163, 74, 0.16);
+  background: oklch(60% 0.18 145 / 0.16);
+  color: #4ade80; color: oklch(78% 0.18 145);
+}
+.labr-ext-ppt, .labr-ext-pptx {
+  background: rgba(234, 88, 12, 0.16);
+  background: oklch(64% 0.20 50 / 0.16);
+  color: #fb923c; color: oklch(76% 0.19 50);
+}
+.labr-ext-txt {
+  background: rgba(148, 163, 184, 0.16);
+  background: oklch(70% 0.02 255 / 0.16);
+  color: #cbd5e1; color: oklch(85% 0.02 255);
+}
+
+.labr-paid-badge {
+  display: inline-block; padding: 1px 5px;
+  border-radius: 3px; font-size: 10px; font-weight: 600;
+  background: rgba(245, 158, 11, 0.16);
+  background: oklch(76% 0.17 75 / 0.16);
+  color: #fbbf24; color: oklch(82% 0.17 80);
+}
+
+.labr-pubdt { font-size: 10px; color: var(--text-3); margin-left: auto; }
+
+#labrPager { font-size: 12px; color: var(--text-3); }
+
+@media (max-width: 640px) {
+  .labr-row { padding: 8px 10px; gap: 8px; }
+  .labr-row-title { font-size: 12px; }
+  .labr-row-meta { font-size: 10px; gap: 4px; }
+  .labr-pubdt { margin-left: 0; }
+}

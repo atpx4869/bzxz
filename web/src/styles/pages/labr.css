@@ -1,5 +1,8 @@
 /* ─── Labr库检索 page (#page-labr) ───────────────────────────────────────
  *
+ * 镜像 public/styles.css 末段（搜 "Labr库检索 page" banner）。
+ * Legacy 入口废弃后，public/styles.css 这一段会删，本文件成为唯一来源。
+ *
  * 列表行：checkbox + 标准号徽章 + 标题（含 hl_title sanitize 后的 <font>/<mark> 高亮）
  *      + kind/ext/付费 徽章 + pubdt + 下载按钮
  *

@@ -51,6 +51,7 @@
 .preview-empty-actions { display: flex; gap: 8px; justify-content: center; }
 
 /* ── 多源 preview picker (#previewSourcePicker) ──
+ * 镜像 public/styles.css 末段（"多源 preview picker" banner）。
  * /api/preview/files 返回 ≥2 候选时显示。按 (year DESC, priority 排序) 的源切换按钮。
  * 默认 hidden（HTML 上 inline `display:none`），JS 拿到候选后才 unhide。 */
 .preview-source-picker {
