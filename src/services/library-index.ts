@@ -56,12 +56,46 @@ interface ParsedFilename {
   stdCodeNorm: string;
   year: string;
   source: SourceName;
+  /** 标题（仅在新格式 `{stdCode} {title} - {source}.pdf` 时非空）。
+   *  目前 scanLibrary 不消费，但 labr 接入后 title 是文件名第一公民，预留字段。 */
+  title: string;
 }
 
 /**
- * 解析文件名。期望格式：`{stdCode} - {sourceLabel}.pdf`，例如
- *   "GB_T 3324-2024 - BW.pdf"
- *   "JJG 196-2006 - BZ.pdf"
+ * 标准号"头部"匹配：从字符串开头吃掉 `<prefix> <数字>[.数字]*[-YYYY[修订字母]]?`。
+ *
+ * 覆盖的形态（保留正则在这里方便对照修改）：
+ *   "GB 3324-2024"        — 最常见
+ *   "GB/T 3324-2024"      — 含 / 分隔（labr 文件名里写作 _）
+ *   "DB44/T 2107-2018"    — prefix 含数字（DB44 = letters+digits）
+ *   "JB/T 4730.5-2005"    — 标准号本体有 `.5` 分部
+ *   "GB/T 3836-2010A"     — 年份带修订字母
+ *   "ISO 4287-1997"       — 国际标准号
+ *   "JJG 196-2006"        — 检定规程
+ *   "GB 3324"             — 无年份
+ *
+ * 不匹配：'/' 必须先被 `_ → /` 还原（文件名里写作 `_`）；中文 / 非 ASCII 字符开头一律
+ * 不算 stdCode（视作 title 起点）。捕获组 1=整个 stdCode 头，2=4 位年份（可能 undefined）。
+ */
+const STD_CODE_HEAD_RE = /^([A-Z][A-Z0-9]*(?:\/[A-Z][A-Z0-9]*)?\s+\d+(?:\.\d+)*(?:\s*-\s*(\d{4})[A-Z]?)?)/;
+
+/**
+ * 解析库文件名。支持两种格式（V2 后向兼容）：
+ *
+ *   旧：`{stdCode} - {sourceLabel}.pdf`            — V1 / 三源（BW/BZ/BY）历史文件
+ *     "GB_T 3324-2024 - BW.pdf"
+ *     "JJG 196-2006 - BZ.pdf"
+ *
+ *   新：`{stdCode} {title} - {sourceLabel}.pdf`    — V2 默认 pattern，含 labr
+ *     "GB_T 3324-2024 木家具通用技术条件 - LB.pdf"
+ *     "GB_T 3324-2024 木家具通用技术条件 - BW.pdf" (用户改默认 pattern 后)
+ *
+ * 解析流程：
+ *   1. 剥 `.pdf` 后缀
+ *   2. 从右侧匹配 ` - {LABEL}` 提源（锚定结尾避免标题里含 " - XX" 误判）
+ *   3. 把 `_` 还原成 `/` 让 std-code 模块认识
+ *   4. 从开头用 STD_CODE_HEAD_RE 抠 stdCode 头部，剩余部分 trim 后即 title
+ *   5. 年份从正则捕获组直接拿（不依赖字符串结尾，因为新格式末尾是 title 不是 year）
  *
  * 兼容：
  * - 文件名里的 `_` 视作 `/`（写入时 `/` 被替换成 `_`）
@@ -74,23 +108,31 @@ export function parseLibraryFilename(name: string): ParsedFilename | null {
   const stem = name.slice(0, -4);
 
   // 从右侧匹配 ` - {SOURCE}`；锚定结尾避免标题里有 " - XX" 误匹配
-  const m = stem.match(/^(.+?)\s*[-—]\s*([A-Za-z]+)\s*$/);
-  if (!m) return null;
-  const sourceRaw = m[2].toUpperCase();
+  const sourceMatch = stem.match(/^(.+?)\s*[-—]\s*([A-Za-z]+)\s*$/);
+  if (!sourceMatch) return null;
+  const sourceRaw = sourceMatch[2].toUpperCase();
   const source = SOURCE_LABEL_TO_CANONICAL[sourceRaw];
   if (!source) return null;
 
-  // 把 _ 换回 / 让 extractBaseCode 能识别 /T、/Z 等
-  const stdCodeRaw = m[1].trim().replace(/_/g, '/');
-  if (!stdCodeRaw) return null;
+  // body = 剥源后的全部内容。可能是单纯 stdCode（旧格式）或 "stdCode title"（新格式）。
+  const body = sourceMatch[1].trim();
+  if (!body) return null;
+
+  // 把 _ 换回 / 让 STD_CODE_HEAD_RE 和 extractBaseCode 能识别 /T、/Z 等
+  const bodyWithSlash = body.replace(/_/g, '/');
+
+  // 从开头匹配 stdCode head；匹不到说明不是规范标准号，整个文件忽略
+  const headMatch = bodyWithSlash.match(STD_CODE_HEAD_RE);
+  if (!headMatch) return null;
+
+  const stdCodeRaw = headMatch[1].trim();
+  const year = headMatch[2] || '';
+  const title = bodyWithSlash.slice(headMatch[0].length).trim();
 
   const stdCodeNorm = extractBaseCode(stdCodeRaw);
   if (!stdCodeNorm) return null;
 
-  const yearMatch = stdCodeRaw.match(/-\s*(\d{4})\s*$/);
-  const year = yearMatch ? yearMatch[1] : '';
-
-  return { stdCodeRaw, stdCodeNorm, year, source };
+  return { stdCodeRaw, stdCodeNorm, year, source, title };
 }
 
 /**

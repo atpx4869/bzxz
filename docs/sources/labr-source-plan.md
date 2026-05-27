@@ -69,7 +69,7 @@ labr 账号密码与 token 在以下两个文件里（已 gitignore 或本地文
 
 | # | 节点 | 状态 | commit | 完成日期 | 关键文件 / 备注 |
 |---|---|:-:|---|---|---|
-| 50 | parseLibraryFilename 兼容新旧文件名 + 单测 | [ ] | | | `src/services/library-index.ts` + 新增 `library-index.test.ts`。验收：BW/BZ/BY/LB 四标签 × 含/不含 title 八种组合全过 |
+| 50 | parseLibraryFilename 兼容新旧文件名 + 单测 | [x] | _待填_ | 2026-05-27 | `src/services/library-index.ts` 新增 `STD_CODE_HEAD_RE` + 输出 `title` 字段；`library-index.test.ts` 21 用例覆盖老格式回归 / 含 title / stdCode 形状 (DB44T/JBT 4730.5/2010A/ISO/无年份) / 拒绝。watcher 仅消费 stdCodeNorm/year/source，title 纯增字段无下游回归 |
 | 51 | 域类型 labr + library-index 映射 + semaphore | [ ] | | | `src/domain/standard.ts` / `src/shared/id.ts` / `src/shared/source-semaphore.ts` / `src/services/library-index.ts` / `src/services/library-naming.ts`。TS build 不报错 |
 | 52 | db.ts 表迁移 + filename_pattern 默认值 | [ ] | | | `src/services/db.ts` 新增 `labr_temp_urls` 表 + 默认 pattern 改 `{stdCode} {title} - {source}`。启动 migration 幂等 |
 | 53 | labr-client（登录 / List / Detail / Download） | [ ] | | | `src/sources/labr/labr-client.ts` + `labr-client.test.ts`（nock 录放）。验收：login → ssoToken cookie 写入；rec-list 翻页正确；download(info,detail) kind 0/1 双分支 |
