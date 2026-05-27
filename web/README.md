@@ -35,8 +35,10 @@ npm run web:build        # 构建到 ../public/dist/
 src/styles/
 ├── base.css            # :root tokens + reset + 全站滚动条 + countIn 工具动画
 ├── layout/             # topbar / sidebar / content / log-panel
-├── components/         # 18 个组件（buttons / search-bar / modal / result-card / ...）
-├── pages/              # stats / users / qualifications / completion / announcement / admin
+├── components/         # 18 个组件（buttons / search-bar / modal / result-card / preview ...）
+│                       #   preview.css 还含 .preview-source-picker（多源切换条）
+├── pages/              # stats / users / qualifications / completion / announcement / admin / labr
+│                       #   labr.css = labr-row 家族 + std-code 蓝徽章 + kind 绿/橙 + ext 按 office 主色
 ├── responsive.css      # 跨组件 @media 汇总（1100 / 900 / 640px）
 ├── theme/glass.css     # 全局玻璃主题，cascade 最后赢
 └── index.css           # 汇总 @import（含目标顺序）

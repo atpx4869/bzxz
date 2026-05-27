@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **labr 第 4 标准源接入**：新增 `labr.cc` 检索与下载。架构上**独立 service，不挂 SourceRegistry** —— labr 的下载产物形态、限速契约、登录链路都与既有三源差异大（kind=0 直拉无消耗 / kind=1 需登录走 preview2 限 5/天），强行做 SourceAdapter 会扭曲 BZ/GBW/BY 的共同契约。
+  - **后端**：新表 `labr_temp_urls` 缓存 kind=1 的短时下载链跨 token 持久化；源级 semaphore=2 防限频；`labr-client` 复用 BY adapter 的 token 持久化 / cookie 模式 + `LABR_USERNAME`/`LABR_PASSWORD` 注入；`labr-service` 编排 List / Detail / Download，batch 路径带指数退避；API 路由 `/api/labr/search` / `/labr/download/:did` / `/labr/batch-download` + `/api/preview/files?stdCode=&year=` 多源候选。
+  - **前端**：sidebar 新 tab「Labr库检索」(`web/index.html` + `KNOWN_TABS` + `TAB_LABELS`/`TAB_ITEMS`)；legacy 路线 `public/js/app-labr.js`（与 app-qual.js 对齐）实现搜索 + 翻页 + 全选 + 单 / 批量下载，结果就地渲染 ok / 失败，限速被跳过条目单独提示数量。错误 code `LABR_RATE_LIMIT` / `LABR_AUTH` 给中文友好提示。`sanitizeLabrTitle` 白名单 `<font color>` / `<mark>` / `<b>` 后 escape 其余，让搜索高亮直接渲染。
+  - **样式**：`web/src/styles/pages/labr.css` —— labr-row 家族 + std-code 蓝徽章 + kind-0 绿 / kind-1 橙 + ext 按 office 套件主色（PDF 红 / DOC 蓝 / XLS 绿 / PPT 橙 / TXT 灰）+ paid 橙 + 640px mobile 紧凑。所有 oklch() 都按 CLAUDE.md 契约带 rgba() fallback 兄弟。
+  - **资质徽章兼容**：labr 入库的文件 `std_code` 走与 CNAS/CMA 一致的三层归一化（`cleanStdCode` → `std_code_norm`/`std_code_base`），跨年 / 全角变体能沾资质徽章。
+  - **已知遗留**：legacy `public/index.html` 入口缺 labr 样式（仅写入 `web/src/styles/*`，未镜像到 `public/styles.css`，因为后者第 1593 行 `.library-row-label` 处预先存在文件损坏）。
+  - 详见 [`docs/sources/labr-source-plan.md`](./docs/sources/labr-source-plan.md)
+- **多源 preview picker**：库内同一标准号同时存在多版本（多年份 / 多扩展名 / 多源）时，预览顶部展开切换条，按钮显示 `源名 · year · ext`，active 蓝高亮；点击 `switchPreviewSource(fileId, stdCode)` 直接换 iframe src 到 `/api/preview/file/:fileId`，跳过 `/preview/request` 整轮 RTT（候选已确定在库）。仅 overlay 路径实装，popup 路径暂不支持（注入 UI 复杂度高、价值低）。`closePreviewOverlay` 清空 picker DOM 防泄漏。CSS 在 `web/src/styles/components/preview.css` 新增 `.preview-source-picker` 块 + 640px 横滚。
 - **资质查询展示重构：CMA / CNAS 不再分两栏**：搜索页 + 可视化页统一改为单列纵排，按 `(标准号 + 资质类型)` 分组，全局严格 **CNAS 段在前、CMA 段在后**，段间一条虚线分割。每组标题行布局：`▶ [CNAS / CMA 徽章] 标准号 标准名 ... N 项`，徽章蓝/橙色块、占位居中。
   - **buildQualUnifiedList 替代 buildQualColumn**：`public/js/app-qual.js`。组内 items 按 `paramScopeRank` 三档排序 —— `0 = 全部参数`、`1 = 部分参数`、`2 = 其它`，确保"全部参数"那一条永远顶在该组最上面（产品标准用户最关心"这家整张证书是否覆盖此标准"的判定）。
   - **删除冗余信息**：不再渲染机构名「机构 XXX」（即使多机构也不显示）、不再渲染 `limitDesc`「限定 ...」。展开后每条记录字段只剩：类别 chip + `检测项目 xxx` + `生效 / 到期`。

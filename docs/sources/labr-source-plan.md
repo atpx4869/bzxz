@@ -26,7 +26,8 @@
 
 - ✅ probe 已完成（probe-labr-result.md 663 行）
 - ✅ V2 plan 已敲定（本文）
-- ❌ 业务代码**一行未动**
+- ✅ **#50–#59 全部上线**（后端 domain / semaphore / db / client / service / API + 前端 sidebar / labr-panel / preview picker / 样式徽章）
+- ⏳ #60 文档同步执行中
 - 任务编号 #50 起（任务系统不跨会话保留，本文末"实施顺序"=权威清单）
 
 ### 凭据位置（不要写进任何 commit / 内存 / 文档）
@@ -79,7 +80,7 @@ labr 账号密码与 token 在以下两个文件里（已 gitignore 或本地文
 | 57 | labr-panel.ts 业务逻辑 | [x] | | | 选 legacy JS 路线（与 app-qual.js 一致），新增 `public/js/app-labr.js`：`doLabrSearch(page)` / `doLabrDownload(did)` / `doLabrBatchDownload()` / 全选 + 单选 / 翻页（page≥2 走 rec-list、page=1 走 inline）。响应走 `readApiResponse` 解 `{data,error}` envelope。错误 code `LABR_RATE_LIMIT` / `LABR_AUTH` 给中文友好提示。批量下载结果逐行就地渲染 ok / 失败原因，限速被跳过的条目单独提示数量。hl_title 白名单 `<font color>` / `<mark>` / `<b>` 后写入，其余 escape。`web/index.html` 注册 `<script src="/legacy/app-labr.js">`。TS 化推迟到 #57 整体（labr-panel.ts 与 web/src/labr/* 文件结构）作为后续单独迁移任务，与 qual 同步迁移即可 |
 | 58 | multi-source preview picker | [x] | | | 沿 legacy JS 路线：`public/index.html` 在 `.preview-head` 下加 `#previewSourcePicker`（默认 hidden）。`public/js/app-search.js` 新增 `loadPreviewSourcePicker(stdCode, year, activeFileId)` —— ready 后调一次 `/api/preview/files?stdCode=&year=`，≥2 候选时显示 picker，单一候选静默隐藏。每个按钮渲染 `source 名 + year + ext`（非 PDF 才显 ext 徽章），active 高亮当前 fileId。`switchPreviewSource(fileId, stdCode)` 直接换 iframe src 到 `/api/preview/file/:fileId`（跳过整轮 `/preview/request` RTT，因为候选已确定在库），并把 active class 转过去。`closePreviewOverlay` 清空 picker。仅 overlay 路径实装；popup 路径暂不支持 picker（popup 是浏览器子窗口，注入 UI 复杂度高、价值低）。CSS 样式留给 #59 |
 | 59 | pages/labr.css + file-type-badge.css | [x] | claude | 2026-05-27 | 新增 `web/src/styles/pages/labr.css`（labr-row 家族 + std-code 蓝徽章 + kind-0 绿/kind-1 橙 + ext 按 office 套件主色 pdf 红/doc 蓝/xls 绿/ppt 橙/txt 灰 + paid 橙 + 640px mobile 紧凑）；`components/preview.css` 追加 `.preview-source-picker` 多源切换条（active 蓝、mobile 横滚）；`index.css` 加 `@import './pages/labr.css'`。所有 oklch() 都有 rgba() fallback 兄弟（CLAUDE.md 契约）。仅写入 `web/src/styles/*`，未镜像 `public/styles.css`（legacy 入口将丢 labr 样式，记录为 #60 跟进项）。**发现**：`public/styles.css` 第 1593 行 `.library-row-label` 处被截断（预先存在的文件损坏），#60 向用户告警 |
-| 60 | 文档同步 + CI 绿 | [ ] | | | `README.md` / `web/README.md` / `docs/ARCHITECTURE.md` / `CHANGELOG.md`；本文顶部 V2 状态 → ✅ 已上线 |
+| 60 | 文档同步 + CI 绿 | [x] | claude | 2026-05-27 | `README.md` 顶部"近期重点"补 labr 上线条 + 来源表加 labr 行；`web/README.md` 加 `pages/labr.css` 与 `components/preview.css` picker 段落；`docs/ARCHITECTURE.md` 模块图加 labr-service / labr-client / labr_temp_urls 节点；`CHANGELOG.md` Unreleased 加"labr 4th source + multi-source preview picker"条；本文顶部 V2 状态 → ✅ 已上线。**已知遗留**：`public/styles.css` 第 1593 行 `.library-row-label` 处被截断（预先存在的文件损坏，与 labr 无关），legacy `public/index.html` 入口缺 labr 样式 —— 用户决定是修补 styles.css 还是直接砍掉 legacy 入口 |
 
 ### 跨节点 / 跨会话发现的事（追加日志）
 

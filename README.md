@@ -15,6 +15,7 @@
 | bz.gxzl.org.cn | `bz` | JSON API | 逐页 JPEG → pdf-lib 合并 PDF |
 | openstd.samr.gov.cn | `gbw` (显示为 BW) | JSON API | ddddocr 验证码 → 直接 PDF |
 | std.samr.gov.cn | `by` | JSON API | 直接 PDF |
+| labr.cc | `labr` | JSON API + 独立 service（不挂 SourceRegistry） | kind=0 直拉 / kind=1 登录+preview2，限 5/天；带 multi-source preview picker |
 
 ## 快速开始
 
@@ -386,6 +387,8 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **labr 第 4 标准源接入** — 新增 `labr.cc` 检索 / 下载（独立 service，不挂 SourceRegistry）。`info.kind=0` 直拉文件系统、无配额；`info.kind=1` 需登录 + preview2 链路、5/天硬限速。新 sidebar tab 「Labr库检索」（独立 keyword + 翻页 + 全选/批量下载，下载结果就地渲染、限速被跳过的条目单独提示）。新表 `labr_temp_urls` 跨 token 持久化短时下载链；源级 semaphore=2 防限频；`std_code_norm/_base` 三层归一化沾资质徽章。详见 [`docs/sources/labr-source-plan.md`](./docs/sources/labr-source-plan.md)
+- **多源 preview picker** — 同一标准号在库内同时存在多个版本（多年份 / 多扩展名 / 多来源）时，预览顶部展开切换条，按钮显示 `源名 · year · ext`，点击秒切 iframe（跳过 `/preview/request` RTT，候选已确定在库）。仅 overlay 路径实装，popup 路径暂不支持
 - **桌面端下载统一入库 + 绿点秒亮** — 三个口子合一：① `triggerDownload` 在 `window.bzxz.isElectron` 时 early-return，避免浏览器再触发一次 `will-download` 把同一份 PDF 重复落到 `Desktop/bzxz/`；② `ExportTaskService.runTask`（BZ/BY 异步 `/export` 路径）补上 `moveDownloadToLibrary` 调用，与 `multi-download`/`auto-download` 同款入库 hook，并把 `fileId` 通过 SSE 末帧透回前端（`ExportTask.fileId/libraryError` + `markSuccess` 携带）；③ 前端 4 个下载入口（`downloadOne` / `downloadSpecificSource` / `downloadSelected` worker / `doCascadeDownload` worker）拿到 `fileId` 后统一调 `markLibraryHit` 写入 `_libraryFileIds` 并 `applyLibraryDots`，下载完按钮右上角绿点几百毫秒内点亮，不必等下次搜索/library-check 触发
 - **Electron 桌面端预览跳系统浏览器** — `mainWindow.webContents.setWindowOpenHandler` 拦截渲染进程的 `window.open(http(s)://...)`，调 `shell.openExternal` 走系统默认浏览器（Edge / Chrome）打开 PDF。原生 viewer 的全屏 / 缩放 / 打印 / 另存为体验比 Electron 内嵌 iframe 好得多。前端 `runPreviewWithOverlay` 和 `pollPreviewTask` 检测 `window.bzxz.isElectron` 后改走 `window.open + closePreviewOverlay`，Web 浏览器侧（手机访问）仍然 iframe 渲染。`about:` / `file:` / `javascript:` 等协议 deny 不放行
 - **DB 自动备份 + 缺失自愈** — 启动时把 `data/bzxz.db` 用 SQLite Online Backup 复制到 `%APPDATA%\bzxz\bzxz-db-backups\bzxz-<时间戳>.db`（NSIS 永远不动 userData，物理隔离），保留最近 7 份。下次启动若 db 缺失或 < 100 字节自动从最新备份还原 —— 防 commit `0bd54c4` 之前的旧 installer 卸载器 RMDir 把 `data\bzxz.db` 抹掉导致 admin 账号丢失。`GET/POST /api/admin/db/backups` 用于查询 / 手动触发
