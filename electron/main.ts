@@ -390,6 +390,25 @@ function createWindow() {
 
   mainWindow.loadURL(`http://localhost:${serverPort}`);
 
+  // 把渲染进程里的 window.open(url, '_blank') 路由到系统默认浏览器。
+  // 背景：预览 Phase 2 让命中本地的标准用 window.open(/api/preview/file/:id) 跳新 tab；
+  // Electron 默认会在一个无菜单的裸 BrowserWindow 里打开，PDF 的全屏 / 缩放 /
+  // 另存为 / 打印体验都比浏览器内置 PDF viewer 差。`shell.openExternal` 让用户
+  // 用系统默认浏览器（Edge / Chrome）的原生 PDF viewer 打开。
+  //
+  // 只放行 http(s) + http://localhost:${serverPort}（本地后端发的 file URL），
+  // 拒绝 file:// / javascript: 之类的危险 scheme。
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const u = new URL(url);
+      if (u.protocol === 'http:' || u.protocol === 'https:') {
+        void shell.openExternal(url);
+      }
+    } catch { /* 非法 url 静默拒绝 */ }
+    // 始终阻止 Electron 在新 BrowserWindow 内打开
+    return { action: 'deny' };
+  });
+
   // Start minimized to tray — user opens window via tray menu or double-click
   const windowWithMinimizeEvent = mainWindow as unknown as {
     on(event: 'minimize', listener: (event: { preventDefault(): void }) => void): void;

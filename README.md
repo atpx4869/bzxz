@@ -386,6 +386,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **Electron 桌面端预览跳系统浏览器** — `mainWindow.webContents.setWindowOpenHandler` 拦截渲染进程的 `window.open(http(s)://...)`，调 `shell.openExternal` 走系统默认浏览器（Edge / Chrome）打开 PDF。原生 viewer 的全屏 / 缩放 / 打印 / 另存为体验比 Electron 内嵌 iframe 好得多。前端 `runPreviewWithOverlay` 和 `pollPreviewTask` 检测 `window.bzxz.isElectron` 后改走 `window.open + closePreviewOverlay`，Web 浏览器侧（手机访问）仍然 iframe 渲染。`about:` / `file:` / `javascript:` 等协议 deny 不放行
 - **DB 自动备份 + 缺失自愈** — 启动时把 `data/bzxz.db` 用 SQLite Online Backup 复制到 `%APPDATA%\bzxz\bzxz-db-backups\bzxz-<时间戳>.db`（NSIS 永远不动 userData，物理隔离），保留最近 7 份。下次启动若 db 缺失或 < 100 字节自动从最新备份还原 —— 防 commit `0bd54c4` 之前的旧 installer 卸载器 RMDir 把 `data\bzxz.db` 抹掉导致 admin 账号丢失。`GET/POST /api/admin/db/backups` 用于查询 / 手动触发
 - **预览优化 Phase 3：轮询提速 + 移除 cache-buster** — 预览自动下载轮询从固定 1500ms 改为「前 5 次 300ms + 之后 1500ms」，CNAS 缓存命中场景从 typical 2-3s 降到 ~500ms。同时移除 iframe URL 的 `?t=Date.now()` cache-buster，让后端 `ETag + must-revalidate` 生效 = 第二次预览同一标准走浏览器 304 缓存几乎瞬间渲染
 - **预览优化 Phase 2：预览直跳新 tab** — 热路径（绿点命中）`window.open('/api/preview/file/:fileId')` 跳过 `/api/preview/request` 整轮 RTT，浏览器走 304 缓存即可秒开；冷路径在 click 同一 tick 里 `window.open('about:blank')` 占住新 tab（popup blocker safe），写入 loading 骨架，异步拿到 fileId 后 `popup.location.replace` 跳过去，原生 PDF viewer 接管 = 全屏 / 缩放 / 打印不受 overlay 限制。失败写错误页 + 关闭按钮；popup 被拦截降级到原 overlay+iframe 流程，零功能退化

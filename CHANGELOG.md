@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **Electron 桌面端预览跳系统浏览器**：解决 Phase 2 `window.open` 在 Electron 里被默认行为接管（弹出无菜单的裸 BrowserWindow，PDF 全屏 / 缩放 / 另存为体验都差）的问题。
+  - **`electron/main.ts:391` 注册 `mainWindow.webContents.setWindowOpenHandler`**：拦截所有渲染进程的 `window.open(url, '_blank')`，对 `http:` / `https:` URL 调 `shell.openExternal(url)` 让系统默认浏览器（Edge / Chrome）打开 —— PDF 用浏览器原生 viewer，全屏 / 缩放 / 打印 / 另存为全部到位。`about:` / `file:` / `javascript:` 等非 http(s) 协议直接 deny 不放行，安全收紧。
+  - **`public/js/app-search.js` 两处 ready 分支接入 Electron 检测**：`runPreviewWithOverlay` 和 `pollPreviewTask` 拿到 ready 状态后，若 `window.bzxz.isElectron` 为 true（preload 注入），改成 `window.open(file_url) + closePreviewOverlay()` —— overlay 仅作 loading 占位，PDF 用系统浏览器展示。Web 浏览器侧（手机访问局域网）仍然在 overlay 内 iframe 渲染。
+  - **行为变化**：Electron 桌面用户点预览，loading 一闪过后系统浏览器弹一个新 tab 展示 PDF。Phase 2 的「热路径 `window.open` 跳新 tab」在 Electron 里也自动转成 `shell.openExternal`，体验统一。
+  - **冷路径 popup 占位 trick 在 Electron 中自然降级**：`window.open('about:blank')` 被 handler deny + 不放行 → 返回 null → fallback `runPreviewWithOverlay`，再被 ready 分支接住跳系统浏览器。逻辑链路完整。
 - **绿点批量查询切 chunk**：`fetchLibraryAvailability` 原来把整个 results 数组当一个 POST 提交。后端 `/api/preview/library-check` zod 限定 `items.max(500)`，多源搜索合并后 results 经常 > 500 → 400 错误 → catch 静默吞 → 绿点对所有结果全瞎。改成 400/批切片并发查询：每批独立 fetch，任一失败不影响其他 chunk 的命中。后端上限不放宽（better-sqlite3 `SQLITE_MAX_VARIABLE_NUMBER` 默认 32766，IN 参数过多 SQL 会被截或拒）—— 切片是正确的客户端响应。
 - **DB 自动备份 + 缺失自愈（防升级丢账号）**：commit `0bd54c4` 之前的 `installer.nsh` 没保留 `$INSTDIR\data`，从更早版本升级的用户会被旧卸载器 `RMDir /r` 把 `users` / 资质数据全部抹掉。装机版升级走的是「上一次安装时落盘的卸载器」 —— 即使现在 installer 修了，旧 exe 的卸载器逻辑无法追溯。所以再加一层 application-level 防御。
   - **备份位置选 `%APPDATA%\bzxz\bzxz-db-backups\`**：NSIS 永远不会动 userData，与 `$INSTDIR` 物理隔离。环境变量 `BZXZ_USER_DATA_DIR` 由 `electron/main.ts:524` 注入；backend 进程通过此环境变量拿到路径。

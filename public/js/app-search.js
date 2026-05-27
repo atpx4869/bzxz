@@ -790,6 +790,12 @@ async function pollPreviewTask(taskId, stdCode) {
     if (data.status === 'ready') {
       _previewCurrent = { fileId: data.fileId, url: data.url, fileName: stdCode };
       if (data.fileId && _previewLastId) { _libraryFileIds.set(_previewLastId, data.fileId); applyLibraryDots(); }
+      // Electron 桌面端：跳系统浏览器（与 runPreviewWithOverlay ready 分支一致）
+      if (window.bzxz && window.bzxz.isElectron) {
+        window.open(`${API}${data.url}`, '_blank');
+        closePreviewOverlay();
+        return;
+      }
       // 不再加 ?t=Date.now() cache-buster；后端发 ETag + must-revalidate，浏览器走 304 复用
       setPreviewBody(`<iframe class="preview-iframe" src="${escapeHtml(data.url)}" title="预览 ${escapeHtml(stdCode)}"></iframe>`);
       return;
@@ -1043,6 +1049,14 @@ async function runPreviewWithOverlay(id, stdCode, r) {
     if (data.status === 'ready') {
       _previewCurrent = { fileId: data.fileId, url: data.url, fileName: stdCode };
       if (data.fileId) { _libraryFileIds.set(id, data.fileId); applyLibraryDots(); }
+      // Electron 桌面端：跳系统浏览器（setWindowOpenHandler 路由到 shell.openExternal）
+      // 体验比 overlay iframe 好得多（全屏 / 缩放 / 打印 / 另存为都用浏览器原生）。
+      // Web 浏览器侧仍然在 overlay 内 iframe 渲染。
+      if (window.bzxz && window.bzxz.isElectron) {
+        window.open(`${API}${data.url}`, '_blank');
+        closePreviewOverlay();
+        return;
+      }
       // 不再加 ?t=Date.now() cache-buster；后端发 ETag + must-revalidate，浏览器走 304 复用
       setPreviewBody(`<iframe class="preview-iframe" src="${escapeHtml(data.url)}" title="预览 ${escapeHtml(stdCode)}"></iframe>`);
     } else if (data.status === 'downloading' && data.taskId) {
