@@ -110,8 +110,11 @@ export function renderLibraryFilename(pattern: string, ctx: Context): string {
 }
 
 /**
- * 渲染并加 `.pdf` 扩展名。
+ * 渲染并加扩展名。默认 `.pdf`（BZ/GBW/BY 永远是 PDF），labr 可传 docx/xlsx/pptx 等。
+ *
+ * ext 入参可带不带前导 `.`，统一去掉非法字符 + 小写化避免 Windows 大小写敏感问题。
  */
-export function renderLibraryFilenameWithExt(pattern: string, ctx: Context): string {
-  return `${renderLibraryFilename(pattern, ctx)}.pdf`;
+export function renderLibraryFilenameWithExt(pattern: string, ctx: Context, ext = 'pdf'): string {
+  const cleanExt = ext.replace(/^\.+/, '').replace(ILLEGAL_CHARS, '').trim().toLowerCase() || 'pdf';
+  return `${renderLibraryFilename(pattern, ctx)}.${cleanExt}`;
 }

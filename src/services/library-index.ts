@@ -38,6 +38,22 @@ const CANONICAL_TO_LABEL: Record<SourceName, string> = {
   labr: 'LB',
 };
 
+// labr 可能落非 PDF（docx/xlsx/pptx），需要按扩展名给 MIME；其它 ext 兜 octet-stream。
+const EXT_MIME: Record<string, string> = {
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  txt: 'text/plain',
+  zip: 'application/zip',
+};
+function extToMime(ext: string): string {
+  return EXT_MIME[ext.toLowerCase()] || 'application/octet-stream';
+}
+
 export function sourceLabel(source: SourceName): string {
   return CANONICAL_TO_LABEL[source];
 }
@@ -516,6 +532,10 @@ interface AddFileParams {
   source: SourceName;
   year?: string;            // 4 位年份；缺失则尝试从 stdCode 尾部正则
   title?: string;           // 标准标题（用于 {title} 模板）
+  /** 文件扩展名（不含点）。默认 'pdf' — BZ/GBW/BY 都是 PDF；labr 可能 docx/xlsx/pptx */
+  ext?: string;
+  /** MIME。默认 'application/pdf'；labr 非 PDF 时由 service 传 */
+  mime?: string;
 }
 
 interface AddFileResult {
@@ -575,12 +595,13 @@ export async function addFileToLibrary(
   }
 
   const pattern = getSetting(db, 'library_filename_pattern', '{stdCode} - {source}');
+  const ext = (params.ext || path.extname(params.srcPath).replace(/^\./, '') || 'pdf').toLowerCase();
   const fileName = renderLibraryFilenameWithExt(pattern, {
     stdCode: params.stdCode,
     source: params.source,
     year,
     title: params.title,
-  });
+  }, ext);
 
   // 强行 basename 一次防注入；目标必须在库内
   const safeBasename = path.basename(fileName);
@@ -595,16 +616,18 @@ export async function addFileToLibrary(
   const stat = await fs.stat(finalPath);
   const mtimeMs = Math.floor(stat.mtimeMs);
 
+  const mime = params.mime || (ext === 'pdf' ? 'application/pdf' : extToMime(ext));
   const result = db.prepare(`
     INSERT INTO standard_files (std_code_norm, year, source, abs_path, size, mtime, mime)
-    VALUES (?, ?, ?, ?, ?, ?, 'application/pdf')
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(std_code_norm, year, source) DO UPDATE SET
       abs_path = excluded.abs_path,
       size = excluded.size,
       mtime = excluded.mtime,
+      mime = excluded.mime,
       indexed_at = datetime('now')
     RETURNING id
-  `).get(norm, year, params.source, finalPath, stat.size, mtimeMs) as { id: number };
+  `).get(norm, year, params.source, finalPath, stat.size, mtimeMs, mime) as { id: number };
 
   return { fileId: result.id, absPath: finalPath, fileName: path.basename(finalPath), reused: false };
 }
