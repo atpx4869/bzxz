@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **#72 资质卡 scope chip + 部分参数限制项 + 全部参数折叠态精简**：产品标准（GB/T、GB 等含「全部参数」/「部分参数」标记的资质）卡头扫读力度不够 —— 之前必须展开才能看 scope，部分参数的限定描述也藏在展开层里。本次：
+  - **`public/js/app-qual.js` `buildQualUnifiedList` 加 groupScope 计算**：扫 grp.items 求组级 scope（全部参数 ≻ 部分参数 ≻ null，遇到 `paramScopeRank === 0` 短路）。卡头标准名称后面渲 `qual-scope-badge` chip：全部参数=绿色（success 调），部分参数=橙色（warning 调）。N 项计数 chip 保留。
+  - **全部参数：折叠态彻底精简**：`collapsible = groupScope !== 'all'` 决定 header 是否带 `onclick`、arrow 是否渲▶（替换为 16px 占位保持横向对齐）、body 是否渲（直接空字符串）。同质 item 展开无价值，少一层视觉噪声。
+  - **部分参数：限制项第二行长驻**：聚合该组所有 `paramScopeRank===1` item 的 `limitDesc`，去重（key=limitDesc 字符串）、过滤 `/` / `—` 占位，`；` join 成一行，渲在卡头下方 `.qual-scope-limit-row`（橙左竖线 + 6% 橙底，不抢戏）。仍可展开看明细（生效/到期日期对用户重要）。
+  - **CSS 双写**：`web/src/styles/pages/qualifications.css` + `public/styles.css` 同步新增 `.qual-scope-badge.scope-all/partial` + `.qual-scope-limit-row`。oklch 都带 sRGB fallback。
+  - **搜索结果卡 `qualBadgeHtml` 不动**：搜索结果的 chip 是「这标准能否沾资质」的 hint 维度，资质查询页才是 scope（全部/部分）维度，两边语义不同不混用。
 - **#71 搜索结果命中本地库时跳过源拉取**：之前用户在搜索结果点「下载」，即使绿点亮着（本地已有）也会再走一遍 source 级联，labr/by/gbw 都有日配额，命中场景重复拉纯属浪费。本次：
   - **`public/js/app-download.js` `downloadOne` 入口加短路**：`_libraryFileIds.get(r.id)` 有 fileId + `window.bzxzPublicSettings.downloadPreferLocal !== false` 时走新增的 `downloadFromLocal(r, fileId)` —— 复用 `/api/preview/file/:id?attachment=1`（纯本地流，无 source adapter），通过 `downloadLocalFile` 触发浏览器/Electron `will-download` 钩子，跟普通下载体验对齐（行状态、绿点、Toast、history 都正常）。Toast 文案前缀「本地库命中，复制完成」便于用户区分。
   - **本地命中失败兜底**：用户在资源管理器里删了 / 移走文件后再点下载会失败，自动清缓存里的 fileId（防 stale 绿点）→ 回退源下载。

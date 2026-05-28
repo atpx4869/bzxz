@@ -262,6 +262,42 @@ function buildQualUnifiedList(items, opts) {
       ? '<span class="qual-source-chip ' + sourceCls + '">' + escapeHtml(grp.source) + '</span>'
       : '';
 
+    // 计算组级 scope（"全部参数"≻"部分参数"≻null）。"全部参数"是更强信号，
+    // 同组里只要有一条命中就标全部；否则只要有"部分参数"就标部分。
+    var groupScope = null;
+    for (var si = 0; si < grp.items.length; si++) {
+      var sr = paramScopeRank(grp.items[si]);
+      if (sr === 0) { groupScope = 'all'; break; }
+      if (sr === 1) groupScope = 'partial';
+    }
+
+    var scopeChip = '';
+    if (groupScope === 'all') {
+      scopeChip = '<span class="qual-scope-badge scope-all">全部参数</span>';
+    } else if (groupScope === 'partial') {
+      scopeChip = '<span class="qual-scope-badge scope-partial">部分参数</span>';
+    }
+
+    // 部分参数场景：把所有 partial item 的 limitDesc 合并、去重、单行长驻展示
+    // （用户能直接看到"不测：xxx"而无需展开）。原文已带"不测："前缀，不再叠加。
+    // 全部参数 / 其它场景不渲此行（全部 = 无限制，其它 = 没意义的限定信息）。
+    var limitRowHtml = '';
+    if (groupScope === 'partial') {
+      var limitSeen = {};
+      var limitParts = [];
+      for (var li = 0; li < grp.items.length; li++) {
+        var lit = grp.items[li];
+        if (paramScopeRank(lit) !== 1) continue;
+        var ld = (lit.limitDesc || '').trim();
+        if (!ld || ld === '/' || ld === '—' || limitSeen[ld]) continue;
+        limitSeen[ld] = 1;
+        limitParts.push(ld);
+      }
+      if (limitParts.length) {
+        limitRowHtml = '<div class="qual-scope-limit-row">' + escapeHtml(limitParts.join('；')) + '</div>';
+      }
+    }
+
     var rows = grp.items.map(function (it) {
       var expired = it.expiryDate && it.expiryDate < now;
       var highlight = paramScopeRank(it) < 2; // 全部参数 / 部分参数 → 高亮
@@ -280,15 +316,31 @@ function buildQualUnifiedList(items, opts) {
       return '<div class="qual-result-item' + (highlight ? ' qual-result-item-scope' : '') + '">' + parts.join('') + '</div>';
     }).join('');
 
+    // 全部参数：组内每条都是"覆盖全部"，再展开看 N 条同质 item 没价值，整组折叠态干净更好
+    // 部分参数 / 其它：仍可展开看明细（生效日期 / 到期日期 / 测试项对用户重要）
+    var collapsible = groupScope !== 'all';
+    var headerAttrs = collapsible
+      ? ' onclick="toggleQualGroup(\'' + gid + '\')" style="cursor:pointer"'
+      : '';
+    var arrowHtml = collapsible
+      ? '<span class="qual-group-arrow" id="' + gid + '_arrow" style="display:inline-block;width:16px;font-size:10px;color:var(--text-3);transition:transform 0.2s">▶</span>'
+      : '<span style="display:inline-block;width:16px"></span>';
+    // 全部参数：N 项徽章保留（告诉用户"5 家机构都能测全部"），但不渲 body
+    var bodyHtml = (groupScope === 'all')
+      ? ''
+      : '<div id="' + gid + '_body" style="display:none">' + rows + '</div>';
+
     html += '<div class="qual-result-group">'
-      + '<div class="qual-result-std" onclick="toggleQualGroup(\'' + gid + '\')" style="cursor:pointer">'
-      + '<span class="qual-group-arrow" id="' + gid + '_arrow" style="display:inline-block;width:16px;font-size:10px;color:var(--text-3);transition:transform 0.2s">▶</span>'
+      + '<div class="qual-result-std"' + headerAttrs + '>'
+      + arrowHtml
       + sourceChip
       + '<span class="qual-std-code">' + escapeHtml(grp.stdCode || '') + '</span>'
       + '<span class="qual-std-name">' + escapeHtml(cleanName) + '</span>'
+      + scopeChip
       + '<span style="margin-left:auto;font-size:11px;color:var(--text-3)">' + grp.items.length + ' 项</span>'
       + '</div>'
-      + '<div id="' + gid + '_body" style="display:none">' + rows + '</div>'
+      + limitRowHtml
+      + bodyHtml
       + '</div>';
   }
   return '<div class="qual-unified-list">' + html + '</div>';
