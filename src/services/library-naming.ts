@@ -75,8 +75,14 @@ export function renderLibraryFilename(pattern: string, ctx: Context): string {
   //
   // 实现：对每个空字段，匹配 (前导分隔符)?{key}(后随分隔符)? 一并删除。
   // 分隔符集合：空格、`-`、`_`、`·`、`—`
+  //
+  // 两侧 sep 都非空时，优先保留"含强分隔字符（- _ · —）"的那一侧 —— 否则
+  // V1 文件按默认 V2 pattern `{stdCode} {title} - {source}` 渲染时，title 空
+  // 会被吃成 `{stdCode} {source}`（丢了关键的 ` - `），反而 willChange=true 并
+  // 把规范 V1 名字劣化掉。
   let result = pattern;
   const SEP = String.raw`[\s\-_·—]*`;
+  const STRONG_SEP_RE = /[\-_·—]/;
   for (const [key, val] of Object.entries(values)) {
     const tokenRe = new RegExp(`${SEP}\\{${key}\\}${SEP}`, 'g');
     if (!val) {
@@ -86,6 +92,11 @@ export function renderLibraryFilename(pattern: string, ctx: Context): string {
         if (atStart || atEnd) return '';
         const left = match.match(new RegExp(`^${SEP}`))?.[0] || '';
         const right = match.match(new RegExp(`${SEP}$`))?.[0] || '';
+        const leftStrong = STRONG_SEP_RE.test(left);
+        const rightStrong = STRONG_SEP_RE.test(right);
+        if (leftStrong && !rightStrong) return left;
+        if (rightStrong && !leftStrong) return right;
+        // 两侧都强 / 都弱 / 都空 → 沿用左优先（保持原有行为，避免改动其它 pattern 输出）
         return left || right || ' ';
       });
     } else {
