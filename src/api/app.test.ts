@@ -25,7 +25,7 @@ describe('createApp', () => {
     expect(response.status).toBe(200);
     expect(response.body.error).toBeNull();
     expect(response.body.data.ok).toBe(true);
-    expect(response.body.data.sources).toEqual(['bz', 'gbw', 'by', 'spc']);
+    expect(response.body.data.sources).toEqual(['bz', 'gbw', 'by']);
     expect(typeof response.body.data.version).toBe('string');
   });
 

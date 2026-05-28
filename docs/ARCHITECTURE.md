@@ -130,7 +130,6 @@ type ApiResult<T> =
 - `gbw`：搜索 + 自动验证码 + 直接下载 PDF (`autoDownload`)
 - `bz`：搜索 + 逐页 JPEG → pdf-lib 合并 (`exportStandard`)
 - `by`：搜索 + 内网直链 PDF (`exportStandard`)
-- `spc`：搜索 + stdonline 拿 token + onlinereading 直拉无水印 PDF (`exportStandard`)；token 单次有效 → 不预拉 detectPreview，串联在 exportStandard 内
 - `labr`：**不实现 SourceAdapter**（详见 §六-A），走独立 service
 
 路由层调用时根据 `adapter.autoDownload`、`adapter.exportStandard` 是否存在选择路径——前端的 `/api/standards/multi-download` 已经做了这层路由。**不要为了"统一"强抽基类**——之前评估过，会产出空壳接口。
@@ -167,29 +166,6 @@ src/sources/labr/
 **禁止**：
 - 把 labr 加进 `library_source_priority` 默认值 —— 它是补给源、用户主动选取，不应被精确搜索 fallback 链当默认候选
 - 在 labr-service 外再加 mutex —— 已经有 source-semaphore + activeByStandard 索引（如果未来用），别让请求排队等自己
-
-### 六-B. spc：第 5 源，**SourceAdapter 模式**
-
-`spc.org.cn`（中国标准在线服务网）是第 5 源，与 bz/gbw/by 同等地位挂 `SourceRegistry`。它的下载契约是「单 stdCode → 单 PDF」，跟 SourceAdapter 完美对齐，所以**不像 labr 另起 service**。
-
-```
-src/sources/spc/
-├── spc-client.ts     协议层：searchByKeyword (POST /queryfocus) /
-│                     getReaderToken (POST /stdlib/stdonline) /
-│                     downloadPdf (GET /stdlib/onlinereading?token=) /
-│                     submitLogin / getCaptcha + 纯函数 stripHighlightTags /
-│                     inferStandclass / extractTokenFromHtml / mergeCookies
-└── spc-adapter.ts    SourceAdapter 实现 + cookie 持久化（settings: spc.cookies /
-                      spc.cookies_expires_at）+ SpcAuthError → BadRequestError 自愈
-```
-
-**关键约束**：
-- **Token 单次有效**：stdonline 拿 token 必须立刻 onlinereading 用掉；detectPreview 不预拉，exportStandard 内部串联
-- **Cookie 不能自动获取**：submitlogin 需要 4 字母图形验证码；MVP 走 admin 面板「手动粘贴 Cookie」路径
-- **字节通道**：`downloadPdf` 必须 `arrayBuffer()`；Playwright/Chromium 因 `Content-Type: application/pdf;charset=utf-8` 会破坏 PDF 字节，但 Node undici 不看 charset
-
-**集成点**：`addFileToLibrary` —— spc 下载产物文件名带 `SPC` 标签，与 BW/BZ/BY/LB 并列落到 `standards_library_dir`。
-**关键资源**：源级 `Semaphore('spc', 2)`（spc 限速未压测，保守起步）+ settings 表 `spc.cookies` cookie 持久化（6 小时寿命）。
 
 ---
 
@@ -286,8 +262,7 @@ ddddocr 是单 Python 进程，请求/响应通过 **UUID-keyed pending map** �
 - `gbw=4`（直 PDF + OCR；4 个并发足以打满 ddddocr 又不堆死队列）
 - `by=4`（内网直 PDF，跟 GBW 同量级）
 - `labr=2`（labr.cc 对单 IP 频控敏感，kind=1 走 preview2 还有 5/天硬限速；2 并发足够 batch 场景，不暴露 IP）
-- `spc=2`（spc.org.cn 限速未压测，保守起步；token 单次有效 + cookie 共享 → 多并发也只能复用同一 session，2 足够）
-- `BzAdapter.exportStandard` / `ByAdapter.exportStandard` / `GbwAdapter.autoDownload` / `SpcAdapter.exportStandard` 入口全部包 `getSourceSemaphore(src).run(...)`；labr 在 `labr-client` 协议层调用前包
+- `BzAdapter.exportStandard` / `ByAdapter.exportStandard` / `GbwAdapter.autoDownload` 入口全部包 `getSourceSemaphore(src).run(...)`；labr 在 `labr-client` 协议层调用前包
 - `Semaphore.setLimit()` 运行时可调（未来想暴露给 admin 设置时直接接上）
 - 诊断：`GET /api/diagnostics/sources` 返回 `{ active, limit, waiting }`
 

@@ -1,7 +1,7 @@
 import type { SourceName } from '../domain/standard';
 import { BadRequestError } from './errors';
 
-export const VALID_SOURCES: ReadonlySet<string> = new Set<SourceName>(['bz', 'gbw', 'by', 'labr', 'spc']);
+export const VALID_SOURCES: ReadonlySet<string> = new Set<SourceName>(['bz', 'gbw', 'by', 'labr']);
 
 export interface ParsedStandardId {
   source: SourceName;

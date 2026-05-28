@@ -36,7 +36,6 @@ const SOURCE_LABELS: Record<SourceName, string> = {
   bz: 'BZ',
   by: 'BY',
   labr: 'LB',
-  spc: 'SPC',
 };
 
 const MAX_BASENAME_LEN = 200;

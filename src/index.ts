@@ -1,4 +1,4 @@
-// 加载 .env.local 必须最先：让源 adapter import 时已能读到 LABR_*/SPC_* 等凭据
+// 加载 .env.local 必须最先：让源 adapter import 时已能读到 LABR_* 等凭据
 import { loadDotEnvLocal } from './shared/env-loader';
 loadDotEnvLocal();
 

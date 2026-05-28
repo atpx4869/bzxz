@@ -2,7 +2,7 @@
 ; 卸载/升级时保留：
 ;   1. $INSTDIR\data           —— 资质数据库 / CNAS·CMA 缓存
 ;   2. $INSTDIR\standards      —— 已下载的标准 PDF 库（默认库路径 <exe 同级>\standards）
-;   3. $INSTDIR\.env.local     —— 用户填的凭据（LABR_*, BY_*, SPC_* 等）
+;   3. $INSTDIR\.env.local     —— 用户填的凭据（LABR_*, BY_* 等）
 ;
 ; 行为：
 ;   - 升级（electron-builder 静默调用旧版卸载器）：始终保留 data/ + standards/ + .env.local

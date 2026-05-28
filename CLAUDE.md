@@ -116,7 +116,7 @@ Chrome ≤109 上整条 declaration 解析失败，主题崩。
 
 源 adapter 的账号密码**必须**通过 `.env.local`（仓库根，gitignored）注入，**绝不允许**写进任何 `.ts` / `.md` / commit message / auto-memory。
 
-**键名约定：** `<SOURCE>_USERNAME` / `<SOURCE>_PASSWORD`（参考 `LABR_USERNAME` / `BY_USERNAME` / `SPC_USERNAME`）。
+**键名约定：** `<SOURCE>_USERNAME` / `<SOURCE>_PASSWORD`（参考 `LABR_USERNAME` / `BY_USERNAME`）。
 
 **Why:** `.env.local` 被 git 忽略，凭据不会泄漏到 PR、issue、CI 日志。dotenv 用 `override: false` 加载，所以真实环境变量（CI/pm2）依旧能覆盖本地默认值。把账号写进代码 / 文档 / 记忆 → 一旦仓库公开或被 share，账号绑定的水印追溯权益全暴露。
 

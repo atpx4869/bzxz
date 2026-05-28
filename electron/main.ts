@@ -1,4 +1,4 @@
-// 加载 .env.local（仓库根 / 安装目录）— 让源 adapter 取得 LABR_*/SPC_* 等凭据
+// 加载 .env.local（仓库根 / 安装目录）— 让源 adapter 取得 LABR_* 等凭据
 import { loadDotEnvLocal } from '../src/shared/env-loader';
 loadDotEnvLocal();
 

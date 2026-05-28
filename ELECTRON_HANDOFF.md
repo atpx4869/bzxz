@@ -7,7 +7,7 @@ Electron 桌面应用 + Web 版均可正常使用。所有已知路径/代理/�
 ## 功能清单
 
 ### 搜索
-- 5 个数据源：BZ（标准在线）、GBW（国标网）、BY（内部网）、LB（labr 补给源，独立 service）、SPC（中国标准在线服务网，纯 HTTP + admin 粘 Cookie）
+- 4 个数据源：BZ（标准在线）、GBW（国标网）、BY（内部网）、LB（labr 补给源，独立 service）
 - 支持多源搜索去重，同一标准号合并结果
 - 批量解析标准号（粘贴换行分隔的标准号列表）
 
@@ -15,7 +15,7 @@ Electron 桌面应用 + Web 版均可正常使用。所有已知路径/代理/�
 - 级联模式（按优先级逐源尝试，失败自动回退；竞速模式已废弃，详见 CHANGELOG）
 - 批量下载（N 并发，进度条 + 日志）
 - 跨用户下载去重（同标准底层只跑一次，subscribers 共享 SSE 进度）
-- 源级并发信号量（`bz=2 / gbw=4 / by=4 / labr=2 / spc=2`，与前端 `downloadConcurrency` 解耦）
+- 源级并发信号量（`bz=2 / gbw=4 / by=4 / labr=2`，与前端 `downloadConcurrency` 解耦）
 - 单条下载带逐行状态反馈（按钮 spinner、卡片高亮、成功/失败闪烁）
 - BZ 下载页级进度实时显示（如 `BZ 下载 12/45 页`）
 - 完成日志显示文件大小和耗时
@@ -63,7 +63,6 @@ bzxz/
 │   │   ├── gbw/           # GBW 国标网（验证码识别 + 下载）
 │   │   ├── by/            # BY 内部网
 │   │   ├── labr/          # labr 补给源（独立 service，不挂 SourceRegistry）
-│   │   ├── spc/           # SPC 中国标准在线服务网（纯 HTTP，admin 粘 Cookie）
 │   │   └── shared/        # OCR 验证码工具
 │   └── shared/            # 通用工具（路径、错误、ID 解析）
 ├── public/
