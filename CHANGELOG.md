@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix: 资质徽章 tooltip 被分组框遮挡** — 用户报告 hover CMA/CNAS 徽章时 tooltip 浮层被上方的 status-group 分组框裁掉。根因:`.status-group-body { overflow: hidden }`(为支持折叠动画 `max-height: 0`)+ `.result-card { transition: transform }`(hover 时 `translateY(-1px)` 创建 containing block)双重夹击 —— 即便 `position: absolute / fixed`、z-index 拉到 9999 也会被祖先裁剪。修法:`app-qual.js` 加全局事件代理 `setupQualTooltipPortal`,mouseover 进 badge 时把 tooltip 节点 detach 到 `document.body` 末尾(留 Comment placeholder 占位),设 `position: fixed` + 用 `getBoundingClientRect` 算 viewport 坐标定位;mouseout 复位放回 badge。完全绕开任何 overflow / transform 祖先的限制。视口边界保护 + scroll/resize 时隐藏。CSS 不动 —— `position: absolute` 仍是默认状态,JS show 时 override,hide 时清空让 CSS 默认值生效。
+- **fix: 资质查询搜带年时不返跨年(`searchQualifications` hasFullYear 路径)** — 用户报告资质查询页搜 `3324-2024` 返了 `3324-2008/3324-2017/33324-2016` 等无关跨年/相似数字标准。根因:`searchQualifications` 原本 `WHERE std_code_base = ? OR std_code_base LIKE ?` 这两条 OR 子句把所有同号跨年 + 子串相似的标准都拉回来。改:检测 query 经 extractFullCode 后是否带完整 4 位年份(`/-\d{4}[A-Z]?$/`),带年时 SQL 中 baseClause 整段去掉(只走 `std_code_norm` 精确路径),不带年时保留 base 双路径(`3324` 这种片段仍跨年命中,符合"无年用户主动想跨年看")。单测加 2 个回归 case:`does NOT return other years when user searches with a full year` + `returns cross-year matches when user searches without year`。本地 DB 实测验证:收紧前 CMA 返 3 条 (2008/2017/2024),收紧后只返 2024 一条。
 - **feat: 8 个分组拆资质/无资质(主搜索结果)** — 用户进一步要求层级严格按"资质 → 状态"线性铺开:① 现行·有资质 ② 废止·有资质 ③ 现行·无资质 ④ 废止·无资质,「即将实施」和「其它」也跟着拆。改 `public/js/app-search.js`:
   - `statusCategory(s, standardNumber)` 返回 8 个 key:`'资质·现行' / '资质·即将实施' / '资质·其它' / '资质·废止' / '无资质·现行' / '无资质·即将实施' / '无资质·其它' / '无资质·废止'`,前缀按 `hasQualificationBadge` 加
   - `STATUS_GROUP_ORDER` 改 8 元素,有资质 4 组在前 + 无资质 4 组在后(各组内按"现行 → 即将实施 → 其它 → 废止"排)

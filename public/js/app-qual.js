@@ -858,6 +858,13 @@ async function loadLabsSyncLogs() {
 }
 
 // ── Qual badges for search results ──
+//
+// Tooltip 浮层定位机制(2026-05):
+// badge 内部 inline 渲染 `<span class="qual-tooltip">`,但用户报浮层被
+// `.status-group-body { overflow: hidden }` 裁剪 + `.result-card { transition: transform }`
+// 创建的 containing block 共同导致 position:absolute / position:fixed 都跳不出来。
+// 解决:hover 时把 tooltip detach 到 document.body 末尾用 position:fixed 算 viewport 坐标,
+// mouseleave 再放回 badge 内部。这样完全绕开任何祖先的 overflow / transform 问题。
 function qualBadgeHtml(standardNumber) {
   if (!qualData || !standardNumber) return '';
   const quals = qualData[standardNumber];
@@ -878,6 +885,83 @@ function qualBadgeHtml(standardNumber) {
   html += '</span>';
   return html;
 }
+
+// 全局事件代理 — 把任意 .qual-badge 的 tooltip 在 hover 时挪到 body 末尾
+// 用 viewport 坐标定位,绕过 overflow:hidden / transform containing block 等裁剪
+(function setupQualTooltipPortal() {
+  if (typeof document === 'undefined' || document.__qualTooltipPortalReady) return;
+  document.__qualTooltipPortalReady = true;
+
+  /** @type {HTMLElement|null} 当前正在显示的 tooltip 节点 */
+  let activeTip = null;
+  /** @type {HTMLElement|null} tooltip 的原属 badge,mouseleave 时复位 */
+  let activeBadge = null;
+  /** @type {Comment|null} placeholder 占位,detach 后回插用 */
+  let activePlaceholder = null;
+
+  function showTip(badge) {
+    if (activeTip) hideTip(); // 切换 badge 时先复位上一条
+    const tip = badge.querySelector(':scope > .qual-tooltip');
+    if (!tip) return;
+    activeBadge = badge;
+    activeTip = tip;
+    activePlaceholder = document.createComment('qual-tooltip-placeholder');
+    badge.insertBefore(activePlaceholder, tip);
+    document.body.appendChild(tip);
+
+    // 用 viewport 坐标定位 —— badge.getBoundingClientRect 拿到的就是 viewport 系
+    const rect = badge.getBoundingClientRect();
+    const tipRect = tip.getBoundingClientRect();
+    let top = rect.top - tipRect.height - 8;        // badge 上方,8px 间距
+    let left = rect.left + rect.width / 2 - tipRect.width / 2;
+    // 视口边界保护:超左/右贴边、上方不够时倒挂到下方
+    const margin = 8;
+    if (left < margin) left = margin;
+    if (left + tipRect.width > window.innerWidth - margin) left = window.innerWidth - tipRect.width - margin;
+    if (top < margin) top = rect.bottom + 8;
+    tip.style.position = 'fixed';
+    tip.style.top = `${top}px`;
+    tip.style.left = `${left}px`;
+    tip.style.transform = 'none';                   // 抹掉原 CSS 里的 translateX(-50%)
+    tip.style.opacity = '1';
+    tip.style.zIndex = '9999';                      // 高于所有 stacking context
+  }
+
+  function hideTip() {
+    if (!activeTip) return;
+    activeTip.style.opacity = '';
+    activeTip.style.position = '';
+    activeTip.style.top = '';
+    activeTip.style.left = '';
+    activeTip.style.transform = '';
+    activeTip.style.zIndex = '';
+    if (activeBadge && activePlaceholder && activePlaceholder.parentNode === activeBadge) {
+      activeBadge.insertBefore(activeTip, activePlaceholder);
+      activePlaceholder.remove();
+    } else if (activeBadge) {
+      // placeholder 失效兜底:直接 append 回 badge
+      activeBadge.appendChild(activeTip);
+    }
+    activeTip = null;
+    activeBadge = null;
+    activePlaceholder = null;
+  }
+
+  document.addEventListener('mouseover', (e) => {
+    const badge = e.target.closest && e.target.closest('.qual-badge');
+    if (badge && badge !== activeBadge) showTip(badge);
+  });
+  document.addEventListener('mouseout', (e) => {
+    if (!activeBadge) return;
+    const to = e.relatedTarget;
+    // 移到 tooltip 自身上不算离开(用户可能想点击/复制内容,虽然 pointer-events:none)
+    if (to && (activeBadge.contains(to) || (activeTip && activeTip.contains(to)))) return;
+    hideTip();
+  });
+  // 滚动 / resize 时 tooltip 位置失效,直接隐藏让用户重新 hover
+  window.addEventListener('scroll', () => { if (activeTip) hideTip(); }, true);
+  window.addEventListener('resize', () => { if (activeTip) hideTip(); });
+})();
 
 function buildQualTooltip(quals, source) {
   const now = beijingDate();

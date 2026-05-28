@@ -320,4 +320,47 @@ describe('searchQualifications (Step 4: keyword search uses std_code_norm/base)'
     expect(results[0].source).toBe('CNAS');
     db.close();
   });
+
+  it('does NOT return other years when user searches with a full year (hasFullYear path)', () => {
+    // 用户报需求:资质查询页搜 '3324-2024' 不应返 '3324-2008/3324-2017' 这种跨年噪音。
+    // 修法:query 带完整 4 位年份时禁用 std_code_base 路径,只走 std_code_norm 精确路径。
+    // 想跨年搜请改成 '3324' 不带年。
+    const db = makeTestDb();
+    db.prepare("INSERT INTO cma_labs (cert_number, lab_name) VALUES ('CERT001', 'Test CMA')").run();
+    const insert = db.prepare(`
+      INSERT INTO cma_qualifications (cert_number, std_code, std_code_norm, std_code_base, std_name, effective_date, expiry_date, category, test_item, test_standard, limit_desc)
+      VALUES ('CERT001', ?, ?, ?, '', '', '', '', '', '', '')
+    `);
+    for (const code of ['GB/T 3324-2008', 'GB/T 3324-2017', 'GB/T 3324-2024']) {
+      insert.run(code, extractFullCode(code), extractBaseCode(code));
+    }
+
+    const svc = new QualificationService(db as any);
+    const results = svc.searchQualifications('GB/T 3324-2024');
+
+    // 只命中 2024 版,2008/2017 跨年版本不返
+    expect(results.length).toBe(1);
+    expect(results[0].stdCode).toBe('GB/T 3324-2024');
+    db.close();
+  });
+
+  it('returns cross-year matches when user searches without year (片段路径)', () => {
+    // 反向验证:搜片段(不带年)时仍跨年模糊,let user 主动选择宽匹配
+    const db = makeTestDb();
+    db.prepare("INSERT INTO cma_labs (cert_number, lab_name) VALUES ('CERT001', 'Test CMA')").run();
+    const insert = db.prepare(`
+      INSERT INTO cma_qualifications (cert_number, std_code, std_code_norm, std_code_base, std_name, effective_date, expiry_date, category, test_item, test_standard, limit_desc)
+      VALUES ('CERT001', ?, ?, ?, '', '', '', '', '', '', '')
+    `);
+    for (const code of ['GB/T 3324-2008', 'GB/T 3324-2017', 'GB/T 3324-2024']) {
+      insert.run(code, extractFullCode(code), extractBaseCode(code));
+    }
+
+    const svc = new QualificationService(db as any);
+    const results = svc.searchQualifications('3324');
+
+    // 三个年版都返(走 std_code_base = 'GB3324' 跨年路径)
+    expect(results.length).toBe(3);
+    db.close();
+  });
 });

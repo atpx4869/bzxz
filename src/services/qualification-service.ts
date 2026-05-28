@@ -200,25 +200,32 @@ export class QualificationService {
    * 关键点：用户搜的可能是标准号片段（如 '3325-' / 'GB/T 3325'）、完整带年（'GB/T 3325-2024'，
    * 含全角/脏空格变体）、关键词（实验室名 / 测试项）。
    *
-   * 多层匹配，越严越靠前：
-   * 1. std_code_norm = ? / std_code_base = ?  — query 解析成完整标准号时索引等值命中
-   * 2. std_code_norm LIKE / std_code_base LIKE — query 是片段时归一化形态做子串
-   *    （比如 '3325-' 在归一化形态下都是 'GB3325-2024' 的子串，CNAS 脏空格变体不再漏）
-   * 3. std_code LIKE — 兜底原始字段子串
-   * 4. 其余字段 LIKE — 关键词搜实验室名 / 测试项
+   * 匹配策略按"用户输入是否带完整 4 位年份"分两路:
+   *
+   * **带年(queryFull 匹 `\d{4}[A-Z]?$`)**:严格同号同年,只走 std_code_norm = / LIKE。
+   *   防止"搜 3324-2024 出来 3324-2008/3324-2017/33324-2016"这种"标准号子串噪音"。
+   *   想跨年看请改搜不带年的形态(如 '3324')。
+   *
+   * **不带年**:用户输入是片段/关键词,双路径 —— std_code_norm + std_code_base 都查,
+   *   覆盖"3324-" 这种含连字符但年份不完整的片段、纯标准号(GB/T 3325)、关键词。
+   *
+   * 不论哪条都还会查 std_code 原始字段 + std_name + lab_no + l.lab_name + test_*
+   * 这些"非标准号字段",支持关键词搜实验室名 / 测试项。
    */
   searchQualifications(query: string, source?: 'CNAS' | 'CMA', limit = 50): Qualification[] {
     const q = `%${query}%`;
     const queryFull = extractFullCode(query);
     const queryBase = extractBaseCode(query);
-    // 把 query 也归一化一遍再 LIKE：用户搜 '3325-'，extractFullCode → '3325-'，
-    // 'GB3325-2024' 含 '3325-' ✓；这一步把"片段不带前缀也能匹"和"脏数据"两个问题一起闭掉
     const qNorm = `%${queryFull}%`;
+    // 检测 query 是否带完整 4 位年份(允许末尾 A/B/R 修订标记):带年时禁用 base 跨年路径
+    const hasFullYear = /-\d{4}[A-Z]?$/.test(queryFull);
     const qBase = `%${queryBase}%`;
     const results: Qualification[] = [];
 
     if (!source || source === 'CNAS') {
-      const rows = this.db.prepare(`
+      // 带年时不在 SQL 里加 std_code_base 两个 OR 子句;不带年时保留双路径
+      const baseClause = hasFullYear ? '' : `OR q.std_code_base = ? OR q.std_code_base LIKE ?`;
+      const sql = `
         SELECT q.std_code, q.std_name, q.lab_no,
                COALESCE(link.display_name, l.lab_name) AS lab_name,
                link.display_name AS linked_lab_name,
@@ -227,14 +234,19 @@ export class QualificationService {
         FROM cnas_qualifications q
         LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
         LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
-        WHERE q.std_code_norm = ? OR q.std_code_base = ?
-           OR q.std_code_norm LIKE ? OR q.std_code_base LIKE ?
+        WHERE q.std_code_norm = ?
+           OR q.std_code_norm LIKE ?
+           ${baseClause}
            OR q.std_code LIKE ? OR q.std_name LIKE ? OR q.lab_no LIKE ?
            OR l.lab_name LIKE ? OR q.test_object LIKE ? OR q.test_param LIKE ?
            OR q.test_standard LIKE ? OR q.category LIKE ?
         ORDER BY q.std_code, q.effective_date DESC
         LIMIT ?
-      `).all(queryFull, queryBase, qNorm, qBase, q, q, q, q, q, q, q, q, limit) as any[];
+      `;
+      const params = hasFullYear
+        ? [queryFull, qNorm, q, q, q, q, q, q, q, q, limit]
+        : [queryFull, qNorm, queryBase, qBase, q, q, q, q, q, q, q, q, limit];
+      const rows = this.db.prepare(sql).all(...params) as any[];
 
       for (const row of rows) {
         results.push({
@@ -255,7 +267,8 @@ export class QualificationService {
     }
 
     if (!source || source === 'CMA') {
-      const rows = this.db.prepare(`
+      const baseClause = hasFullYear ? '' : `OR q.std_code_base = ? OR q.std_code_base LIKE ?`;
+      const sql = `
         SELECT q.std_code, q.std_name, q.cert_number,
                COALESCE(link.display_name, l.lab_name) AS lab_name,
                link.display_name AS linked_lab_name,
@@ -264,14 +277,19 @@ export class QualificationService {
         FROM cma_qualifications q
         LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
         LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
-        WHERE q.std_code_norm = ? OR q.std_code_base = ?
-           OR q.std_code_norm LIKE ? OR q.std_code_base LIKE ?
+        WHERE q.std_code_norm = ?
+           OR q.std_code_norm LIKE ?
+           ${baseClause}
            OR q.std_code LIKE ? OR q.std_name LIKE ? OR q.cert_number LIKE ?
            OR l.lab_name LIKE ? OR q.test_item LIKE ? OR q.test_standard LIKE ?
            OR q.category LIKE ?
         ORDER BY q.std_code, q.effective_date DESC
         LIMIT ?
-      `).all(queryFull, queryBase, qNorm, qBase, q, q, q, q, q, q, q, limit) as any[];
+      `;
+      const params = hasFullYear
+        ? [queryFull, qNorm, q, q, q, q, q, q, q, limit]
+        : [queryFull, qNorm, queryBase, qBase, q, q, q, q, q, q, q, limit];
+      const rows = this.db.prepare(sql).all(...params) as any[];
 
       for (const row of rows) {
         results.push({
