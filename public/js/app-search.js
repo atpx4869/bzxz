@@ -182,7 +182,11 @@ async function doSearch() {
     // 后到的结果(如 BZ 截断 size=20 漏掉、但 GBW/BY 返回的 stdCode)会拿不到徽章。
     if (results.length > 0) {
       const stdNums = results.map(r => r.standardNumber).filter(Boolean);
-      fetchQualBadges(stdNums).then(() => { if (results.length > 0) renderResults(); });
+      // 徽章到达后:既 renderResults 重排(分组可能变化 → 资质·废止 组首次出现),
+      // 也 renderFilterBar 让 status chip count 反映分组迁移
+      fetchQualBadges(stdNums).then(() => {
+        if (results.length > 0) { renderFilterBar(); renderResults(); }
+      });
     }
     // Poll GBW text availability in background (non-blocking)
     pollGbwTextAvailability();
@@ -281,10 +285,16 @@ document.getElementById('searchBtn').addEventListener('click', () => {
 });
 
 // ── Filter bar ──
-function statusCategory(s) {
+function statusCategory(s, standardNumber) {
+  // 有资质 + 废止 独立分组 —— 用户报需求:有资质的废止标准应该显式呈现而非随其它废止一起折叠
+  // (用户用资质表判断"我能测这标准吗",有资质的版本即使废止也值得知道)。
+  // 普通废止(无资质)仍走原默认折叠路径
+  const isExpired = s && s.includes('废止');
+  const hasQual = standardNumber && hasQualificationBadge(standardNumber);
+  if (isExpired && hasQual) return '资质·废止';
   if (!s) return '其它';
   if (s.includes('现行') || s.includes('部分有效')) return '现行';
-  if (s.includes('废止')) return '废止';
+  if (isExpired) return '废止';
   if (s.includes('即将实施')) return '即将实施';
   return '其它';
 }
@@ -296,7 +306,7 @@ function getFilteredResults() {
       if (!rSources.some(s => filterState.sources.has(s))) return false;
     }
     if (filterState.statuses.size > 0) {
-      if (!filterState.statuses.has(statusCategory(r.status))) return false;
+      if (!filterState.statuses.has(statusCategory(r.status, r.standardNumber))) return false;
     }
     if (filterState.onlyDownloadable && !r.previewAvailable) return false;
     if (filterState.onlyQualified && !hasQualificationBadge(r.standardNumber)) return false;
@@ -341,7 +351,7 @@ function renderFilterBar() {
   let downloadableCount = 0; let qualifiedCount = 0; let savedCount = 0;
   for (const r of results) {
     for (const s of (r.sources || [r._source])) { srcCounts[s] = (srcCounts[s] || 0) + 1; }
-    statusCounts[statusCategory(r.status)] = (statusCounts[statusCategory(r.status)] || 0) + 1;
+    statusCounts[statusCategory(r.status, r.standardNumber)] = (statusCounts[statusCategory(r.status, r.standardNumber)] || 0) + 1;
     if (r.previewAvailable) downloadableCount++;
     if (hasQualificationBadge(r.standardNumber)) qualifiedCount++;
     if (isStandardSaved(r)) savedCount++;
@@ -354,6 +364,7 @@ function renderFilterBar() {
   const statusChips = [
     { key: '', label: '全部', count: results.length },
     { key: '现行', label: '现行', count: statusCounts['现行'] || 0 },
+    { key: '资质·废止', label: '资质·废止', count: statusCounts['资质·废止'] || 0 },
     { key: '废止', label: '废止', count: statusCounts['废止'] || 0 },
     { key: '即将实施', label: '即将实施', count: statusCounts['即将实施'] || 0 },
     { key: '其它', label: '其它', count: statusCounts['其它'] || 0 }
@@ -566,7 +577,7 @@ function _persistCollapsedGroups() {
   try { localStorage.setItem(_collapsedGroupsKey, JSON.stringify([..._collapsedGroups])); } catch {}
 }
 
-const STATUS_GROUP_ORDER = ['现行', '即将实施', '其它', '废止'];
+const STATUS_GROUP_ORDER = ['现行', '资质·废止', '即将实施', '其它', '废止'];
 
 function renderResults() {
   const filtered = getFilteredResults();
@@ -588,7 +599,7 @@ function renderResults() {
   // Group by status category when at least 2 categories present and we have >5 results.
   const visibleBatch = filtered.slice(0, _resultsRenderedCount);
   const catCounts = {};
-  for (const r of filtered) { const c = statusCategory(r.status); catCounts[c] = (catCounts[c] || 0) + 1; }
+  for (const r of filtered) { const c = statusCategory(r.status, r.standardNumber); catCounts[c] = (catCounts[c] || 0) + 1; }
   const usedCats = Object.keys(catCounts);
   const useGrouping = usedCats.length >= 2 && filtered.length > 5;
 
@@ -597,7 +608,7 @@ function renderResults() {
     // Group first-batch rows by status category, then render in canonical order
     const groups = {};
     for (const r of visibleBatch) {
-      const c = statusCategory(r.status);
+      const c = statusCategory(r.status, r.standardNumber);
       (groups[c] = groups[c] || []).push(r);
     }
     for (const cat of STATUS_GROUP_ORDER) {
@@ -606,7 +617,7 @@ function renderResults() {
       if (!total) continue;
       const collapsed = _collapsedGroups.has(cat);
       const rendered = rows ? rows.length : 0;
-      const groupCls = `status-group status-group-${cat === '现行' ? 'current' : cat === '即将实施' ? 'upcoming' : cat === '废止' ? 'expired' : 'other'}${collapsed ? ' collapsed' : ''}`;
+      const groupCls = `status-group status-group-${cat === '现行' ? 'current' : cat === '即将实施' ? 'upcoming' : cat === '资质·废止' ? 'qual-expired' : cat === '废止' ? 'expired' : 'other'}${collapsed ? ' collapsed' : ''}`;
       bodyHtml += `<div class="${groupCls}" data-group-cat="${escapeHtml(cat)}">
         <div class="status-group-header" data-group-toggle="${escapeHtml(cat)}">
           <span class="status-group-caret">▾</span>
@@ -661,7 +672,7 @@ function appendNextResultsBatch() {
   if (grouped) {
     // Distribute new rows into their status-group bodies (already exist from initial render)
     for (const r of slice) {
-      const cat = statusCategory(r.status);
+      const cat = statusCategory(r.status, r.standardNumber);
       const body = document.querySelector(`.status-group[data-group-cat="${CSS.escape(cat)}"] .status-group-body`);
       const html = buildResultCardHtml(r, idxMap.get(r.id));
       if (body) body.insertAdjacentHTML('beforeend', html);
@@ -669,10 +680,10 @@ function appendNextResultsBatch() {
     }
     // Refresh group counts
     const catCounts = {};
-    for (const r of filtered.slice(0, end)) { const c = statusCategory(r.status); catCounts[c] = (catCounts[c] || 0) + 1; }
+    for (const r of filtered.slice(0, end)) { const c = statusCategory(r.status, r.standardNumber); catCounts[c] = (catCounts[c] || 0) + 1; }
     document.querySelectorAll('.status-group').forEach(g => {
       const cat = g.dataset.groupCat;
-      const total = filtered.reduce((acc, r) => acc + (statusCategory(r.status) === cat ? 1 : 0), 0);
+      const total = filtered.reduce((acc, r) => acc + (statusCategory(r.status, r.standardNumber) === cat ? 1 : 0), 0);
       const rendered = catCounts[cat] || 0;
       const cnt = g.querySelector('.status-group-count');
       if (cnt) cnt.textContent = rendered < total ? `${rendered} / ${total}` : `${rendered}`;
