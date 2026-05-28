@@ -95,6 +95,8 @@ labr 账号密码与 token 在以下两个文件里（已 gitignore 或本地文
 | 2026-05-28 | #62 | **legacy `public/index.html` 是装包后的实际入口**（不是 `web/index.html`）：Electron `loadURL(http://localhost:port)` → Express `staticDir/public/index.html`。任何新 sidebar tab / page 都要镜像到 `public/index.html`，CSS 镜像到 `public/styles.css`，legacy JS 放 `public/js/`。直到 legacy 入口被砍掉前，**HTML/CSS/JS 三件套都要同步镜像** |
 | 2026-05-28 | #64 | **`/api/preview/library-check` 与 `/api/preview/files` 用不同源集合是有意的**：前者是"绿点 = 库里有没有"OR 语义、用 4 源全集 `ALL_LIBRARY_SOURCES`；后者是"自动选哪一个"priority 语义、用 `getConfiguredSourcePriority`（默认不含 labr）。改 library-check 默认源时不要顺手把 files 也改了 |
 | 2026-05-28 | #64 | **labr hl_title 是原始 HTML**（带 `<font color="red">`），不是预转义文本。sanitize 不能简单 escape-then-whitelist，因为转义后正则要在转义形态里匹配（`<` → `&lt;`、`>` → `&gt;`），但 attribute 引号 `"` 默认 escape 链不动它，会让 `[&quot;']` 类正则永远失配。要么先把 `"` 也 escape（多一条规则），要么改成"先标准化标签 → 再统一 escape → 再解白名单"，#64 选了后者 |
+| 2026-05-28 | #65 | **不在 UI 中暴露 labr.cc 域名**：sidebar 副标题 `labr.cc 标准库补给` → `标准库补给`，README "支持的标准源"表 `labr.cc` → `标准库补给源`（用户向描述）。API 表里的 `source=labr` **保留**（开发者参考，文案不属于面向用户的 UI 范畴）。镜像位置：`public/index.html` + `web/index.html` + `public/js/app-auth-admin.js` (`TAB_LABELS` / `TAB_ITEMS`) + `README.md` 顶部表 + 功能清单 |
+| 2026-05-28 | #66 | **本地文件库独立成顶级 tab**：从「下载历史」中拆出 `data-tab="local"`，加 5 项管理（预览/下载/打开路径/编辑/删除 + 复选 + 批量删）。后端新增 `DELETE /api/preview/file/:id` / `POST /api/preview/files/batch-delete` / `POST /api/preview/file/:id/reveal` (Electron-only) / `PATCH /api/preview/file/:id`（rename）。Electron 主进程靠 `process.on('bzxz:reveal-in-folder')` 事件总线接收后端 emit、调 `shell.showItemInFolder`，避免给每个新需求都加 ipcMain handle 引线。**`std_code_norm` 索引键不允许被 rename 改动**（搜索 / 绿点都依赖它） |
 
 ### 本地测试约定（**强制**）
 

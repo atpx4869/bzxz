@@ -48,6 +48,10 @@
       <span class="sidebar-icon">🔍</span>
       <span class="sidebar-text">标准检索<span class="sidebar-desc">搜索和下载标准</span></span>
     </button>
+    <button class="sidebar-item" data-tab="labr" onclick="switchTab('labr')">
+      <span class="sidebar-icon">📚</span>
+      <span class="sidebar-text">Labr库检索<span class="sidebar-desc">标准库补给</span></span>
+    </button>
     <button class="sidebar-item" data-tab="batch" onclick="switchTab('batch')">
       <span class="sidebar-icon">📦</span>
       <span class="sidebar-text">批量下载<span class="sidebar-desc">批量解析和下载</span></span>
@@ -56,6 +60,10 @@
       <span class="sidebar-icon">📋</span>
       <span class="sidebar-text">标准补全<span class="sidebar-desc">Excel/CSV 自动补全</span></span>
     </button>
+    <button class="sidebar-item" data-tab="local" onclick="switchTab('local')">
+      <span class="sidebar-icon">🗂</span>
+      <span class="sidebar-text">本地文件库<span class="sidebar-desc">已下载标准管理</span></span>
+    </button>
     <button class="sidebar-item" data-tab="history" onclick="switchTab('history')">
       <span class="sidebar-icon">📥</span>
       <span class="sidebar-text">下载历史<span class="sidebar-desc">查看下载记录</span></span>
@@ -63,10 +71,6 @@
     <button class="sidebar-item" data-tab="qual" onclick="switchTab('qual')">
       <span class="sidebar-icon">🛡</span>
       <span class="sidebar-text">资质查询<span class="sidebar-desc">CNAS/CMA 资质</span></span>
-    </button>
-    <button class="sidebar-item" data-tab="labr" onclick="switchTab('labr')">
-      <span class="sidebar-icon">📚</span>
-      <span class="sidebar-text">Labr库检索<span class="sidebar-desc">labr.cc 标准库补给</span></span>
     </button>
     <div class="sidebar-sep"></div>
     <button class="sidebar-item" data-tab="stats" onclick="switchTab('stats')">
@@ -238,24 +242,53 @@
     </div>
   </div>
 
+  <!-- Page: Local Library -->
+  <div class="page" id="page-local">
+    <div class="page-heading">
+      <div>
+        <h2>本地文件库</h2>
+        <p>已下载标准 PDF 的集中管理：预览 / 下载 / 重命名 / 批量删除。</p>
+      </div>
+      <button class="btn btn-sm btn-ghost" onclick="refreshFileLibrary()">刷新</button>
+    </div>
+    <div class="local-toolbar">
+      <input class="library-search" id="fileLibrarySearch" placeholder="按标准号或文件名筛选…" oninput="renderFileLibrary()">
+      <div class="local-toolbar-actions">
+        <span class="badge-count"><span id="fileLibraryCount">0</span> 项 · 已选 <span id="fileLibrarySelectedCount">0</span></span>
+        <button class="btn btn-sm btn-ghost" id="fileLibrarySelectAll" onclick="toggleLocalSelectAll()">全选</button>
+        <button class="btn btn-sm btn-danger" id="fileLibraryBatchDelete" onclick="batchDeleteLibraryFiles()" disabled>批量删除</button>
+      </div>
+    </div>
+    <div class="local-table-wrap">
+      <table class="local-table" id="fileLibraryTable">
+        <thead>
+          <tr>
+            <th class="local-col-check"><input type="checkbox" id="fileLibraryCheckAll" onchange="onLocalCheckAll(this.checked)"></th>
+            <th>标准号</th>
+            <th>文件名</th>
+            <th>来源</th>
+            <th>大小</th>
+            <th>时间</th>
+            <th class="local-col-actions">操作</th>
+          </tr>
+        </thead>
+        <tbody id="fileLibraryList"></tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- Page: History -->
   <div class="page" id="page-history">
     <div class="page-heading">
       <div>
-        <h2>下载历史与文件库</h2>
-        <p>收藏的常用标准、已下载文件和历史记录集中在这里。</p>
+        <h2>下载历史</h2>
+        <p>记录每一次下载行为。收藏夹用于监控收藏标准是否有新版本。</p>
       </div>
-      <button class="btn btn-sm btn-ghost" onclick="refreshFileLibrary()">刷新文件库</button>
     </div>
     <div class="library-grid">
       <section class="library-card">
-        <div class="library-head"><h3>常用标准库</h3><span id="savedLibraryCount">0</span></div>
+        <div class="library-head"><h3>收藏标准</h3><span id="savedLibraryCount">0</span></div>
         <div id="savedLibraryList"></div>
-      </section>
-      <section class="library-card">
-        <div class="library-head"><h3>本地文件库</h3><span id="fileLibraryCount">0</span></div>
-        <input class="library-search" id="fileLibrarySearch" placeholder="按标准号或文件名筛选…" oninput="renderFileLibrary()">
-        <div id="fileLibraryList"></div>
       </section>
       <section class="library-card wide">
         <div class="library-head">

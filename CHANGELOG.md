@@ -3,6 +3,15 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **#66 本地文件库独立成顶级 tab + 5 项管理能力**：之前"本地文件库"是「下载历史」tab 里的一个 card，随着用户积累的标准 PDF 增多，已不堪用。本次拆出为独立 sidebar 入口 `data-tab="local"`，改表格布局（标准号 / 文件名 / 来源 / 大小 / 时间 / 操作），去掉原"路径"列；每行 5 个动作：`预览 / 下载 / 打开路径 / 编辑 / 删除`；表头复选 + 单行复选 + "全选 / 批量删除"工具条。
+  - **后端新增 4 端点（`src/api/preview-routes.ts`）**：`DELETE /api/preview/file/:id` 物理删 PDF + 删 `standard_files` 行；`POST /api/preview/files/batch-delete` 批删，body `{ ids: number[] }`，返回 `{ deleted, failed }`；`POST /api/preview/file/:id/reveal` 桌面端"在资源管理器中定位"，靠 `process.env.BZXZ_ELECTRON` 卡口 + `process.emit('bzxz:reveal-in-folder', absPath)` 喂主进程，Web 端 501；`PATCH /api/preview/file/:id` rename，body `{ fileName }`，校验非法字符 + `isInsideLibrary` 防越界 + 409 拒绝覆盖同名，`std_code_norm` 索引键保留不动（避免绿点/搜索失效）。
+  - **Electron 主进程（`electron/main.ts`）**：启动时 `process.env.BZXZ_ELECTRON = '1'` 喂卡口；`process.on('bzxz:reveal-in-folder', absPath => shell.showItemInFolder(absPath))` 监听后端事件总线。
+  - **前端（`public/js/app-detail-utils.js`）**：重写 `renderFileLibrary` 为表格；新增 `openLocalPreview` / `downloadLocalFile` / `revealLocalFile` / `renameLocalFile` / `deleteLibraryFile` / `deleteExportFile` / `batchDeleteLibraryFiles` / `onLocalCheck` / `onLocalCheckAll` / `updateLocalSelectionUi`。删除全部带 `showConfirm` 二次确认。`window.bzxz.isElectron` 为真时显示「打开路径」按钮，为假（Web 浏览器）时改为「复制路径」。
+  - **页面拆分（`public/index.html` + `web/index.html`）**：新增 `#page-local` 容器；`#page-history` 保留"收藏标准"+"下载历史"两个 card，副标题改为"记录每一次下载行为。收藏夹用于监控收藏标准是否有新版本。"，"常用标准库" → "收藏标准"。
+  - **CSS**：`public/styles.css` 末尾 + `web/src/styles/pages/local-library.css`（新文件）。表格布局 + sticky thead + 复选列窄 + 操作列 nowrap + 720px 窄屏紧凑。`.btn.btn-xs` 与 `.btn.btn-danger` 全局补全。
+  - **switchTab 联动（`public/js/app-core.js`）**：`tab === 'local'` 时调 `refreshFileLibrary()`；同时去掉 `renderDownloadHistory` 里冗余的 `refreshFileLibrary()`（独立 tab 后不再耦合）。
+  - **TAB 字典（`public/js/app-auth-admin.js`）**：`TAB_LABELS` / `TAB_ITEMS` 加 `local: '本地文件库 / 已下载标准管理'`，`KNOWN_TABS` 已有该键无需改。
+- **#65 Labr sidebar 文案 + 位置调整**：把「Labr库检索」按钮从「资质查询」之后挪到「标准检索」紧下方（高频使用 → 高优先级位置）；副标题 `labr.cc 标准库补给` → `标准库补给`（不在 UI 中暴露上游域名）。`public/index.html` + `web/index.html` 双 entry 镜像；`public/js/app-auth-admin.js` 的 `TAB_LABELS` / `TAB_ITEMS` 同步。README 「支持的标准源」表行 `labr.cc` 改为 `标准库补给源`（用户向描述），API 表里的 `source=labr` 保留（开发者文档参考，方案 A）。
 - **labr 第 4 标准源接入**：新增 `labr.cc` 检索与下载。架构上**独立 service，不挂 SourceRegistry** —— labr 的下载产物形态、限速契约、登录链路都与既有三源差异大（kind=0 直拉无消耗 / kind=1 需登录走 preview2 限 5/天），强行做 SourceAdapter 会扭曲 BZ/GBW/BY 的共同契约。
   - **后端**：新表 `labr_temp_urls` 缓存 kind=1 的短时下载链跨 token 持久化；源级 semaphore=2 防限频；`labr-client` 复用 BY adapter 的 token 持久化 / cookie 模式 + `LABR_USERNAME`/`LABR_PASSWORD` 注入；`labr-service` 编排 List / Detail / Download，batch 路径带指数退避；API 路由 `/api/labr/search` / `/labr/download/:did` / `/labr/batch-download` + `/api/preview/files?stdCode=&year=` 多源候选。
   - **前端**：sidebar 新 tab「Labr库检索」(`web/index.html` + `KNOWN_TABS` + `TAB_LABELS`/`TAB_ITEMS`)；legacy 路线 `public/js/app-labr.js`（与 app-qual.js 对齐）实现搜索 + 翻页 + 全选 + 单 / 批量下载，结果就地渲染 ok / 失败，限速被跳过条目单独提示数量。错误 code `LABR_RATE_LIMIT` / `LABR_AUTH` 给中文友好提示。`sanitizeLabrTitle` 白名单 `<font color>` / `<mark>` / `<b>` 后 escape 其余，让搜索高亮直接渲染。

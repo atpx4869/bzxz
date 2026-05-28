@@ -413,6 +413,7 @@ document.getElementById('searchHistory').addEventListener('click', e => {
 // ── Download history ──
 const DL_HISTORY_KEY = 'bzxz_dl_history';
 let fileLibraryItems = [];
+let fileLibrarySelectedIds = new Set();
 function loadDownloadHistory() {
   try { return JSON.parse(localStorage.getItem(DL_HISTORY_KEY) || '[]'); } catch { return []; }
 }
@@ -429,7 +430,6 @@ function clearDownloadHistory() {
 }
 function renderDownloadHistory() {
   renderSavedLibrary();
-  refreshFileLibrary();
   const hist = loadDownloadHistory();
   const el = document.getElementById('historyList');
   if (!hist.length) { el.innerHTML = '<div style="color:var(--text-3);text-align:center;padding:32px">暂无下载记录</div>'; return; }
@@ -500,6 +500,8 @@ async function refreshFileLibrary() {
   }
 }
 
+// 本地文件库：表格渲染 + 复选 + 5 个操作（预览/下载/打开路径/编辑/删除）+ 批量删
+// 打开路径仅 Electron 桌面端显示（window.bzxz.isElectron 为真），Web 浏览器侧改成"复制路径"
 function renderFileLibrary() {
   const list = document.getElementById('fileLibraryList');
   const count = document.getElementById('fileLibraryCount');
@@ -507,23 +509,108 @@ function renderFileLibrary() {
   const q = (document.getElementById('fileLibrarySearch')?.value || '').trim().toLowerCase();
   const items = fileLibraryItems.filter(f => !q || `${f.fileName} ${f.standardNumber}`.toLowerCase().includes(q));
   count.textContent = String(items.length);
+  // 清理已不在当前过滤集合内的选中项
+  const visibleIds = new Set(items.filter(f => f.kind === 'library').map(f => f.fileId));
+  fileLibrarySelectedIds.forEach(id => { if (!visibleIds.has(id)) fileLibrarySelectedIds.delete(id); });
+
   if (!items.length) {
-    list.innerHTML = '<div class="library-empty">暂无匹配文件</div>';
+    list.innerHTML = '<tr><td colspan="7" class="local-empty">暂无匹配文件</td></tr>';
+    updateLocalSelectionUi();
     return;
   }
-  list.innerHTML = items.map(f => `
-    <div class="library-item">
-      <div class="library-main">
-        <strong>${escapeHtml(f.standardNumber || f.fileName)}</strong>
-        <span title="${escapeHtml(f.fileName)}">${escapeHtml(f.fileName)}</span>
-        <em>${escapeHtml(f.source || '本地')} · ${formatSize(f.size)} · ${utcToBeijing(f.mtime)}</em>
-      </div>
-      <div class="library-actions">
-        <button class="btn btn-ghost btn-sm" data-download-file="${escapeHtml(f.fileName)}">下载</button>
-        <button class="btn btn-ghost btn-sm" onclick="copyFilePath('${escapeHtml(f.path)}')">路径</button>
-        <button class="btn btn-ghost btn-sm danger" onclick="deleteLibraryFile('${escapeHtml(f.fileName)}')">删除</button>
-      </div>
-    </div>`).join('');
+  const isElectron = !!(window.bzxz && window.bzxz.isElectron);
+  list.innerHTML = items.map(f => {
+    const isLib = f.kind === 'library';
+    const checked = isLib && fileLibrarySelectedIds.has(f.fileId) ? 'checked' : '';
+    const previewBtn = isLib && f.previewUrl
+      ? `<button class="btn btn-ghost btn-xs" onclick="openLocalPreview(${f.fileId})">预览</button>`
+      : '';
+    const downloadBtn = isLib
+      ? `<button class="btn btn-ghost btn-xs" onclick="downloadLocalFile(${f.fileId}, '${escapeAttr(f.fileName)}')">下载</button>`
+      : `<button class="btn btn-ghost btn-xs" data-download-file="${escapeAttr(f.fileName)}">下载</button>`;
+    const openPathBtn = isLib && isElectron
+      ? `<button class="btn btn-ghost btn-xs" onclick="revealLocalFile(${f.fileId})">打开路径</button>`
+      : (isLib ? `<button class="btn btn-ghost btn-xs" onclick="copyFilePath('${escapeAttr(f.path)}')">复制路径</button>` : '');
+    const editBtn = isLib
+      ? `<button class="btn btn-ghost btn-xs" onclick="renameLocalFile(${f.fileId}, '${escapeAttr(f.fileName)}')">编辑</button>`
+      : '';
+    const delBtn = isLib
+      ? `<button class="btn btn-ghost btn-xs danger" onclick="deleteLibraryFile(${f.fileId}, '${escapeAttr(f.fileName)}')">删除</button>`
+      : `<button class="btn btn-ghost btn-xs danger" onclick="deleteExportFile('${escapeAttr(f.fileName)}')">删除</button>`;
+    return `<tr data-file-id="${isLib ? f.fileId : ''}">
+      <td class="local-col-check">${isLib ? `<input type="checkbox" ${checked} onchange="onLocalCheck(${f.fileId}, this.checked)">` : ''}</td>
+      <td><strong>${escapeHtml(f.standardNumber || f.fileName)}</strong></td>
+      <td class="local-col-name" title="${escapeHtml(f.fileName)}">${escapeHtml(f.fileName)}</td>
+      <td>${escapeHtml(f.source || (isLib ? '本地' : '导出'))}</td>
+      <td>${escapeHtml(formatSize(f.size))}</td>
+      <td>${escapeHtml(utcToBeijing(f.mtime))}</td>
+      <td class="local-col-actions">${previewBtn}${downloadBtn}${openPathBtn}${editBtn}${delBtn}</td>
+    </tr>`;
+  }).join('');
+  updateLocalSelectionUi();
+}
+
+function escapeAttr(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function updateLocalSelectionUi() {
+  const selCount = document.getElementById('fileLibrarySelectedCount');
+  const batchBtn = document.getElementById('fileLibraryBatchDelete');
+  const checkAll = document.getElementById('fileLibraryCheckAll');
+  if (selCount) selCount.textContent = String(fileLibrarySelectedIds.size);
+  if (batchBtn) batchBtn.disabled = fileLibrarySelectedIds.size === 0;
+  if (checkAll) {
+    const libCount = fileLibraryItems.filter(f => f.kind === 'library').length;
+    checkAll.checked = libCount > 0 && fileLibrarySelectedIds.size === libCount;
+    checkAll.indeterminate = fileLibrarySelectedIds.size > 0 && fileLibrarySelectedIds.size < libCount;
+  }
+}
+
+function onLocalCheck(fileId, checked) {
+  if (checked) fileLibrarySelectedIds.add(fileId);
+  else fileLibrarySelectedIds.delete(fileId);
+  updateLocalSelectionUi();
+}
+
+function onLocalCheckAll(checked) {
+  if (checked) fileLibraryItems.forEach(f => { if (f.kind === 'library') fileLibrarySelectedIds.add(f.fileId); });
+  else fileLibrarySelectedIds.clear();
+  renderFileLibrary();
+}
+
+function toggleLocalSelectAll() {
+  const checkAll = document.getElementById('fileLibraryCheckAll');
+  if (!checkAll) return;
+  onLocalCheckAll(!checkAll.checked);
+}
+
+function openLocalPreview(fileId) {
+  // 直接打开预览端点：Electron windowOpenHandler 会拦截到系统浏览器；Web 端浏览器内嵌 PDF viewer
+  window.open(`/api/preview/file/${fileId}`, '_blank');
+}
+
+function downloadLocalFile(fileId, fileName) {
+  // 走 attachment=1，让浏览器保存而非内联
+  const a = document.createElement('a');
+  a.href = `/api/preview/file/${fileId}?attachment=1`;
+  a.download = fileName || '';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+async function revealLocalFile(fileId) {
+  try {
+    const res = await fetch(`/api/preview/file/${fileId}/reveal`, { method: 'POST' });
+    const data = await readApiResponse(res);
+    if (!res.ok) throw new Error(data.message || '打开失败');
+    showToast('已在资源管理器中定位');
+  } catch (e) {
+    showToast(`打开失败: ${e.message}`, 'fail');
+  }
 }
 
 function copyFilePath(filePath) {
@@ -531,7 +618,41 @@ function copyFilePath(filePath) {
   showToast('文件路径已复制');
 }
 
-async function deleteLibraryFile(fileName) {
+async function renameLocalFile(fileId, oldName) {
+  const next = prompt('修改文件名（保留扩展名 .pdf 可省略）', oldName || '');
+  if (next === null) return;
+  const trimmed = next.trim();
+  if (!trimmed || trimmed === oldName) return;
+  try {
+    const res = await fetch(`/api/preview/file/${fileId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName: trimmed }),
+    });
+    const data = await readApiResponse(res);
+    if (!res.ok) throw new Error(data.message || '改名失败');
+    showToast('文件已重命名');
+    refreshFileLibrary();
+  } catch (e) {
+    showToast(`改名失败: ${e.message}`, 'fail');
+  }
+}
+
+async function deleteLibraryFile(fileId, fileName) {
+  if (!await showConfirm({ title: '删除文件', body: `确定删除「${fileName}」？文件将从磁盘移除，此操作不可恢复。`, danger: true, confirmText: '删除' })) return;
+  try {
+    const res = await fetch(`/api/preview/file/${fileId}`, { method: 'DELETE' });
+    const data = await readApiResponse(res);
+    if (!res.ok) throw new Error(data.message || '删除失败');
+    fileLibrarySelectedIds.delete(fileId);
+    showToast('文件已删除');
+    refreshFileLibrary();
+  } catch (e) {
+    showToast(`删除失败: ${e.message}`, 'fail');
+  }
+}
+
+async function deleteExportFile(fileName) {
   if (!await showConfirm({ title: '删除文件', body: `确定删除「${fileName}」？此操作不可恢复。`, danger: true, confirmText: '删除' })) return;
   try {
     const res = await fetch(`/api/downloads/${encodeURIComponent(fileName)}`, { method: 'DELETE' });
@@ -541,6 +662,28 @@ async function deleteLibraryFile(fileName) {
     refreshFileLibrary();
   } catch (e) {
     showToast(`删除失败: ${e.message}`, 'fail');
+  }
+}
+
+async function batchDeleteLibraryFiles() {
+  const ids = Array.from(fileLibrarySelectedIds);
+  if (!ids.length) return;
+  if (!await showConfirm({ title: '批量删除', body: `确定删除选中的 ${ids.length} 个文件？文件将从磁盘移除，此操作不可恢复。`, danger: true, confirmText: '删除' })) return;
+  try {
+    const res = await fetch('/api/preview/files/batch-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    const data = await readApiResponse(res);
+    if (!res.ok) throw new Error(data.message || '批量删除失败');
+    const okN = (data.deleted || []).length;
+    const failN = (data.failed || []).length;
+    fileLibrarySelectedIds.clear();
+    showToast(failN ? `已删 ${okN} 个，失败 ${failN} 个` : `已删 ${okN} 个文件`, failN ? 'fail' : 'success');
+    refreshFileLibrary();
+  } catch (e) {
+    showToast(`批量删除失败: ${e.message}`, 'fail');
   }
 }
 

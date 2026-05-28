@@ -181,6 +181,7 @@ function switchTab(tab) {
   if (tab === 'stats') loadStats();
   if (tab === 'users') loadUsers();
   if (tab === 'history') renderDownloadHistory();
+  if (tab === 'local' && typeof refreshFileLibrary === 'function') refreshFileLibrary();
   if (tab === 'settings') {
     renderSettings();
     // 订阅管理 lives inside 系统设置 now — lazy-load labs + recent sync log

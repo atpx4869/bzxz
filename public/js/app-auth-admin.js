@@ -156,7 +156,7 @@ function onAuthReady() {
   if (typeof pollEnvironmentCheck === 'function') pollEnvironmentCheck();
 }
 
-var TAB_LABELS = {search:'标准检索',batch:'批量下载',complete:'标准补全',history:'下载历史',qual:'资质查询',labr:'Labr库检索',stats:'使用统计',users:'用户管理',settings:'系统设置',me:'我'};
+var TAB_LABELS = {search:'标准检索',labr:'Labr库检索',batch:'批量下载',complete:'标准补全',local:'本地文件库',history:'下载历史',qual:'资质查询',stats:'使用统计',users:'用户管理',settings:'系统设置',me:'我'};
 
 function applyTabPermissions() {
   var allowed = currentUser.allowedTabs; // null = all allowed
@@ -647,11 +647,12 @@ async function showCreateUser() {
 
 var TAB_ITEMS = [
   { key: 'search', label: '标准检索', desc: '搜索和下载标准' },
+  { key: 'labr', label: 'Labr库检索', desc: '标准库补给' },
   { key: 'batch', label: '批量下载', desc: '批量解析和下载' },
   { key: 'complete', label: '标准补全', desc: 'Excel/CSV 自动补全' },
+  { key: 'local', label: '本地文件库', desc: '已下载标准管理' },
   { key: 'history', label: '下载历史', desc: '查看下载记录' },
   { key: 'qual', label: '资质查询', desc: 'CNAS/CMA 资质' },
-  { key: 'labr', label: 'Labr库检索', desc: 'labr.cc 标准库补给' },
   { key: 'stats', label: '使用统计', desc: '查看使用数据' },
   { key: 'settings', label: '系统设置', desc: '下载参数和源' },
 ];

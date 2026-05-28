@@ -15,7 +15,7 @@
 | bz.gxzl.org.cn | `bz` | JSON API | 逐页 JPEG → pdf-lib 合并 PDF |
 | openstd.samr.gov.cn | `gbw` (显示为 BW) | JSON API | ddddocr 验证码 → 直接 PDF |
 | std.samr.gov.cn | `by` | JSON API | 直接 PDF |
-| labr.cc | `labr` | JSON API + 独立 service（不挂 SourceRegistry） | kind=0 直拉 / kind=1 登录+preview2，限 5/天；带 multi-source preview picker |
+| 标准库补给源 | `labr` | JSON API + 独立 service（不挂 SourceRegistry） | kind=0 直拉 / kind=1 登录+preview2，限 5/天；带 multi-source preview picker |
 
 ## 快速开始
 
@@ -42,6 +42,22 @@ start.bat
 ```
 
 自动检测 Node.js 环境（fnm / nvm / 手动安装），补装依赖，启动服务并打开浏览器。`start.vbs` 提供无窗口静默启动。
+
+### 凭据配置 (.env.local)
+
+部分源需要账号登录。复制 `.env.example` 为 `.env.local` 填入真实凭据：
+
+```bash
+cp .env.example .env.local
+# 编辑 .env.local 填入 LABR_USERNAME / LABR_PASSWORD 等
+```
+
+`.env.local` 已在 `.gitignore` 中，绝不会被提交。加载时机：
+- Web 后端 `src/index.ts` / Electron 主进程 `electron/main.ts` 启动时
+- `scripts/sources/**/inspect-*.ts` 勘察脚本自行加载
+- 真实环境变量（CI / shell `set`）优先级高于 `.env.local`（`override: false`）
+
+支持的键见 `.env.example`。新增源的凭据按 `<SOURCE>_USERNAME` / `<SOURCE>_PASSWORD` 命名约定。
 
 ## 运行模式
 
@@ -260,6 +276,10 @@ start.bat
 | GET | `/api/preview/file/:id` | 流式回 PDF（HTTP Range + ETag + 304；`?attachment=1` 强制另存） |
 | GET | `/api/preview/files?stdCode=&year=` | 多源候选：列出该 `(stdCode, year)` 在 `gbw/bz/by/labr` 4 源里能找到的所有本地文件，供 multi-source preview picker 渲染切换条 |
 | POST | `/api/preview/library-check` | 批量本地库命中检查：body `{ items: [{stdCode, year}] }`，返回每条 `{ stdCode, year, hit, fileId? }`，用于搜索结果绿点指示器 |
+| DELETE | `/api/preview/file/:id` | 删除本地文件库中的标准 PDF（物理删 + 删 `standard_files` 行；库根外路径拒绝）|
+| POST | `/api/preview/files/batch-delete` | 批量删除：body `{ ids: number[] }`；返回 `{ deleted: number[], failed: [{id,message}] }` |
+| POST | `/api/preview/file/:id/reveal` | Electron 桌面端在系统资源管理器中定位文件（`shell.showItemInFolder`）；Web 浏览器侧 501 NOT_SUPPORTED |
+| PATCH | `/api/preview/file/:id` | 重命名本地文件：body `{ fileName }`；保留 `std_code_norm` 索引键，仅改物理文件名 |
 
 ### Labr 库检索（需登录，第 4 源；独立 sidebar tab）
 
@@ -299,7 +319,7 @@ start.bat
 - 行级下载反馈（spinner + 卡片高亮 + 成功/失败闪烁）
 - BZ 页级实时进度
 - 搜索历史（可配置条数 3~20，localStorage 持久化）
-- 常用标准收藏、本地文件库、下载历史
+- 常用标准收藏（监控收藏标准是否有新版本）、独立的本地文件库管理 tab、下载历史
 - 键盘快捷键：全局 `Ctrl+K` 聚焦搜索 / `Ctrl+Enter` 触发 / `Ctrl+A` 全选 / `Ctrl+D` 取消 / `Alt+1..6` 切源；结果列表 vim 风格 `j` `k` `g g` `G` `x` `d` `s` `Enter`（详见 [DEVELOPMENT.md](./DEVELOPMENT.md#前端键盘快捷键)）
 - 结果行右键菜单：复制编号 / 复制标题 / 查看详情 / 单条下载
 - 状态分组（现行 / 即将实施 / 其它 / 废止）默认折叠 `废止`，折叠状态持久化
@@ -398,6 +418,8 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **#66 本地文件库独立成顶级 tab + 完整管理能力** — 把"本地文件库"从「下载历史」tab 抽出来成独立侧边栏入口 `data-tab="local"`，改为表格布局（标准号 / 文件名 / 来源 / 大小 / 时间 / 操作），去掉原"路径"列。每行 5 个动作：`预览`（新 tab 打开 `/api/preview/file/:id`） / `下载`（`?attachment=1`） / `打开路径`（仅 Electron 桌面端显示，通过 IPC 走 `shell.showItemInFolder`；Web 端 fallback 为"复制路径"） / `编辑`（rename 物理文件名，保留 `std_code_norm` 索引键不动） / `删除`（带二次确认 `showConfirm`）。新增表头复选框 + 单行复选 + 「全选 / 批量删除」工具条，批量删走 `POST /api/preview/files/batch-delete`。后端新增 4 个端点：`DELETE /api/preview/file/:id`、`POST /api/preview/files/batch-delete`、`POST /api/preview/file/:id/reveal`（Electron-only，`process.env.BZXZ_ELECTRON` 卡口）、`PATCH /api/preview/file/:id`（rename，校验非法字符 + 防路径越界 + 拒绝覆盖同名）。Electron `electron/main.ts` 加 `BZXZ_ELECTRON=1` + 监听 `process.on('bzxz:reveal-in-folder')` 调 `shell.showItemInFolder`。「下载历史」tab 留下"收藏标准"和"下载历史"两个 card，标题改为"下载历史"，副标题点明"收藏夹用于监控收藏标准是否有新版本"
+- **#65 Labr sidebar 文案 + 位置调整** — 把 「Labr库检索」按钮从「资质查询」之后挪到「标准检索」紧下方（高频使用→放高优先级位置）；副标题从 `labr.cc 标准库补给` 简化为 `标准库补给`（不在 UI 中暴露具体上游域名）。`public/index.html` + `web/index.html` 双 entry 镜像；`public/js/app-auth-admin.js` 的 `TAB_LABELS` / `TAB_ITEMS` 同步。README 的"支持的标准源"表行 `labr.cc` 改为 `标准库补给源`（用户向描述），API 表里的 `source=labr` 保留（开发者文档参考）
 - **labr #64 双 fix** — ① Labr 搜索结果 title 不再字面出现 `<font color="red">`：`sanitizeLabrTitle` 把上游高亮 `<font>` 整体转 `<mark>` 再统一 escape，规避之前 escape 链没转 `"` 导致白名单正则永远失配的 bug。② labr 入库的标准在主搜索预览也亮绿点：`/api/preview/library-check` 默认改用 4 源全集 `ALL_LIBRARY_SOURCES`（"绿点 = 库里有没有"OR 语义），与 `/api/preview/files` / `runAutoDownload` 的"自动选源"priority 语义解耦
 - **labr sidebar 入口镜像到 legacy `public/index.html`** — #62 修复用户装包后看不到 Labr 入口的问题。根因：Electron 装包跑起来加载 `http://localhost:port` → Express 把 `public/` 当静态根 → 实际入口是 legacy `public/index.html`；但 #56 sidebar `<button data-tab="labr">` 与 `<div id="page-labr">` 只加到了 `web/index.html`，#61 也只镜像了 CSS。本次把 sidebar 按钮（qual 之后、stats 之前）+ `#page-labr` 容器 + `<script src="/js/app-labr.js">` 三件套全部镜像到 `public/index.html`。两步切换契约：未来砍 legacy 入口时整段删
 - **labr 第 4 标准源接入** — 新增 `labr.cc` 检索 / 下载（独立 service，不挂 SourceRegistry）。`info.kind=0` 直拉文件系统、无配额；`info.kind=1` 需登录 + preview2 链路、5/天硬限速。新 sidebar tab 「Labr库检索」（独立 keyword + 翻页 + 全选/批量下载，下载结果就地渲染、限速被跳过的条目单独提示）。新表 `labr_temp_urls` 跨 token 持久化短时下载链；源级 semaphore=2 防限频；`std_code_norm/_base` 三层归一化沾资质徽章。详见 [`docs/sources/labr-source-plan.md`](./docs/sources/labr-source-plan.md)

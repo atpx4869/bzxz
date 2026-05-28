@@ -67,6 +67,7 @@
 @import './pages/announcement.css';
 @import './pages/admin.css';
 @import './pages/labr.css';
+@import './pages/local-library.css';
 
 /* responsive —— 跨组件 @media 汇总（详见文件头部的"为何不分散"说明）。
  * 必须在 pages/* 之后，theme/glass.css 之前 —— 窄屏覆盖压过基线，主题最后赢。 */

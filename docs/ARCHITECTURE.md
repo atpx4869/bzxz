@@ -345,3 +345,22 @@ standard_files
 **预览自动下载流**：`POST /api/preview/request` 未命中 → `services/preview-task-store.ts` 先 `findActiveTaskByKey(stdCode, year)` 查同标准的 pending/downloading 任务，命中直接复用 taskId（返回 `reused:true`），否则 `createTask(stdCode, year)` 建新 task → 后台按 source 优先级遍历 `searchStandards` → `autoDownload`/`exportStandard` → `moveDownloadToLibrary` → task.ready(fileId)。前端 `GET /api/preview/task/:taskId` 轮询 1.5s/次直到 ready 切 iframe / failed 弹「重试」+「关闭」/ 用户主动关闭 abort（**无前端超时**，靠 store 的 10 分钟无更新 TTL GC 兜底；GC 命中后轮询接口返 404，前端当 failed 处理）。任务存在内存 Map（重启即丢）。key 用 normalized `stdCode + year` 保证连点 / 下载预览交叉调用都聚合到同一任务。
 
 **模板引擎**：`services/library-naming.ts` `renderLibraryFilename`。空值占位符 + 相邻分隔符（空格/`-`/`_`/`·`/`—`）被吞掉，避免"GB 3324-2024 -.pdf"悬空尾。非法路径字符 `\/:*?"<>|` 清成空格；总长截到 200 字符防 Windows 260 字符路径上限。admin zod schema 强制模板含 `{stdCode}`。
+
+### Phase 3：本地文件库管理（独立 tab `data-tab="local"`，#66）
+
+**目的**：用户积累的标准 PDF 数量增长后，需要集中查看 / 重命名 / 删除 / 在文件管理器中定位的能力。原先这是「下载历史」tab 里的一个 section，被拆出为独立顶级 tab。
+
+**端点拓扑**（均收口在 `src/api/preview-routes.ts`，复用同一组 `getFileById` + `isInsideLibrary` 安全防线）：
+
+- `DELETE /api/preview/file/:id`：物理 `fs.unlink` + 删 `standard_files` 行。`ENOENT` 静默吞掉（DB 行已脏，仍然清行）。库根外的 `abs_path` → 拒绝物理删但清行 + 410 GONE，避免索引脏行长期残留。
+- `POST /api/preview/files/batch-delete`：body `{ ids: number[] }`，单循环复用 DELETE 路径，返回 `{ deleted, failed: [{id, message}] }` 让前端展示部分成功。
+- `POST /api/preview/file/:id/reveal`：用 `process.env.BZXZ_ELECTRON` 区分桌面端 / Web；桌面端 `process.emit('bzxz:reveal-in-folder', absPath)` 把 absPath 喂给 Electron 主进程的 listener，后者调 `shell.showItemInFolder`。Web 浏览器侧返 501，前端 fallback 到「复制路径」按钮。
+- `PATCH /api/preview/file/:id`：rename，body `{ fileName }`。校验 `/[\/\\:*?"<>|\x00-\x1F]/` 非法字符 + 200 字符长度上限；用户没带扩展名时自动接旧扩展；新路径走 `isInsideLibrary` 防越界；目标文件已存在 → 409 拒绝覆盖。**关键**：只改 `abs_path`，不动 `std_code_norm` / `year` / `source` —— 这三个是搜索/绿点的索引键，改了会破坏库匹配。
+
+**Electron IPC 桥**（`electron/main.ts`）：
+
+启动 startServer 阶段一次性注册 `process.on('bzxz:reveal-in-folder')`，把 Node 主进程事件总线当后端 → 桌面端的轻量 IPC（避免给每个新需求都加 ipcMain handle 引线）。注意只 emit absPath 字符串，后端已校验路径在库根内，主进程只需信任并打开。
+
+**前端表格**（`public/js/app-detail-utils.js` `renderFileLibrary`）：
+
+`fileLibrarySelectedIds: Set<number>` 跨筛选词保留选中状态，但 `renderFileLibrary` 每次执行时按 `visibleIds` 清理掉已不在过滤集合内的 id（防"看不见的勾选"溜到批量删除里）。每行 5 个动作按 `kind === 'library'` 区分：库内文件全功能，`exports/` xlsx 只有「下载 / 删除」（走原 `/api/downloads/:filename` 路径）。删除 / 批量删除 / rename 全部走 `showConfirm` 二次确认。

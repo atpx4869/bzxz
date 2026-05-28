@@ -424,5 +424,179 @@ export function createPreviewRoutes(
     }
   });
 
+  /**
+   * DELETE /api/preview/file/:id — 删除本地文件库中的标准 PDF
+   *
+   * 物理删 abs_path 指向的文件 + 从 standard_files 删行。库根之外的路径拒删（安全防线）。
+   */
+  router.delete('/api/preview/file/:id', requireAuth, async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) {
+        respondError(res, 400, 'BAD_REQUEST', 'Invalid file id');
+        return;
+      }
+      const file = await getFileById(db, id);
+      if (!file) {
+        respondError(res, 404, 'NOT_FOUND', '文件不存在或已被删除');
+        return;
+      }
+      const libStatus = await resolveLibraryDir(db);
+      if (!isInsideLibrary(file.absPath, libStatus.dir)) {
+        db.prepare('DELETE FROM standard_files WHERE id = ?').run(id);
+        respondError(res, 410, 'GONE', '文件已不在当前库目录');
+        return;
+      }
+      try { await fs.unlink(file.absPath); } catch (e: any) {
+        if (e && e.code !== 'ENOENT') throw e;
+      }
+      db.prepare('DELETE FROM standard_files WHERE id = ?').run(id);
+      respond(res, { ok: true, id });
+    } catch (error) {
+      next(normalizeError(error));
+    }
+  });
+
+  /**
+   * POST /api/preview/files/batch-delete — 批量删除
+   * body: { ids: number[] }
+   * 返回 { deleted: number[], failed: Array<{id, message}> }
+   */
+  router.post('/api/preview/files/batch-delete', requireAuth, async (req, res, next) => {
+    try {
+      const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter((n: any) => Number.isInteger(n) && n > 0) : [];
+      if (!ids.length) {
+        respondError(res, 400, 'BAD_REQUEST', 'ids 不能为空');
+        return;
+      }
+      const libStatus = await resolveLibraryDir(db);
+      const deleted: number[] = [];
+      const failed: Array<{ id: number; message: string }> = [];
+      for (const id of ids) {
+        try {
+          const file = await getFileById(db, id);
+          if (!file) { failed.push({ id, message: '不存在' }); continue; }
+          if (!isInsideLibrary(file.absPath, libStatus.dir)) {
+            db.prepare('DELETE FROM standard_files WHERE id = ?').run(id);
+            failed.push({ id, message: '库外路径' }); continue;
+          }
+          try { await fs.unlink(file.absPath); } catch (e: any) {
+            if (e && e.code !== 'ENOENT') { failed.push({ id, message: e.message || '删除失败' }); continue; }
+          }
+          db.prepare('DELETE FROM standard_files WHERE id = ?').run(id);
+          deleted.push(id);
+        } catch (e: any) {
+          failed.push({ id, message: e?.message || '未知错误' });
+        }
+      }
+      respond(res, { deleted, failed });
+    } catch (error) {
+      next(normalizeError(error));
+    }
+  });
+
+  /**
+   * POST /api/preview/file/:id/reveal — 在系统资源管理器中定位文件
+   *
+   * 仅 Electron 桌面端支持；后端通过 process.env.BZXZ_ELECTRON 判断。
+   * Web 浏览器侧返回 501，让前端 fallback 到"复制路径"。
+   */
+  router.post('/api/preview/file/:id/reveal', requireAuth, async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) {
+        respondError(res, 400, 'BAD_REQUEST', 'Invalid file id');
+        return;
+      }
+      const file = await getFileById(db, id);
+      if (!file) {
+        respondError(res, 404, 'NOT_FOUND', '文件不存在或已被删除');
+        return;
+      }
+      const libStatus = await resolveLibraryDir(db);
+      if (!isInsideLibrary(file.absPath, libStatus.dir)) {
+        respondError(res, 410, 'GONE', '文件已不在当前库目录');
+        return;
+      }
+      // Electron 主进程在启动时往 process.env 塞 BZXZ_ELECTRON=1
+      if (!process.env.BZXZ_ELECTRON) {
+        respondError(res, 501, 'NOT_SUPPORTED', '仅桌面端支持');
+        return;
+      }
+      // 通知 Electron 主进程；用 process 事件总线传 absPath，主进程 listen 'bzxz:reveal-in-folder' 后调 shell.showItemInFolder
+      try { process.emit('bzxz:reveal-in-folder' as any, file.absPath); } catch {}
+      respond(res, { ok: true, path: file.absPath });
+    } catch (error) {
+      next(normalizeError(error));
+    }
+  });
+
+  /**
+   * PATCH /api/preview/file/:id — 重命名（编辑标准名称）
+   *
+   * body: { fileName: string }
+   * 仅支持改文件名 basename；保留原扩展名；新名走 safeFileName 校验防路径穿越。
+   * 同时更新 standard_files.abs_path 和（必要时）std_code_norm/year。
+   * 注意：std_code_norm 是搜索/绿点的索引键，**不动**；只改物理文件名（用户视觉层标识）。
+   */
+  router.patch('/api/preview/file/:id', requireAuth, async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) {
+        respondError(res, 400, 'BAD_REQUEST', 'Invalid file id');
+        return;
+      }
+      const raw = String(req.body?.fileName || '').trim();
+      if (!raw) {
+        respondError(res, 400, 'BAD_REQUEST', 'fileName 不能为空');
+        return;
+      }
+      // 拒绝路径分隔符 / 控制字符 / Windows 保留字符；保留中文
+      // eslint-disable-next-line no-control-regex
+      if (/[\/\\:*?"<>|\x00-\x1F]/.test(raw)) {
+        respondError(res, 400, 'BAD_REQUEST', '文件名含非法字符');
+        return;
+      }
+      if (raw.length > 200) {
+        respondError(res, 400, 'BAD_REQUEST', '文件名过长');
+        return;
+      }
+      const file = await getFileById(db, id);
+      if (!file) {
+        respondError(res, 404, 'NOT_FOUND', '文件不存在或已被删除');
+        return;
+      }
+      const libStatus = await resolveLibraryDir(db);
+      if (!isInsideLibrary(file.absPath, libStatus.dir)) {
+        respondError(res, 410, 'GONE', '文件已不在当前库目录');
+        return;
+      }
+      const oldExt = path.extname(file.absPath);
+      const newExt = path.extname(raw);
+      // 用户没带扩展名 → 自动接旧扩展名；带了不同扩展名 → 也尊重，但要 lowercase 校验是 pdf
+      const finalName = newExt ? raw : raw + oldExt;
+      const newPath = path.join(path.dirname(file.absPath), finalName);
+      if (!isInsideLibrary(newPath, libStatus.dir)) {
+        respondError(res, 400, 'BAD_REQUEST', '目标路径越界');
+        return;
+      }
+      if (newPath === file.absPath) {
+        respond(res, { ok: true, id, fileName: finalName, abs_path: newPath });
+        return;
+      }
+      // 目标文件已存在 → 拒绝（不静默覆盖）
+      try {
+        await fs.access(newPath);
+        respondError(res, 409, 'CONFLICT', '目标文件名已存在');
+        return;
+      } catch { /* not exists → ok */ }
+      await fs.rename(file.absPath, newPath);
+      db.prepare('UPDATE standard_files SET abs_path = ? WHERE id = ?').run(newPath, id);
+      respond(res, { ok: true, id, fileName: finalName, abs_path: newPath });
+    } catch (error) {
+      next(normalizeError(error));
+    }
+  });
+
   return router;
 }

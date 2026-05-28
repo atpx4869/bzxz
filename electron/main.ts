@@ -1,3 +1,7 @@
+// 加载 .env.local（仓库根 / 安装目录）— 让源 adapter 取得 LABR_*/SPC_* 等凭据
+import { loadDotEnvLocal } from '../src/shared/env-loader';
+loadDotEnvLocal();
+
 // Force direct connection — bypass any system proxy (Clash, etc.)
 for (const key of ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy']) {
   delete (process.env as Record<string, string | undefined>)[key];
@@ -542,6 +546,13 @@ async function startServer(): Promise<number> {
     : installDir;
   process.env.BZXZ_USER_DATA_DIR = app.getPath('userData');
   process.env.BZXZ_APP_VERSION = app.getVersion();
+  // Electron 桌面端标志：后端 preview-routes reveal 端点判断是否暴露"打开路径"功能
+  process.env.BZXZ_ELECTRON = '1';
+  // 监听后端发出的"在资源管理器中定位文件"事件 — 调 shell.showItemInFolder
+  // 后端 /api/preview/file/:id/reveal 校验完路径合法性后 process.emit('bzxz:reveal-in-folder', absPath)
+  process.on('bzxz:reveal-in-folder' as any, (absPath: string) => {
+    try { shell.showItemInFolder(absPath); } catch (e) { console.error('[reveal-in-folder] failed:', e); }
+  });
   await ensureDataDirs();
 
   const expressApp = express();
