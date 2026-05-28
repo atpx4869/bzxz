@@ -159,19 +159,24 @@ export function normalizeLabrExt(ext: string): string {
 }
 
 const STD_CODE_FROM_TITLE_RE =
-  /^([A-Z][A-Z0-9]*(?:\/[A-Z][A-Z0-9]*)?\s+\d+(?:\.\d+)*(?:\s*-\s*\d{4}[A-Z]?)?)\s*[|｜:：\s]/;
+  /^([A-Z][A-Z0-9]*(?:\/[A-Z][A-Z0-9]*)?\s+\d+(?:\.\d+)*(?:\s*-\s*\d{4}[A-Z]?)?)(?=[|｜:：\s]|[一-鿿]|$)/;
 
 /**
  * labr title 形如 "GB/T 3324-2017|木家具通用技术条件" 或 "GB 46035-2025|橡胶塑料机械  通用安全要求"
  * 抽出 stdCode + 剩余 title。无独立 std_code 字段，必须从 title 抠。
  *
  * 与 library-index.ts 的 STD_CODE_HEAD_RE 复用同一形态正则（A-Z 前缀 / 可选 /T / 数字 / 可选年），
- * 区别只在分隔符：library-index 接 ` ` 或 ` - ` 或 ` — `，这里接 `|` `｜` `:` `：` 或空白。
+ * 区别在分隔符识别：labr 部分 title 形如 `GB/T 35607-2024绿色产品评价 家具`（标准号直接连中文，
+ * 无 `|` / `:` / 空白），所以分隔符用 lookahead，允许 `|｜:：` / 空白 / 中文（U+4E00-U+9FFF）/ 末尾。
+ * 不消费分隔符 → rest 从 m[1].length 切，再 trim 去掉前导空白（中文直接相邻则无空白可去）。
  */
 export function extractStdCodeFromTitle(title: string): { stdCode: string; rest: string } {
   const m = title.match(STD_CODE_FROM_TITLE_RE);
   if (!m) return { stdCode: '', rest: title };
-  return { stdCode: m[1].trim(), rest: title.slice(m[0].length).trim() };
+  let rest = title.slice(m[1].length);
+  // 跳过紧随其后的分隔符（| ｜ : ：）和空白；中文字符不跳（属于内容起始）
+  rest = rest.replace(/^[|｜:：\s]+/, '').trim();
+  return { stdCode: m[1].trim(), rest };
 }
 
 // ─── 客户端 ────────────────────────────────────────────────────────────────

@@ -128,6 +128,22 @@ describe('extractStdCodeFromTitle — labr title 形态', () => {
       rest: '质量手册（27025新版）.docx',
     });
   });
+
+  it('标准号后无分隔符直连中文（实测 did=14718 形态）', () => {
+    // labr did=14718 实测 title：标准号末位 `-2024` 直接连中文，无 | / : / 空白
+    // 修前正则要求 `\s*[|｜:：\s]` 必有分隔符 → 抽不出 → 走 LABR-${did} fallback
+    expect(extractStdCodeFromTitle('GB/T 35607-2024绿色产品评价 家具')).toEqual({
+      stdCode: 'GB/T 35607-2024',
+      rest: '绿色产品评价 家具',
+    });
+  });
+
+  it('整段就是标准号（无 rest）', () => {
+    expect(extractStdCodeFromTitle('GB/T 3324-2017')).toEqual({
+      stdCode: 'GB/T 3324-2017',
+      rest: '',
+    });
+  });
 });
 
 describe('normalizeLabrExt — labr ext 别名表', () => {
