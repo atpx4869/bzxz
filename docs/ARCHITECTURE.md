@@ -133,6 +133,39 @@ type ApiResult<T> =
 
 路由层调用时根据 `adapter.autoDownload`、`adapter.exportStandard` 是否存在选择路径——前端的 `/api/standards/multi-download` 已经做了这层路由。**不要为了"统一"强抽基类**——之前评估过，会产出空壳接口。
 
+### 六-A. labr：第 4 源，**独立 service，不挂 SourceRegistry**
+
+`labr.cc` 是第 4 标准源，但**有意不实现 `SourceAdapter`**。原因：
+
+- **搜索语义不同**：gbw/bz/by 是"输入 stdCode → 唯一命中"的精确检索；labr 是关键词模糊匹配，一次返回多条候选
+- **下载链路差异大**：kind=0 匿名直拉 / kind=1 需登录走 preview2 + 5/天硬限速，强行套 `exportStandard`/`autoDownload` 会扭曲三源共同契约
+- **用户路径独立**：sidebar 单开 tab「Labr库检索」→ 搜索 → 多选 → 批量下载入库，**不参与**主搜索的多源并行（避免污染精确命中唯一性）
+
+**模块布局**：
+
+```
+src/sources/labr/
+├── labr-client.ts    协议层：login / bridgeSso / searchInline / recList /
+│                     getDetail / preview2 / downloadDirect。无 token 持久化、
+│                     无编排，纯 HTTP 协议薄壳。错误模型 LabrRateLimitError /
+│                     LabrAuthError
+└── labr-service.ts   单例编排：session 持久化（settings: labr.token /
+                      labr.token_expires_at）+ env LABR_USERNAME/LABR_PASSWORD
+                      取凭据 + download(did) 按 info.kind 0/1 分支 + auth 失败
+                      自动重登重试一次 + batchDownload 撞 RateLimit 后短路 kind=1
+```
+
+**集成点**：`library-index.addFileToLibrary` —— labr 下载产物与 BW/BZ/BY 一起落到 `standards_library_dir`，文件名带 `LB` 标签，主搜索预览路由自动看见、被 `/api/preview/files` 列入候选。
+
+**关键资源**：
+- 源级 `Semaphore('labr', 2)` —— labr 上游对单 IP 频控敏感，钉死真实并发
+- `labr_temp_urls (did PK, url, fetched_at)` 表 —— 缓存 kind=1 的 `temp/<md5>.pdf` 短时下载链跨 token 持久化；preview2 拿到的 hash 实测可跨账号 token 拉，避开 5/天额度
+- 三层 std-code 归一化（`cleanStdCode` + `std_code_norm` + `std_code_base`） —— labr 入库的文件能沾资质徽章
+
+**禁止**：
+- 把 labr 加进 `library_source_priority` 默认值 —— 它是补给源、用户主动选取，不应被精确搜索 fallback 链当默认候选
+- 在 labr-service 外再加 mutex —— 已经有 source-semaphore + activeByStandard 索引（如果未来用），别让请求排队等自己
+
 ---
 
 ## 七、前端模块布局
@@ -227,7 +260,8 @@ ddddocr 是单 Python 进程，请求/响应通过 **UUID-keyed pending map** �
 - `bz=2`（pdf-merge worker pool 也只 2，叠在一起不会让 worker queue 堆死）
 - `gbw=4`（直 PDF + OCR；4 个并发足以打满 ddddocr 又不堆死队列）
 - `by=4`（内网直 PDF，跟 GBW 同量级）
-- `BzAdapter.exportStandard` / `ByAdapter.exportStandard` / `GbwAdapter.autoDownload` 入口全部包 `getSourceSemaphore(src).run(...)`
+- `labr=2`（labr.cc 对单 IP 频控敏感，kind=1 走 preview2 还有 5/天硬限速；2 并发足够 batch 场景，不暴露 IP）
+- `BzAdapter.exportStandard` / `ByAdapter.exportStandard` / `GbwAdapter.autoDownload` 入口全部包 `getSourceSemaphore(src).run(...)`；labr 在 `labr-client` 协议层调用前包
 - `Semaphore.setLimit()` 运行时可调（未来想暴露给 admin 设置时直接接上）
 - 诊断：`GET /api/diagnostics/sources` 返回 `{ active, limit, waiting }`
 
@@ -255,7 +289,7 @@ ddddocr 是单 Python 进程，请求/响应通过 **UUID-keyed pending map** �
 | Tesseract Worker | 2 | tesseract.js 池 | 验证码 OCR（ddddocr 不可用时回退）|
 | undici HTTP | 32/origin | keep-alive + pipelining | 所有外网 HTTP 请求 |
 | ddddocr 子进程 | 1（多路复用）| UUID pending map | 验证码 OCR 首选 |
-| Source Semaphore (bz/gbw/by) | 2/4/4 | FIFO 计数信号量 | 多用户下载共享出口 IP，钉死真实并发 |
+| Source Semaphore (bz/gbw/by/labr) | 2/4/4/2 | FIFO 计数信号量 | 多用户下载共享出口 IP，钉死真实并发；labr 还叠 5/天 preview2 配额 |
 | ExportTaskStore subscribers | 不限人数 | activeByStandard 索引 + 共享 SSE | 同标准跨用户下载去重 |
 
 **加新的耗时操作前**：判断它是 CPU 密集还是 IO 密集，CPU → worker_threads 池；IO → 看是否已有 client 池可复用；都不是 → 先想想是不是真的需要锁。

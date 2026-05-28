@@ -258,6 +258,17 @@ start.bat
 | POST | `/api/preview/request` | 查本地库；命中返回 `{status:'ready', fileId, url}`；未命中后台触发自动下载并返回 `{status:'downloading', taskId, tried}` |
 | GET | `/api/preview/task/:taskId` | 轮询自动下载任务：`pending`/`downloading`/`ready{fileId,url}`/`failed{error}` |
 | GET | `/api/preview/file/:id` | 流式回 PDF（HTTP Range + ETag + 304；`?attachment=1` 强制另存） |
+| GET | `/api/preview/files?stdCode=&year=` | 多源候选：列出该 `(stdCode, year)` 在 `gbw/bz/by/labr` 4 源里能找到的所有本地文件，供 multi-source preview picker 渲染切换条 |
+| POST | `/api/preview/library-check` | 批量本地库命中检查：body `{ items: [{stdCode, year}] }`，返回每条 `{ stdCode, year, hit, fileId? }`，用于搜索结果绿点指示器 |
+
+### Labr 库检索（需登录，第 4 源；独立 sidebar tab）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/labr/search?keyword=&page=&pageSize=` | 翻页搜索 labr.cc。`page=1` 走首屏 inline dataList（≤4 条），`page≥2` 走 rec-list；pageSize 上限 500；过滤 `is_free=1 && price=0 && ext=pdf` |
+| GET | `/api/labr/detail/:did` | 资源详情（`info` + `detail` 完整字段） |
+| POST | `/api/labr/download` | body `{ did }` 单条下载入库。kind=0 匿名直拉 / kind=1 走 preview2（限 5/天）+ `labr_temp_urls` 缓存。错误 code：`LABR_RATE_LIMIT` / `LABR_AUTH` |
+| POST | `/api/labr/batch-download` | body `{ items: [{did}] }` 批量下载（上限 100）。撞 `LABR_RATE_LIMIT` 后后续 kind=1 任务全部短路标 `skipped:'quotaExhausted'`，kind=0 继续 |
 
 ### 统计（需登录）
 
