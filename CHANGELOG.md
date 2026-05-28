@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **note: 搜索框 placeholder 加年份提示** — 用户报告搜 `4463-201` / `4463-202` 命中 0 条,搜 `4463-2013` / `4463-2025` 正常。诊断:`BZ 远程 /api/gxist-standard/standardstd/list` 不接受残缺年份后缀 —— `keywords=4463-201` 总命中 0,`keywords=4463-2013` 命中 2;GBW / BY 远程行为类似。这是远程源搜索引擎的分词限制(token 匹配,不做子串扩展),非项目侧 bug。改:`public/index.html` + `web/index.html` 主搜索 `placeholder` 加"年份要写完整 4 位"提示,引导用户用 `4463-2013`(完整年份)或 `4463`(纯片段),避免 `4463-201` 这种半年份。**不动**:adapter 不做 query 重写(BZ/GBW/BY 都是 size=20 截断 + token 匹配,本地展开成 10 个年份并发查会放大远程 QPS 10× 风险)、不做本地 DB 补充(local 命中范围有限,补出来的结果反而误导)。
 - **fix: 资质徽章多源结果增量拉取(`app-search.js` / `app-qual.js`)** — 用户报告搜 `4463`(关键词片段)时结果列表里的 `QB/T 4463-2025` 没有任何 CMA/CNAS 徽章,但搜 `4463-2025`(精确)时同条结果有 CMA 徽章。
   - **根因**:`app-search.js` 第一个源(通常是 BZ)返回后立即 `qualFetched = true` 锁死,只拉了 BZ 那 20 条 stdCode 的徽章 → 后到的 GBW/BY 源带来的新 stdCode(如 `QB/T 4463-2025` 在 BZ `size=20` 截断里漏掉、但 GBW 返回了)从来没被问过资质 → 自然无徽章。`fetchQualBadges` 本身 `qualData = data` 全量替换的写法,也会让后续若有补查发生时覆盖前面结果。
   - **改 `app-search.js`**:去掉 `qualFetched` 标志位 + 收尾兜底,改为**每个源返回都调一次** `fetchQualBadges(stdNums)`(`stdNums` 是当前 `results` 全量,fetchQualBadges 内部去重)。
