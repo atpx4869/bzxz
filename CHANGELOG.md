@@ -3,13 +3,14 @@
 ## [Unreleased]
 
 ### Added / Changed
-- **feat: 「资质·废止」独立分组,排在「现行」与「即将实施」之间** — 用户进一步要求:有资质徽章(CMA/CNAS)的标准排在最上面,优先级最高的是有资质的现行,其次是有资质的作废标准,然后是无资质的现行,其它作废仍默认折叠。改 `public/js/app-search.js`:
-  - `statusCategory(s, standardNumber)` 加 `standardNumber` 参数 + `hasQualificationBadge` 判断:"废止 + 有资质" → 新分组 `资质·废止`;其余分组(现行 / 即将 / 其它 / 废止)不变
-  - `STATUS_GROUP_ORDER` 改 `['现行', '资质·废止', '即将实施', '其它', '废止']`,新组排第 2 位(不在 `_collapsedGroups` 默认列表 → **默认展开,不折叠**)
-  - filterBar `statusChips` 加 `资质·废止` chip,8 处 `statusCategory(r.status)` 调用全部改成 `statusCategory(r.status, r.standardNumber)`
-  - `appendNextResultsBatch` 也跟着改,但实际增量加载主要走 `renderResults` 完整重渲(fetchQualBadges 完成后调 renderFilterBar + renderResults 一起),增量路径仅在用户点"加载更多"时触发,稳
-  - 视觉:新组 CSS class `status-group-qual-expired`,暂用 default style 不加新 CSS(看用户反馈再说)
-  - 异步收敛:首次渲染时 qualData 还空 → 所有"有资质废止"先归到「废止」组里折叠;徽章到达后 renderResults 重渲 → 该标准挪到新组「资质·废止」展开。首屏 1-2 秒内视觉上会跳一次,这是 fetchQualBadges 异步模型本质,跟之前徽章排序优先一样,可接受
+- **feat: 8 个分组拆资质/无资质(主搜索结果)** — 用户进一步要求层级严格按"资质 → 状态"线性铺开:① 现行·有资质 ② 废止·有资质 ③ 现行·无资质 ④ 废止·无资质,「即将实施」和「其它」也跟着拆。改 `public/js/app-search.js`:
+  - `statusCategory(s, standardNumber)` 返回 8 个 key:`'资质·现行' / '资质·即将实施' / '资质·其它' / '资质·废止' / '无资质·现行' / '无资质·即将实施' / '无资质·其它' / '无资质·废止'`,前缀按 `hasQualificationBadge` 加
+  - `STATUS_GROUP_ORDER` 改 8 元素,有资质 4 组在前 + 无资质 4 组在后(各组内按"现行 → 即将实施 → 其它 → 废止"排)
+  - 渲染时空组自动跳过(`if (!total) continue`),实际数据稀疏只会显示 2-4 组,UI 不会被 8 组撑爆
+  - `_collapsedGroupsKey` 改 `bzxz_collapsed_status_groups_v2`,默认折叠 `['无资质·废止']`(不再是老的 `['废止']` —— 现在分两个废止组,只折叠无资质那个;有资质的废止默认展开,符合用户的"提上去不折叠"诉求)
+  - filterBar `statusChips` 仍展示 4 个基础状态 chip(现行/即将/其它/废止),过滤匹配时剥前缀(`baseCat = cat.replace(/^(资质·|无资质·)/, '')`),`statusCounts` 也按基础状态聚合 —— chip 视觉简洁,过滤直觉性不变
+  - 分组 CSS class 按基础状态映射(`status-group-current/upcoming/expired/other`,忽略资质前缀),颜色一致;资质前缀靠组名展示
+  - 老用户首次访问:localStorage 没有 v2 key → 用默认 `['无资质·废止']`,自动迁移
 - **feat: 资质命中条目排序优先(主搜索结果)** — 用户需求:有 CMA/CNAS 徽章的标准排在最上面,方便快速判断"这标准我们能测吗"。改 `public/js/app-search.js`:`sortByStatus` 顶部 + `sortFilteredResults` 三个非默认模式都加上 `hasQualificationBadge` 作为最高优先级 → 4 种排序(默认 / 日期 / 可下载 / 源数)都资质优先,模式选择只在"资质有无"分组内做次级排。资质徽章异步增量到达 → 每次 `fetchQualBadges` 完成 `renderResults` 都按"当时已知 qualData"重排,首屏 1-2 秒内渐进收敛到最终顺序。
 - **note: 搜索框 placeholder 加年份提示** — 用户报告搜 `4463-201` / `4463-202` 命中 0 条,搜 `4463-2013` / `4463-2025` 正常。诊断:`BZ 远程 /api/gxist-standard/standardstd/list` 不接受残缺年份后缀 —— `keywords=4463-201` 总命中 0,`keywords=4463-2013` 命中 2;GBW / BY 远程行为类似。这是远程源搜索引擎的分词限制(token 匹配,不做子串扩展),非项目侧 bug。改:`public/index.html` + `web/index.html` 主搜索 `placeholder` 加"年份要写完整 4 位"提示,引导用户用 `4463-2013`(完整年份)或 `4463`(纯片段),避免 `4463-201` 这种半年份。**不动**:adapter 不做 query 重写(BZ/GBW/BY 都是 size=20 截断 + token 匹配,本地展开成 10 个年份并发查会放大远程 QPS 10× 风险)、不做本地 DB 补充(local 命中范围有限,补出来的结果反而误导)。
 - **fix: 资质徽章多源结果增量拉取(`app-search.js` / `app-qual.js`)** — 用户报告搜 `4463`(关键词片段)时结果列表里的 `QB/T 4463-2025` 没有任何 CMA/CNAS 徽章,但搜 `4463-2025`(精确)时同条结果有 CMA 徽章。

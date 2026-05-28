@@ -285,18 +285,19 @@ document.getElementById('searchBtn').addEventListener('click', () => {
 });
 
 // ── Filter bar ──
+// 8 个分组 = 资质有无(2) × 状态(现行 / 即将实施 / 其它 / 废止)。
+// 用户诉求:看到的列表顺序按"资质优先 + 状态次优先"线性铺开 ——
+// 资质·现行 > 资质·即将 > 资质·其它 > 资质·废止 > 无资质·现行 > 无资质·即将 > 无资质·其它 > 无资质·废止。
+// 实际数据稀疏 → 大部分组为空,renderResults 已经在 `if (!total) continue` 跳过空组,
+// 用户看到只有 2-4 组非空。
 function statusCategory(s, standardNumber) {
-  // 有资质 + 废止 独立分组 —— 用户报需求:有资质的废止标准应该显式呈现而非随其它废止一起折叠
-  // (用户用资质表判断"我能测这标准吗",有资质的版本即使废止也值得知道)。
-  // 普通废止(无资质)仍走原默认折叠路径
-  const isExpired = s && s.includes('废止');
   const hasQual = standardNumber && hasQualificationBadge(standardNumber);
-  if (isExpired && hasQual) return '资质·废止';
-  if (!s) return '其它';
-  if (s.includes('现行') || s.includes('部分有效')) return '现行';
-  if (isExpired) return '废止';
-  if (s.includes('即将实施')) return '即将实施';
-  return '其它';
+  const qualPrefix = hasQual ? '资质·' : '无资质·';
+  if (!s) return qualPrefix + '其它';
+  if (s.includes('现行') || s.includes('部分有效')) return qualPrefix + '现行';
+  if (s.includes('废止')) return qualPrefix + '废止';
+  if (s.includes('即将实施')) return qualPrefix + '即将实施';
+  return qualPrefix + '其它';
 }
 
 function getFilteredResults() {
@@ -306,7 +307,9 @@ function getFilteredResults() {
       if (!rSources.some(s => filterState.sources.has(s))) return false;
     }
     if (filterState.statuses.size > 0) {
-      if (!filterState.statuses.has(statusCategory(r.status, r.standardNumber))) return false;
+      // chip 用基础状态(现行/废止/即将/其它),所以剥掉 statusCategory 返回的资质前缀再匹配
+      const baseCat = statusCategory(r.status, r.standardNumber).replace(/^(资质·|无资质·)/, '');
+      if (!filterState.statuses.has(baseCat)) return false;
     }
     if (filterState.onlyDownloadable && !r.previewAvailable) return false;
     if (filterState.onlyQualified && !hasQualificationBadge(r.standardNumber)) return false;
@@ -351,7 +354,9 @@ function renderFilterBar() {
   let downloadableCount = 0; let qualifiedCount = 0; let savedCount = 0;
   for (const r of results) {
     for (const s of (r.sources || [r._source])) { srcCounts[s] = (srcCounts[s] || 0) + 1; }
-    statusCounts[statusCategory(r.status, r.standardNumber)] = (statusCounts[statusCategory(r.status, r.standardNumber)] || 0) + 1;
+    // statusCounts 用基础状态聚合(chip 不区分资质前缀),分组渲染另算 catCounts
+    const baseCat = statusCategory(r.status, r.standardNumber).replace(/^(资质·|无资质·)/, '');
+    statusCounts[baseCat] = (statusCounts[baseCat] || 0) + 1;
     if (r.previewAvailable) downloadableCount++;
     if (hasQualificationBadge(r.standardNumber)) qualifiedCount++;
     if (isStandardSaved(r)) savedCount++;
@@ -364,7 +369,6 @@ function renderFilterBar() {
   const statusChips = [
     { key: '', label: '全部', count: results.length },
     { key: '现行', label: '现行', count: statusCounts['现行'] || 0 },
-    { key: '资质·废止', label: '资质·废止', count: statusCounts['资质·废止'] || 0 },
     { key: '废止', label: '废止', count: statusCounts['废止'] || 0 },
     { key: '即将实施', label: '即将实施', count: statusCounts['即将实施'] || 0 },
     { key: '其它', label: '其它', count: statusCounts['其它'] || 0 }
@@ -571,13 +575,18 @@ function buildResultCardHtml(r, i) {
 }
 
 // Status group collapse state — persisted
-const _collapsedGroupsKey = 'bzxz_collapsed_status_groups';
-let _collapsedGroups = new Set(safeJsonParse(localStorage.getItem(_collapsedGroupsKey), ['废止']));
+// v2 key:之前的 v1 key 用 ['废止'] 作折叠值,现在分组拆成「资质·废止」/「无资质·废止」,
+// 改 key 避免老数据残留导致两个废止组都不折叠或全折叠
+const _collapsedGroupsKey = 'bzxz_collapsed_status_groups_v2';
+let _collapsedGroups = new Set(safeJsonParse(localStorage.getItem(_collapsedGroupsKey), ['无资质·废止']));
 function _persistCollapsedGroups() {
   try { localStorage.setItem(_collapsedGroupsKey, JSON.stringify([..._collapsedGroups])); } catch {}
 }
 
-const STATUS_GROUP_ORDER = ['现行', '资质·废止', '即将实施', '其它', '废止'];
+const STATUS_GROUP_ORDER = [
+  '资质·现行', '资质·即将实施', '资质·其它', '资质·废止',
+  '无资质·现行', '无资质·即将实施', '无资质·其它', '无资质·废止',
+];
 
 function renderResults() {
   const filtered = getFilteredResults();
@@ -617,7 +626,13 @@ function renderResults() {
       if (!total) continue;
       const collapsed = _collapsedGroups.has(cat);
       const rendered = rows ? rows.length : 0;
-      const groupCls = `status-group status-group-${cat === '现行' ? 'current' : cat === '即将实施' ? 'upcoming' : cat === '资质·废止' ? 'qual-expired' : cat === '废止' ? 'expired' : 'other'}${collapsed ? ' collapsed' : ''}`;
+      // CSS class 按"基础状态"映射(忽略资质前缀),颜色按状态走,资质前缀通过组名表达
+      const baseStatus = cat.replace(/^(资质·|无资质·)/, '');
+      const statusCls = baseStatus === '现行' ? 'current'
+        : baseStatus === '即将实施' ? 'upcoming'
+        : baseStatus === '废止' ? 'expired'
+        : 'other';
+      const groupCls = `status-group status-group-${statusCls}${collapsed ? ' collapsed' : ''}`;
       bodyHtml += `<div class="${groupCls}" data-group-cat="${escapeHtml(cat)}">
         <div class="status-group-header" data-group-toggle="${escapeHtml(cat)}">
           <span class="status-group-caret">▾</span>
