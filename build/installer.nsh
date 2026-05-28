@@ -2,22 +2,37 @@
 ; 卸载/升级时保留：
 ;   1. $INSTDIR\data           —— 资质数据库 / CNAS·CMA 缓存
 ;   2. $INSTDIR\standards      —— 已下载的标准 PDF 库（默认库路径 <exe 同级>\standards）
+;   3. $INSTDIR\.env.local     —— 用户填的凭据（LABR_*, BY_*, SPC_* 等）
 ;
 ; 行为：
-;   - 升级（electron-builder 静默调用旧版卸载器）：始终保留 data/ + standards/
+;   - 升级（electron-builder 静默调用旧版卸载器）：始终保留 data/ + standards/ + .env.local
 ;   - 交互卸载：弹窗询问数据库，standards 始终保留（PDF 体量大、清空风险高，要走显式
-;     "彻底卸载"按钮 / 用户手删才合理）
+;     "彻底卸载"按钮 / 用户手删才合理）；.env.local 始终保留（凭据是用户私有资产）
 ;   - 命令行 /S 静默卸载：按 /SD 默认（都保留）
+;
+; 安装阶段（customInstall）：把 resources\.env.example 复制一份到 $INSTDIR\.env.example
+; 让用户在 INSTDIR 直接看到模板。复制为 .env.local 后重启即可加载（env-loader 会查
+; process.execPath 同级目录）。
 ;
 ; Why standards 不弹窗：用户报告 v 升级把 G:\bzxz\standards 几十 GB 标准全删了。
 ; 库目录是「下次升级也想留着的资产」，跟程序文件不是一码事 —— 默认强保留。
 ; 想真正清掉的用户走资源管理器手删 $INSTDIR\standards 即可。
+
+!macro customInstall
+  ; 把模板放到 $INSTDIR 让用户直接看到，复制为 .env.local 即可被 env-loader 命中。
+  ; 模板每次安装都刷新（凭据用户已经填到 .env.local，模板只是参考文档）。
+  IfFileExists "$INSTDIR\resources\.env.example" 0 skip_env_example_copy
+    CopyFiles /SILENT "$INSTDIR\resources\.env.example" "$INSTDIR\.env.example"
+  skip_env_example_copy:
+!macroend
 
 !macro customUnInit
   ; data/ 默认保留（升级时静默路径会直接走这里）
   StrCpy $R0 "1"
   ; standards/ 始终保留（不再弹窗、不接受 IDNO）
   StrCpy $R1 "1"
+  ; .env.local 始终保留（凭据是用户私有资产）
+  StrCpy $R2 "1"
 
   ; 没有 data 目录就没必要弹询问
   IfFileExists "$INSTDIR\data\*.*" 0 skip_prompt
@@ -54,6 +69,14 @@
     Rename "$INSTDIR\standards" "$INSTDIR\..\._bzxz_standards_backup"
   skip_backup_standards:
 
+  ; .env.local：单文件 Rename 到临时占位（不存在就跳过）
+  StrCmp $R2 "1" 0 skip_backup_env
+    IfFileExists "$INSTDIR\.env.local" 0 skip_backup_env
+      IfFileExists "$INSTDIR\..\._bzxz_env_backup" 0 +2
+        Delete "$INSTDIR\..\._bzxz_env_backup"
+      Rename "$INSTDIR\.env.local" "$INSTDIR\..\._bzxz_env_backup"
+  skip_backup_env:
+
   ; ── 清安装目录 ──
   RMDir /r "$INSTDIR"
   CreateDirectory "$INSTDIR"
@@ -66,4 +89,9 @@
   StrCmp $R1 "1" 0 skip_restore_standards
     Rename "$INSTDIR\..\._bzxz_standards_backup" "$INSTDIR\standards"
   skip_restore_standards:
+
+  StrCmp $R2 "1" 0 skip_restore_env
+    IfFileExists "$INSTDIR\..\._bzxz_env_backup" 0 skip_restore_env
+      Rename "$INSTDIR\..\._bzxz_env_backup" "$INSTDIR\.env.local"
+  skip_restore_env:
 !macroend
