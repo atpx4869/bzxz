@@ -112,6 +112,20 @@ Chrome ≤109 上整条 declaration 解析失败，主题崩。
 - 新增数据源（除 CNAS/CMA 外）想沾资质徽章 → schema 也加这两列 + 索引，沿用同样的三层防御
 - 改 `cleanStdCode` / `extractFullCode` / `extractBaseCode` 逻辑（覆盖新的脏数据变体）后必须删 DB 强制下次启动回填 —— 或者临时跑 `UPDATE cnas_qualifications SET std_code_norm=''` 触发 backfill + fixup。新加 case 的单测放 `qualification-service.test.ts` 防回归
 
+## 凭据配置（**强制**）
+
+源 adapter 的账号密码**必须**通过 `.env.local`（仓库根，gitignored）注入，**绝不允许**写进任何 `.ts` / `.md` / commit message / auto-memory。
+
+**键名约定：** `<SOURCE>_USERNAME` / `<SOURCE>_PASSWORD`（参考 `LABR_USERNAME` / `BY_USERNAME` / `SPC_USERNAME`）。
+
+**Why:** `.env.local` 被 git 忽略，凭据不会泄漏到 PR、issue、CI 日志。dotenv 用 `override: false` 加载，所以真实环境变量（CI/pm2）依旧能覆盖本地默认值。把账号写进代码 / 文档 / 记忆 → 一旦仓库公开或被 share，账号绑定的水印追溯权益全暴露。
+
+**How to apply:**
+- 新增源接入流程多一步：在 `.env.example` 加占位 + 注释；用户拷成 `.env.local` 填真值
+- adapter 读凭据走 `process.env.XXX_USERNAME`，未配置时报错信息要明确指向 `.env.local`（仿 `labr-service.ts:130-134`）
+- 加载入口：`src/index.ts` + `electron/main.ts` 顶部 `loadDotEnvLocal()`；勘察脚本（`scripts/sources/**/inspect-*.ts`）自行加载
+- 改 `src/shared/env-loader.ts` 的加载顺序时务必保持「真实 env > .env.local」的优先级
+
 ## 记忆系统
 
 跨会话的项目状态、未做项、风险点记在 auto-memory（不在仓库里）。Claude 会自己维护，

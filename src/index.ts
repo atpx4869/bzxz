@@ -1,3 +1,7 @@
+// 加载 .env.local 必须最先：让源 adapter import 时已能读到 LABR_*/SPC_* 等凭据
+import { loadDotEnvLocal } from './shared/env-loader';
+loadDotEnvLocal();
+
 // Force direct connection — bypass any system proxy (Clash, etc.)
 for (const key of ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy']) {
   delete (process.env as Record<string, string | undefined>)[key];

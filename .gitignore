@@ -15,3 +15,5 @@ eng.traineddata
 .claude/
 .omc/
 *.bak
+.env.local
+out/
