@@ -65,3 +65,46 @@
   .local-col-name { max-width: 160px; }
   .local-table thead th, .local-table tbody td { padding: 8px 8px; }
 }
+
+/* #73 统一命名 modal —— scope chip 切换 */
+.normalize-scope-row { display: flex; gap: 6px; margin-bottom: 10px; }
+.normalize-chip { padding: 4px 10px; font-size: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-1); background: transparent; color: var(--text-2); cursor: pointer; transition: all 0.15s; }
+.normalize-chip:hover { color: var(--text-1); border-color: var(--border-2); }
+.normalize-chip.active { background: rgba(37, 99, 235, 0.18); background: oklch(58% 0.18 250 / 0.18); border-color: #2563eb; border-color: oklch(58% 0.18 250); color: var(--text-1); }
+
+/* 主信息行 + 主列表 from→to */
+.normalize-summary { margin-bottom: 8px; font-size: 13px; color: var(--text-2); }
+.normalize-summary strong { color: var(--text-1); font-size: 15px; }
+.normalize-empty { padding: 24px 8px; text-align: center; color: var(--text-3); font-size: 12px; }
+.normalize-list { font-family: 'SF Mono', Consolas, monospace; font-size: 11.5px; line-height: 1.5; border: 1px solid var(--border-1); border-radius: var(--radius-sm); padding: 8px; background: rgba(0, 0, 0, 0.18); background: oklch(20% 0.01 240 / 0.4); max-height: 320px; overflow-y: auto; }
+.normalize-row { display: grid; grid-template-columns: 1fr 24px 1fr; gap: 6px; align-items: start; padding: 3px 0; border-bottom: 1px dashed rgba(255, 255, 255, 0.04); }
+.normalize-row:last-child { border-bottom: 0; }
+.normalize-from { color: var(--text-3); word-break: break-all; }
+.normalize-arrow { color: #16a34a; color: oklch(62% 0.18 150); text-align: center; }
+.normalize-to { color: var(--text-1); word-break: break-all; }
+.normalize-more { padding: 4px 0 0; color: var(--text-3); font-style: italic; text-align: center; }
+.normalize-more-btn { display: block; margin: 6px auto 0; padding: 4px 10px; font-size: 11px; background: transparent; border: 1px dashed var(--border-1); border-radius: var(--radius-sm); color: var(--text-3); cursor: pointer; }
+.normalize-more-btn:hover { color: var(--text-2); border-color: var(--border-2); }
+
+/* 分组折叠（已符合 / 冲突 / 错误） */
+.normalize-group { margin-top: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-1); background: rgba(255, 255, 255, 0.02); }
+.normalize-group summary { padding: 6px 10px; font-size: 12px; cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; color: var(--text-2); }
+.normalize-group summary::-webkit-details-marker { display: none; }
+.normalize-group summary::before { content: "▶"; font-size: 9px; color: var(--text-3); transition: transform 0.15s; }
+.normalize-group[open] summary::before { transform: rotate(90deg); }
+.normalize-group-label { flex: 1; }
+.normalize-group-count { font-size: 11px; color: var(--text-3); }
+.normalize-group-body { padding: 4px 10px 8px; font-size: 11.5px; max-height: 200px; overflow-y: auto; }
+.normalize-row-mini { padding: 2px 0; border-bottom: 1px dashed rgba(255, 255, 255, 0.03); color: var(--text-3); word-break: break-all; }
+.normalize-row-mini:last-child { border-bottom: 0; }
+.normalize-row-name { color: var(--text-2); font-family: 'SF Mono', Consolas, monospace; }
+.normalize-row-reason { color: var(--text-3); font-size: 10.5px; }
+.normalize-group.conflict { border-left: 2px solid #d97706; border-left: 2px solid oklch(68% 0.17 60); }
+.normalize-group.error { border-left: 2px solid #de3b3d; border-left: 2px solid oklch(60% 0.20 25); }
+.normalize-group.neutral { border-left: 2px solid rgba(255, 255, 255, 0.08); }
+
+/* rename modal 实时预览框 */
+.rename-preview-box { margin-top: 10px; padding: 8px 10px; border-radius: var(--radius-sm); background: rgba(22, 163, 74, 0.08); background: oklch(62% 0.18 150 / 0.08); border-left: 2px solid #16a34a; border-left: 2px solid oklch(62% 0.18 150); }
+.rename-preview-label { font-size: 11px; color: var(--text-3); margin-bottom: 4px; }
+.rename-preview-name { font-family: 'SF Mono', Consolas, monospace; font-size: 12px; color: var(--text-1); word-break: break-all; }
+.rename-preview-skip { margin-top: 10px; padding: 6px 10px; border-radius: var(--radius-sm); background: rgba(255, 255, 255, 0.03); font-size: 11.5px; color: var(--text-3); }

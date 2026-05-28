@@ -16,7 +16,8 @@ import { promises as fs, createReadStream } from 'node:fs';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
 import type { Request, Response, NextFunction } from 'express';
-import { lookupFile, getFileById, bulkLookup } from '../services/library-index';
+import { lookupFile, getFileById, bulkLookup, parseLibraryFilename } from '../services/library-index';
+import { computeNormalizedName } from '../services/library-naming';
 import { extractBaseCode } from '../services/qualification-service';
 import { resolveLibraryDir, isInsideLibrary } from '../shared/library-paths';
 import { respond, respondError } from '../shared/response';
@@ -531,6 +532,33 @@ export function createPreviewRoutes(
     }
   });
 
+  // 把 file row rename 为 finalName（已含扩展名，不带路径分隔符）。
+  // 返回 ok / conflict / gone / unchanged 状态码语义供端点透出。
+  // 复用给 PATCH（用户手输）和 normalize 端点（pattern 算出）—— rename + db abs_path 同步逻辑一致。
+  async function renameLibraryFile(
+    file: { id: number; absPath: string },
+    finalName: string,
+    libDir: string,
+  ): Promise<{ ok: true; abs_path: string; changed: boolean } | { ok: false; code: 'GONE' | 'BAD_REQUEST' | 'CONFLICT'; message: string }> {
+    if (!isInsideLibrary(file.absPath, libDir)) {
+      return { ok: false, code: 'GONE', message: '文件已不在当前库目录' };
+    }
+    const newPath = path.join(path.dirname(file.absPath), finalName);
+    if (!isInsideLibrary(newPath, libDir)) {
+      return { ok: false, code: 'BAD_REQUEST', message: '目标路径越界' };
+    }
+    if (newPath === file.absPath) {
+      return { ok: true, abs_path: newPath, changed: false };
+    }
+    try {
+      await fs.access(newPath);
+      return { ok: false, code: 'CONFLICT', message: '目标文件名已存在' };
+    } catch { /* not exists → ok */ }
+    await fs.rename(file.absPath, newPath);
+    db.prepare('UPDATE standard_files SET abs_path = ? WHERE id = ?').run(newPath, file.id);
+    return { ok: true, abs_path: newPath, changed: true };
+  }
+
   /**
    * PATCH /api/preview/file/:id — 重命名（编辑标准名称）
    *
@@ -567,32 +595,213 @@ export function createPreviewRoutes(
         return;
       }
       const libStatus = await resolveLibraryDir(db);
-      if (!isInsideLibrary(file.absPath, libStatus.dir)) {
-        respondError(res, 410, 'GONE', '文件已不在当前库目录');
-        return;
-      }
       const oldExt = path.extname(file.absPath);
       const newExt = path.extname(raw);
-      // 用户没带扩展名 → 自动接旧扩展名；带了不同扩展名 → 也尊重，但要 lowercase 校验是 pdf
+      // 用户没带扩展名 → 自动接旧扩展名；带了不同扩展名 → 也尊重
       const finalName = newExt ? raw : raw + oldExt;
-      const newPath = path.join(path.dirname(file.absPath), finalName);
-      if (!isInsideLibrary(newPath, libStatus.dir)) {
-        respondError(res, 400, 'BAD_REQUEST', '目标路径越界');
+      const result = await renameLibraryFile(file, finalName, libStatus.dir);
+      if (!result.ok) {
+        const status = result.code === 'GONE' ? 410 : result.code === 'CONFLICT' ? 409 : 400;
+        respondError(res, status, result.code, result.message);
         return;
       }
-      if (newPath === file.absPath) {
-        respond(res, { ok: true, id, fileName: finalName, abs_path: newPath });
+      respond(res, { ok: true, id, fileName: finalName, abs_path: result.abs_path });
+    } catch (error) {
+      next(normalizeError(error));
+    }
+  });
+
+  /**
+   * #73 计算单个文件 row 的目标名 + 当前 pattern；封装给 normalize 端点用。
+   * 返回 null 表示物理文件名 parseLibraryFilename 解析失败（应当不会发生，scanLibrary
+   * 会跳过这些文件 → 不在 standard_files 表里），调用方按 error 透回。
+   */
+  function computeForRow(
+    file: { id: number; absPath: string; source: SourceName },
+    pattern: string,
+  ): { id: number; from: string; to: string; willChange: boolean; error?: string } {
+    const currentName = path.basename(file.absPath);
+    const parsed = parseLibraryFilename(currentName);
+    if (!parsed) {
+      return { id: file.id, from: currentName, to: currentName, willChange: false, error: '文件名不符合命名规范，无法解析（可能是手动放进库的非规范文件）' };
+    }
+    const result = computeNormalizedName({
+      currentName,
+      source: file.source,
+      stdCode: parsed.stdCodeRaw,
+      year: parsed.year,
+      title: parsed.title,
+    }, pattern);
+    return {
+      id: file.id,
+      from: result.currentName,
+      to: result.normalizedName,
+      willChange: result.willChange,
+      error: result.error,
+    };
+  }
+
+  /**
+   * #73 POST /api/preview/file/:id/normalize — 单文件按当前 pattern 格式化
+   *
+   * query: ?dryRun=1 仅返回 {currentName, normalizedName, willChange}，不动文件
+   *        （供 rename modal 实时显示「按内置格式将变为：xxx」）
+   *
+   * 行为（非 dryRun）：parse 物理名拿 stdCode/year/title → 按 library_filename_pattern
+   *      重渲染 → 与现名比对，相同则 changed=false（200），不同则 fs.rename + 更新 abs_path。
+   *
+   * 注意：std_code_norm 不动（索引键），title 缺失（V1 老文件）→ 模板引擎自动剥占位符 →
+   *      结果可能与原名一致 → unchanged，符合预期（要补 title 得跑源 detail，超出本端点范围）
+   */
+  router.post('/api/preview/file/:id/normalize', requireAuth, async (req, res, next) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) {
+        respondError(res, 400, 'BAD_REQUEST', 'Invalid file id');
         return;
       }
-      // 目标文件已存在 → 拒绝（不静默覆盖）
-      try {
-        await fs.access(newPath);
-        respondError(res, 409, 'CONFLICT', '目标文件名已存在');
+      const dryRun = req.query.dryRun === '1' || req.query.dryRun === 'true';
+      const file = await getFileById(db, id);
+      if (!file) {
+        respondError(res, 404, 'NOT_FOUND', '文件不存在或已被删除');
         return;
-      } catch { /* not exists → ok */ }
-      await fs.rename(file.absPath, newPath);
-      db.prepare('UPDATE standard_files SET abs_path = ? WHERE id = ?').run(newPath, id);
-      respond(res, { ok: true, id, fileName: finalName, abs_path: newPath });
+      }
+      const pattern = getSetting(db, 'library_filename_pattern', '{stdCode} {title} - {source}');
+      const plan = computeForRow(file, pattern);
+      if (dryRun) {
+        respond(res, { dryRun: true, id, currentName: plan.from, normalizedName: plan.to, willChange: plan.willChange, error: plan.error });
+        return;
+      }
+      if (plan.error) {
+        respondError(res, 422, 'UNPROCESSABLE', plan.error);
+        return;
+      }
+      if (!plan.willChange) {
+        respond(res, { ok: true, id, changed: false, fileName: plan.from });
+        return;
+      }
+      const libStatus = await resolveLibraryDir(db);
+      const result = await renameLibraryFile(file, plan.to, libStatus.dir);
+      if (!result.ok) {
+        const status = result.code === 'GONE' ? 410 : result.code === 'CONFLICT' ? 409 : 400;
+        respondError(res, status, result.code, result.message);
+        return;
+      }
+      respond(res, { ok: true, id, changed: result.changed, fileName: plan.to, abs_path: result.abs_path });
+    } catch (error) {
+      next(normalizeError(error));
+    }
+  });
+
+  /**
+   * #73 POST /api/preview/files/normalize — 批量按当前 pattern 格式化
+   *
+   * body: { ids?: number[], scope?: 'selected'|'all', dryRun?: boolean }
+   * - scope='all'：忽略 ids，扫所有 library 行（提供整库格式化快捷入口）
+   * - scope='selected' (默认) 或缺省：使用 ids
+   * - dryRun=true（默认）：仅返回预览（preview）不动文件
+   * - dryRun=false：实际执行
+   *
+   * 预览/执行都做 self-conflict 检测（同批两个旧文件目标名一样 → 标 conflict 跳过）。
+   * 与库内已有文件冲突也标 conflict。执行时逐条 rename，单条失败不影响其它。
+   */
+  router.post('/api/preview/files/normalize', requireAuth, async (req, res, next) => {
+    try {
+      const scope: 'selected' | 'all' = req.body?.scope === 'all' ? 'all' : 'selected';
+      let ids: number[];
+      if (scope === 'all') {
+        // 取所有 library 行 ID（已经经过 scanLibrary 过滤，都是符合命名规范的）
+        const rows = db.prepare('SELECT id FROM standard_files ORDER BY id ASC').all() as Array<{ id: number }>;
+        ids = rows.map(r => r.id);
+      } else {
+        ids = Array.isArray(req.body?.ids)
+          ? req.body.ids.filter((n: any) => Number.isInteger(n) && n > 0)
+          : [];
+      }
+      const dryRun = req.body?.dryRun !== false; // 默认 true，显式传 false 才执行
+      if (!ids.length) {
+        respondError(res, 400, 'BAD_REQUEST', scope === 'all' ? '文件库为空' : 'ids 不能为空');
+        return;
+      }
+      const pattern = getSetting(db, 'library_filename_pattern', '{stdCode} {title} - {source}');
+      const libStatus = await resolveLibraryDir(db);
+
+      // 第一遍：算所有目标名 + parse 失败 / 不变 分类
+      type Plan = { id: number; from: string; to: string; willChange: boolean; error?: string; conflictReason?: string };
+      const plans: Plan[] = [];
+      for (const id of ids) {
+        const file = await getFileById(db, id);
+        if (!file) {
+          plans.push({ id, from: '', to: '', willChange: false, error: '文件不存在或已被删除' });
+          continue;
+        }
+        plans.push(computeForRow(file, pattern));
+      }
+
+      // 第二遍：self-conflict 检测 —— 同批多个 plan 渲染出相同 to（且都 willChange）
+      const targetMap = new Map<string, number[]>();
+      for (const p of plans) {
+        if (!p.willChange || p.error) continue;
+        const key = p.to.toLowerCase(); // Windows 大小写不敏感
+        if (!targetMap.has(key)) targetMap.set(key, []);
+        targetMap.get(key)!.push(p.id);
+      }
+      for (const [, idList] of targetMap) {
+        if (idList.length > 1) {
+          for (const id of idList) {
+            const p = plans.find(x => x.id === id);
+            if (p) p.conflictReason = `本批内多项目标名相同（#${idList.join(', #')}）`;
+          }
+        }
+      }
+
+      // 第三遍（dryRun=true 时仅这一遍）：预检每个目标名是否与库内已有文件冲突
+      // 注：库内文件如果就是自己本身的旧路径则不算冲突，by-id 也涵盖这一点（rename 到自己 = unchanged）
+      for (const p of plans) {
+        if (!p.willChange || p.error || p.conflictReason) continue;
+        // 检测同目录下是否已存在目标名的物理文件（且不是自身）
+        try {
+          const file = await getFileById(db, p.id);
+          if (!file) continue;
+          const targetPath = path.join(path.dirname(file.absPath), p.to);
+          if (targetPath === file.absPath) continue;
+          try {
+            await fs.access(targetPath);
+            p.conflictReason = '目标文件名已被同目录其它文件占用';
+          } catch { /* not exists → ok */ }
+        } catch { /* 忽略 */ }
+      }
+
+      if (dryRun) {
+        // libraryTotal 供前端「整库」chip 显示总数
+        const total = (db.prepare('SELECT COUNT(*) AS c FROM standard_files').get() as { c: number }).c;
+        respond(res, { dryRun: true, scope, preview: plans, libraryTotal: total });
+        return;
+      }
+
+      // dryRun=false：实际执行
+      const renamed: Array<{ id: number; from: string; to: string }> = [];
+      const unchanged: number[] = [];
+      const failed: Array<{ id: number; message: string }> = [];
+      for (const p of plans) {
+        if (p.error) { failed.push({ id: p.id, message: p.error }); continue; }
+        if (!p.willChange) { unchanged.push(p.id); continue; }
+        if (p.conflictReason) { failed.push({ id: p.id, message: p.conflictReason }); continue; }
+        try {
+          const file = await getFileById(db, p.id);
+          if (!file) { failed.push({ id: p.id, message: '文件不存在或已被删除' }); continue; }
+          const result = await renameLibraryFile(file, p.to, libStatus.dir);
+          if (!result.ok) {
+            failed.push({ id: p.id, message: result.message });
+            continue;
+          }
+          if (result.changed) renamed.push({ id: p.id, from: p.from, to: p.to });
+          else unchanged.push(p.id);
+        } catch (e: any) {
+          failed.push({ id: p.id, message: e?.message || '未知错误' });
+        }
+      }
+      respond(res, { dryRun: false, renamed, unchanged, failed });
     } catch (error) {
       next(normalizeError(error));
     }

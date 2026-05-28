@@ -3,6 +3,18 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **#73 本地文件库：统一命名（批量 + 单文件，含整库快捷入口）**：库里同时存在 V1 (`{stdCode} - {source}.pdf`) 和 V2 (`{stdCode} {title} - {source}.pdf`) 格式的文件，还有用户手拷进来的杂乱命名，扫读 / 排序 / 搜索都受影响。本次给用户一个"按 admin pattern 一键统一命名"的工具：
+  - **`src/services/library-naming.ts` 新增 `computeNormalizedName(input, pattern)`**：复用 `parseLibraryFilename` + `renderLibraryFilenameWithExt`，输出 `{currentName, normalizedName, willChange, error}`。保留原扩展名（labr 可能落 docx/xlsx 也能统一）。V1 老文件 title 缺失 → 模板引擎自动剥占位符 + 相邻分隔符 → 结果与原名相同 → willChange=false（要补 title 得跑源 detail，超出本端点范围，留作 #74 评估）。
+  - **`src/api/preview-routes.ts` 提取 `renameLibraryFile(file, finalName, libDir)` helper**：PATCH（用户手输）与新 normalize 端点共用 rename + abs_path 同步 + GONE/CONFLICT/BAD_REQUEST 状态码，避免逻辑漂移。
+  - **新增 `POST /api/preview/file/:id/normalize`**（单文件）：`?dryRun=1` 支持 → 返回 `{currentName, normalizedName, willChange, error}` 不动文件（供 rename modal 实时预览）；非 dryRun 则 parse 物理名 → 按 `library_filename_pattern` 重渲染 → 不变返回 `changed:false`、有变化走 `renameLibraryFile`。冲突 409、parse 失败 422 `UNPROCESSABLE`。
+  - **新增 `POST /api/preview/files/normalize`**（批量 dryRun + scope 切换）：body `{ ids?, scope?: 'selected'|'all', dryRun? }`。`scope='all'` 忽略 ids，扫所有 library 行（提供整库格式化快捷入口）。三遍扫描——① computeForRow 算每条 from/to；② **self-conflict 检测**（同批两个旧文件渲染出相同 to，全部标 conflictReason 跳过，Windows 大小写不敏感 toLowerCase 比较）；③ 与库内已有同名文件冲突检测。dryRun=true 返回 `{preview, libraryTotal}`（libraryTotal 供前端「整库」chip 显示总数）；dryRun=false 实际执行返回 `{renamed, unchanged, failed}`。
+  - **前端 `public/js/app-detail-utils.js`**：
+    - 重构 `batchNormalizeLibraryFiles` → `openNormalizeModal({scope, selectedIds})`：modal 顶部新增 **scope chip 切换**「仅选中 N 项 / 整个文件库 M 项」，点击重新 dryRun 刷新内容（用 200ms setTimeout 避让 click bubble 关闭新 modal）；主区放「将重命名 N 项」突出，from→to grid 三列对比，默认 20 行 + 「全部展开」按钮可显示完整；其它三类（已符合 / 冲突 / 错误）做 `<details>` 折叠分组，**冲突项自动展开** 让用户立刻看到；50 行内全列。
+    - `showConfirmHtml` 扩展支持 `confirmDisabled`（无可执行项时禁用确认按钮，Enter 键失效）+ `onMount(overlay)` 让调用方挂事件（chip / 展开按钮）。
+    - `showRenameModal` **加实时预览**：modal 打开时异步调 `POST /file/:id/normalize?dryRun=1` 拿目标名 → input 下方显示「按内置格式将变为：xxx」绿底块 + 「套用内置格式」按钮；目标名 = 当前名时显示「文件名已是内置格式」灰底；parse 失败显示「内置格式不可用：xxx」灰底。
+    - 新增 `normalizeSingleFile(fileId)` 调单文件端点；`updateLocalSelectionUi` 同时控制「批量删除」和「统一命名」按钮 disabled 状态。
+  - **HTML 双 entry**：`public/index.html` + `web/index.html` `.local-toolbar-actions` 全选和批量删除按钮之间插入 `#fileLibraryBatchNormalize`（**ghost 样式**避免与红色批量删除按钮争视觉焦点，文案「统一命名」直白，title 解释「按 admin 设置的内置命名格式统一改名」）。
+  - **CSS 双写**：`web/src/styles/pages/local-library.css` + `public/styles.css` 同步新增 `.normalize-chip(.active)` / `.normalize-summary` / `.normalize-list / -row / -from / -arrow / -to / -more / -more-btn` / `.normalize-group(.conflict/.error/.neutral)` 折叠分组 / `.rename-preview-box / -label / -name / -skip` —— 等宽字体 + grid 三列 (from / → / to) 让差异一眼能比较；冲突 / 错误条块用左竖线 + 浅底色提示非阻塞跳过；rename modal 内置格式预览用绿底（确认性）vs skip 用灰底（提示性）。
 - **#72 资质卡 scope chip + 部分参数限制项 + 全部参数折叠态精简**：产品标准（GB/T、GB 等含「全部参数」/「部分参数」标记的资质）卡头扫读力度不够 —— 之前必须展开才能看 scope，部分参数的限定描述也藏在展开层里。本次：
   - **`public/js/app-qual.js` `buildQualUnifiedList` 加 groupScope 计算**：扫 grp.items 求组级 scope（全部参数 ≻ 部分参数 ≻ null，遇到 `paramScopeRank === 0` 短路）。卡头标准名称后面渲 `qual-scope-badge` chip：全部参数=绿色（success 调），部分参数=橙色（warning 调）。N 项计数 chip 保留。
   - **全部参数：折叠态彻底精简**：`collapsible = groupScope !== 'all'` 决定 header 是否带 `onclick`、arrow 是否渲▶（替换为 16px 占位保持横向对齐）、body 是否渲（直接空字符串）。同质 item 展开无价值，少一层视觉噪声。

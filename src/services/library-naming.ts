@@ -118,3 +118,66 @@ export function renderLibraryFilenameWithExt(pattern: string, ctx: Context, ext 
   const cleanExt = ext.replace(/^\.+/, '').replace(ILLEGAL_CHARS, '').trim().toLowerCase() || 'pdf';
   return `${renderLibraryFilename(pattern, ctx)}.${cleanExt}`;
 }
+
+// #73 「格式化名称」用：把一个已索引文件按当前 admin pattern 重渲染。
+//
+// 行为：
+// - parse 失败的物理文件名（用户手塞但符合 V1/V2 规范但模板引擎不认）→ error 字段返回
+//   注：scanLibrary 跳过 parse 失败的文件 → 它们根本不会进 standard_files 表，理论上拿不到 row
+//   防御性保留 error 路径，方便端点把异常透回前端
+// - V1 老格式（无 title）按 pattern `{stdCode} {title} - {source}` 渲染时模板引擎自动剥
+//   `{title}` 占位符 + 相邻空格 → 结果可能与原名相同 → willChange=false
+// - 扩展名 case-insensitive；模板引擎只接受小写 ext，renderLibraryFilenameWithExt 内部统一
+//
+// 入参 fileRow 取自 standard_files 表（abs_path + source canonical）
+export interface NormalizeInput {
+  /** standard_files.abs_path basename */
+  currentName: string;
+  /** canonical SourceName（"gbw" 不是 "BW"） */
+  source: SourceName;
+  /** parsed stdCode（带 /T、大小写正确，来自 parseLibraryFilename(stdCodeRaw)） */
+  stdCode: string;
+  /** parsed year，可能为空 */
+  year?: string;
+  /** parsed title，V1 文件这里为空字符串 */
+  title?: string;
+}
+
+export interface NormalizeResult {
+  currentName: string;
+  normalizedName: string;
+  willChange: boolean;
+  error?: string;
+}
+
+export function computeNormalizedName(input: NormalizeInput, pattern: string): NormalizeResult {
+  const { currentName, source, stdCode, year, title } = input;
+  try {
+    if (!stdCode) {
+      return { currentName, normalizedName: currentName, willChange: false, error: 'stdCode 缺失（文件名不符合规范，无法解析）' };
+    }
+    // 提取原扩展名（labr 可能有 docx/xlsx/pptx）
+    const lastDot = currentName.lastIndexOf('.');
+    const ext = lastDot > 0 ? currentName.slice(lastDot + 1) : 'pdf';
+
+    const normalizedName = renderLibraryFilenameWithExt(pattern, {
+      stdCode,
+      source,
+      year: year || undefined,
+      title: title || undefined,
+    }, ext);
+
+    return {
+      currentName,
+      normalizedName,
+      willChange: normalizedName !== currentName,
+    };
+  } catch (e: any) {
+    return {
+      currentName,
+      normalizedName: currentName,
+      willChange: false,
+      error: e?.message || '格式化失败',
+    };
+  }
+}
