@@ -243,6 +243,12 @@ function dedupeResults(items) {
 }
 
 function sortByStatus(a, b) {
+  // 最高优先级:有 CMA/CNAS 资质徽章的条目排前 —— 用户用资质表判断"这标准我们能测吗",
+  // 排在最上面看着最直接。徽章异步增量到达(fetchQualBadges 完成后 renderResults 重渲),
+  // 排序时机不固定但每次重渲都按"当时已知"的 qualData 排,渐进收敛
+  const qa = hasQualificationBadge(a.standardNumber) ? 1 : 0;
+  const qb = hasQualificationBadge(b.standardNumber) ? 1 : 0;
+  if (qa !== qb) return qb - qa;
   const pa = statusPriority(a.status), pb = statusPriority(b.status);
   if (pa !== pb) return pa - pb;
   if (a.previewAvailable !== b.previewAvailable) return a.previewAvailable ? -1 : 1;
@@ -311,12 +317,16 @@ function sortFilteredResults(items) {
     const t = value ? new Date(value).getTime() : 0;
     return Number.isNaN(t) ? 0 : t;
   };
+  // 所有排序模式都以"资质徽章有无"作为最高优先级 —— 用户能测的标准永远在最上面,
+  // 模式选择(日期 / 可下载 / 源数)只是在"已资质过滤"内做次级排
+  const qualRank = (r) => hasQualificationBadge(r.standardNumber) ? 1 : 0;
+  const byQual = (a, b) => qualRank(b) - qualRank(a);
   if (filterState.sort === 'date') {
-    sorted.sort((a, b) => dateValue(b.implementDate || b.publishDate) - dateValue(a.implementDate || a.publishDate));
+    sorted.sort((a, b) => byQual(a, b) || (dateValue(b.implementDate || b.publishDate) - dateValue(a.implementDate || a.publishDate)));
   } else if (filterState.sort === 'downloadable') {
-    sorted.sort((a, b) => Number(Boolean(b.previewAvailable)) - Number(Boolean(a.previewAvailable)) || sortByStatus(a, b));
+    sorted.sort((a, b) => byQual(a, b) || (Number(Boolean(b.previewAvailable)) - Number(Boolean(a.previewAvailable))) || sortByStatus(a, b));
   } else if (filterState.sort === 'sourceCount') {
-    sorted.sort((a, b) => ((b.sources || [b._source]).length - (a.sources || [a._source]).length) || sortByStatus(a, b));
+    sorted.sort((a, b) => byQual(a, b) || (((b.sources || [b._source]).length - (a.sources || [a._source]).length)) || sortByStatus(a, b));
   } else {
     sorted.sort(sortByStatus);
   }
