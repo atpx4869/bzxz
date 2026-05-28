@@ -128,8 +128,13 @@ export function parseLibraryFilename(name: string): ParsedFilename | null {
   if (!name.toLowerCase().endsWith('.pdf')) return null;
   const stem = name.slice(0, -4);
 
-  // 从右侧匹配 ` - {SOURCE}`；锚定结尾避免标题里有 " - XX" 误匹配
-  const sourceMatch = stem.match(/^(.+?)\s*[-—]\s*([A-Za-z]+)\s*$/);
+  // 从右侧匹配 ` - {SOURCE}` 或 ` {SOURCE}`；锚定结尾避免标题里有 " - XX" 误匹配。
+  // 分隔符允许 `-` / `—` 或纯空格 —— 后者用于救回 #73 早期 bug 砸坏的文件：
+  // V1 老文件 `GB_T 24456-2009 - BW.pdf` 曾被错误渲染成 `GB_T 24456-2009 BW.pdf`，
+  // 严格要求 `-` 会让它"无法解析"卡死（既不入索引也用不上 rename / normalize）。
+  // 放宽后 scanLibrary 重新捡起，「统一命名」按 V2 pattern 渲染时会自动补回 ` - `。
+  // 副作用：source label 只有 5 个（BW/BZ/BY/LB/SPC），手塞文件名结尾恰好命中的概率极低。
+  const sourceMatch = stem.match(/^(.+?)(?:\s*[-—]\s*|\s+)([A-Za-z]+)\s*$/);
   if (!sourceMatch) return null;
   const sourceRaw = sourceMatch[2].toUpperCase();
   const source = SOURCE_LABEL_TO_CANONICAL[sourceRaw];

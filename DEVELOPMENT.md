@@ -71,6 +71,12 @@ src/
     ├── gbw/                       # gbw源实现
     │   ├── gbw-adapter.ts
     │   └── gbw-download-session-store.ts
+    ├── labr/                      # labr 标准库补给源（独立 service，不挂 SourceRegistry）
+    │   ├── labr-client.ts
+    │   └── labr-service.ts
+    ├── spc/                       # spc.org.cn 第 5 源（纯 HTTP，admin 粘 Cookie）
+    │   ├── spc-client.ts
+    │   └── spc-adapter.ts
     └── shared/
         └── captcha-ocr.ts         # 验证码OCR (ddddocr→tesseract)
 ```
@@ -109,7 +115,7 @@ src/
 
 ```ts
 interface SourceAdapter {
-  source: 'bz' | 'gbw' | 'by';
+  source: 'bz' | 'gbw' | 'by' | 'spc';  // labr 走独立 service，不实现此接口
   searchStandards(input): Promise<StandardSummary[]>;
   getStandardDetail(id): Promise<StandardDetail>;
   detectPreview(id): Promise<PreviewInfo>;
@@ -164,6 +170,7 @@ curl.exe "http://localhost:3000/api/health"
 # 搜索
 curl.exe "http://localhost:3000/api/standards/search?q=3324-2024&source=bz"
 curl.exe "http://localhost:3000/api/standards/search?q=3324-2024&source=gbw"
+curl.exe "http://localhost:3000/api/standards/search?q=18584-2024&source=spc"
 
 # 详情
 curl.exe "http://localhost:3000/api/standards/bz:443847"

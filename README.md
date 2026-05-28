@@ -174,10 +174,12 @@ cp .env.example .env.local
 │   │   ├── cma-scraper.ts    # CMA 采集器
 │   │   └── qualification-service.ts  # 资质同步调度
 │   ├── shared/          # 工具函数（ID解析/错误/路径）
-│   └── sources/         # 数据源适配器
+│   └── sources/         # 5 个数据源（4 个 SourceAdapter + labr 独立 service）
 │       ├── bz-zhenggui/ # BZ 标准在线
 │       ├── gbw/         # BW 国标网
 │       ├── by/          # BY 内部网
+│       ├── labr/        # LB 标准库补给源（独立 service，不挂 SourceRegistry）
+│       ├── spc/         # SPC 中国标准在线服务网（纯 HTTP，admin 粘 Cookie）
 │       └── shared/      # OCR 验证码工具
 ├── docs/                # 源实现文档
 ├── data/                # SQLite 数据库 (bzxz.db, .gitignore)
@@ -327,7 +329,7 @@ cp .env.example .env.local
 - **后端自动切源下载**：批量下载时后端按优先级自动尝试多个源，失败自动切换
 - **多用户并发适配**：
   - **跨用户下载去重**：两个用户同时点同一标准下载，底层 `adapter.exportStandard` 只跑一次。`ExportTaskStore` 用 `activeByStandard` 索引找现有活跃任务，把新用户追加到 `subscribers`，共享同一 SSE 进度流和最终结果
-  - **源级并发信号量**（`src/shared/source-semaphore.ts`）：每个源全局并发上限独立钉死，与前端 `downloadConcurrency` 解耦。默认 `bz=2 / gbw=4 / by=4`（依据：BZ 单次涉及 12 路 JPEG + pdf-lib worker，GBW/BY 是直 PDF）。多用户叠加不会让真实出口超额
+  - **源级并发信号量**（`src/shared/source-semaphore.ts`）：每个源全局并发上限独立钉死，与前端 `downloadConcurrency` 解耦。默认 `bz=2 / gbw=4 / by=4 / labr=2 / spc=2`（依据：BZ 单次涉及 12 路 JPEG + pdf-lib worker，GBW/BY 是直 PDF；labr/spc 限速未压测保守起步）。多用户叠加不会让真实出口超额
   - 诊断接口 `GET /api/diagnostics/sources` 返回各源 `{ active, limit, waiting }`
 - 行级下载反馈（spinner + 卡片高亮 + 成功/失败闪烁）
 - BZ 页级实时进度
@@ -400,9 +402,10 @@ cp .env.example .env.local
 ### 新增数据源
 
 1. **勘察**：`scripts/sources/<name>/` 下写 Playwright 或 fetch 脚本
-2. **文档**：`docs/sources/<name>-source-implementation.md`
-3. **实现**：`src/sources/<name>/` 下实现 `SourceAdapter` 接口
-4. **注册**：在 `src/services/source-registry.ts` 添加新源
+2. **文档**：`docs/sources/<name>-source-implementation.md`（或 `-source-plan.md`，参考 labr/spc）
+3. **实现**：`src/sources/<name>/` 下实现 `SourceAdapter` 接口（不符合「单 stdCode → 单 PDF」契约的源走独立 service，参考 labr）
+4. **注册**：在 `src/services/source-registry.ts` 添加新源；同步更新 `SourceName` / `VALID_SOURCES` / `SUPPORTED_SOURCES` / `SOURCE_LABELS` / `sourceEnum` / `ALL_LIBRARY_SOURCES` / source-semaphore `DEFAULTS` / 前端 `sourceLabel` dict（TS 会通过 `Record<SourceName,...>` 强制提示漏改的点）
+5. **凭据**：如需账号密码，按 `.env.local` + `<SOURCE>_USERNAME` / `<SOURCE>_PASSWORD` 命名（见 CLAUDE.md 凭据配置契约）
 
 ### SourceAdapter 接口
 
@@ -431,6 +434,8 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **#64 spc.org.cn 第 5 数据源接入（纯 HTTP + admin 粘 Cookie）** — 新增 `src/sources/spc/{spc-client,spc-adapter}.ts`，与 bz/gbw/by 并列挂 `SourceRegistry`，主搜索 / 库绿点 / 批量下载流统一支持。协议层 4 步链路：`POST /queryfocus`（匿名搜索）→ `POST /stdlib/stdonline`（拿 token）→ `GET /stdlib/onlinereading?token=`（下完整无水印 PDF）。**字节通道关键**：`downloadPdf` 必须 `arrayBuffer()` —— Playwright/Chromium 因 `Content-Type: application/pdf;charset=utf-8` 会按 UTF-8 解码破坏 PDF，但 Node undici 不看 charset 永远返回原始字节，比浏览器自动化快 10×（100 标准 2-3 分钟 vs 8-25 分钟）。**Cookie 不能自动获取**：submitlogin 需要 4 字母图形验证码（OCR 难度高），MVP 走 admin 面板「手动粘贴 Cookie」路径，cookie 写 settings 表（key=`spc.cookies` / `spc.cookies_expires_at`，6h 寿命）；新增 `GET/POST/DELETE /api/admin/spc/cookie` 三端点。**Token 单次有效**：detectPreview 不预拉，exportStandard 内部串联 stdonline → onlinereading → addFileToLibrary。ISO 标准 a100 含 `:` 替换为 `∶`（U+2236）绕开 createStandardId 禁忌。源级 semaphore=2（限速未压测，保守起步）。`SpcAuthError` → invalidateSession + `BadRequestError`（"spc 凭据失效，请在 admin 面板重新粘贴 Cookie"）自愈。详见 [`docs/sources/spc-source-plan.md`](./docs/sources/spc-source-plan.md)
+- **#73 fix: `parseLibraryFilename` 放宽 source 前分隔符，救回上一个 bug 砸坏的文件** — 用户报告 `GB_T 24456-2009 BW.pdf`（上一个 bug 砸坏的 V1 文件，缺 ` - `）「统一命名」卡在「无法解析」组，scanLibrary 不入索引 → 「编辑」/「删除」/「统一命名」全用不上。修：正则 `\s*[-—]\s*` → `(?:\s*[-—]\s*|\s+)`，允许「`-`/`—` 或纯空格」当 source 分隔符；重启 scanLibrary 自动捡回，「统一命名」按 V2 pattern 渲染时补回 ` - `。副作用：source label 字典只有 5 个（BW/BZ/BY/LB/SPC），手塞 PDF 末尾命中字典的概率极低
 - **#73 fix: V1 文件按 V2 pattern 渲染时不再丢 ` - ` 分隔符** — 用户报告 `GB_T 4893.2-2020 - BZ.pdf`（V1）「统一命名」被预览成 `GB_T 4893.2-2020 BZ.pdf`，把规范名劣化掉。根因：`renderLibraryFilename` 处理空 `{title}` 时两侧 sep 用 `left||right`，左 ` `（空格）优先保留把右 ` - ` 吞了。修：两侧 sep 都非空时优先含强分隔字符（`-` / `_` / `·` / `—`）的那一侧，弱 sep（纯空白）让位。V1 文件按默认 V2 pattern 渲染后与原名一致 → willChange=false → 跳过
 - **labr fix: 标准号直连中文时不再 fallback 成 `LABR-${did}`** — 实测 `GB/T 35607-2024绿色产品评价 家具`（labr title 标准号末位直接连中文，无 `|` / 空白）抽不出 stdCode → 走 `LABR-${did}` 兜底命名成 `LABR-14718 GB_T 35607-2024绿色产品评价 家具 - LB.pdf`。修：`STD_CODE_FROM_TITLE_RE` 末尾分隔符改 lookahead `(?=[|｜:：\s]|[一-鿿]|$)`，允许 CJK 字符 / 末尾终止；不消费分隔符，rest 切片改用 `m[1].length` + 单独 `^[|｜:：\s]+` strip。原有 9 个 case 全数通过 + 2 个新回归 case。历史 `LABR-${did} ...` 文件需手动改名（库内 std_code 已存成 LABR-xxx）
 - **#73 本地文件库：统一命名（批量 + 单文件，含整库快捷入口）** — 库里 V1 (`{stdCode} - {source}.pdf`) 和 V2 (`{stdCode} {title} - {source}.pdf`) 并存 + 手拷杂乱命名，给用户一键统一工具。`computeNormalizedName(input, pattern)` 复用 `parseLibraryFilename` + `renderLibraryFilenameWithExt`，保留原扩展名（labr 可能 docx/xlsx）；V1 title 缺失 → 模板引擎自动剥占位符 → willChange=false（不强行渲染会产生空段）。`renameLibraryFile` helper 抽出，PATCH / normalize 端点共用 rename + abs_path 同步逻辑。新增 `POST /api/preview/file/:id/normalize`（单文件，支持 `?dryRun=1` query）+ `POST /api/preview/files/normalize`（批量，body `{ids?, scope?, dryRun?}`，`scope='all'` 服务端拉全库 ID；三遍扫：compute → self-conflict（小写比对 Windows 文件系统）→ existing-file conflict；dryRun=true 返回 `{preview, libraryTotal}`，dryRun=false 执行）。前端工具栏 `btn-ghost`「统一命名」按钮（启用条件与批量删除一致，配色避让红色批量删除）；点击 → dryRun → `showConfirmHtml`（扩展 `confirmDisabled` + `onMount(overlay)` 钩子）渲改名列表：scope chip「仅选中 N 项 / 整个文件库 M 项」可一键切换（200ms setTimeout 防点击冒泡关闭新弹窗）、3 个 `<details>` 折叠分组（不变 / 冲突 / 无法解析，冲突默认展开）、>20 行带「全部展开」按钮、确认后实际执行。rename modal 重写为 input + 「套用内置格式」prefill 按钮 + 异步 dryRun 实时预览框（`.rename-preview-box` 绿底显示「按内置格式将变为：xxx」，已是内置格式 / 不可解析则灰字提示）。CSS 双写 `pages/local-library.css` + `public/styles.css` 加 `.normalize-chip(.active)` / `.normalize-group(.conflict/.error/.neutral)` 折叠三角动画 / `.rename-preview-box/-label/-name/-skip` 等，所有 oklch 都带 sRGB fallback。V1 title 补全（要跑源 detail）留作 #74

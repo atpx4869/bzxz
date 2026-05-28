@@ -130,6 +130,8 @@ type ApiResult<T> =
 - `gbw`：搜索 + 自动验证码 + 直接下载 PDF (`autoDownload`)
 - `bz`：搜索 + 逐页 JPEG → pdf-lib 合并 (`exportStandard`)
 - `by`：搜索 + 内网直链 PDF (`exportStandard`)
+- `spc`：搜索 + stdonline 拿 token + onlinereading 直拉无水印 PDF (`exportStandard`)；token 单次有效 → 不预拉 detectPreview，串联在 exportStandard 内
+- `labr`：**不实现 SourceAdapter**（详见 §六-A），走独立 service
 
 路由层调用时根据 `adapter.autoDownload`、`adapter.exportStandard` 是否存在选择路径——前端的 `/api/standards/multi-download` 已经做了这层路由。**不要为了"统一"强抽基类**——之前评估过，会产出空壳接口。
 
@@ -284,7 +286,8 @@ ddddocr 是单 Python 进程，请求/响应通过 **UUID-keyed pending map** �
 - `gbw=4`（直 PDF + OCR；4 个并发足以打满 ddddocr 又不堆死队列）
 - `by=4`（内网直 PDF，跟 GBW 同量级）
 - `labr=2`（labr.cc 对单 IP 频控敏感，kind=1 走 preview2 还有 5/天硬限速；2 并发足够 batch 场景，不暴露 IP）
-- `BzAdapter.exportStandard` / `ByAdapter.exportStandard` / `GbwAdapter.autoDownload` 入口全部包 `getSourceSemaphore(src).run(...)`；labr 在 `labr-client` 协议层调用前包
+- `spc=2`（spc.org.cn 限速未压测，保守起步；token 单次有效 + cookie 共享 → 多并发也只能复用同一 session，2 足够）
+- `BzAdapter.exportStandard` / `ByAdapter.exportStandard` / `GbwAdapter.autoDownload` / `SpcAdapter.exportStandard` 入口全部包 `getSourceSemaphore(src).run(...)`；labr 在 `labr-client` 协议层调用前包
 - `Semaphore.setLimit()` 运行时可调（未来想暴露给 admin 设置时直接接上）
 - 诊断：`GET /api/diagnostics/sources` 返回 `{ active, limit, waiting }`
 
