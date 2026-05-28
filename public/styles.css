@@ -1259,6 +1259,23 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
   /* 两栏 grid 在窄屏继续左右分列（CMA / CNAS 不并屏即破坏可读性），但收紧 gap */
   body:not(.force-desktop) .qual-results-grid { gap: 8px; }
   body:not(.force-desktop) .qual-col-header { font-size: 12px; padding: 6px 8px; }
+
+  /* 13) 手机端隐藏下载 / 收藏入口 —— 与 web/src/styles/responsive.css 同段镜像。
+     Why: 手机端定位是「查阅」而非「管理」。下载和收藏依赖本地库 + 桌面 IPC，
+     在手机浏览器里没有 standards 库目录可写、收藏列表也只是 localStorage 单端孤岛，
+     不如直接收掉避免误点。详情 / 预览弹窗里的 #previewDownloadBtn 保留，
+     方便临时复制单个链接到外部浏览器。
+     How to apply: 顶栏下载中心入口、结果卡片 / 上下文菜单里的下载和收藏按钮、
+     筛选条「只看收藏」chip、"我"页"下载历史"行、侧边栏「下载历史」全部隐掉。
+     JS 端 toggleSavedStandard / 键盘 d 各自 early-return 防键盘走捷径。 */
+  body:not(.force-desktop) #downloadCenterToggle { display: none; }
+  body:not(.force-desktop) .result-card [data-action="download"],
+  body:not(.force-desktop) .result-card [data-action="save"],
+  body:not(.force-desktop) .batch-result-card [data-action="download"],
+  body:not(.force-desktop) .batch-result-card [data-action="save"] { display: none; }
+  body:not(.force-desktop) [data-filter-toggle="saved"] { display: none; }
+  body:not(.force-desktop) #meRowHistory,
+  body:not(.force-desktop) .sidebar-item[data-tab="history"] { display: none; }
 }
 
 /* 桌面/手机通用：mobile-tabbar 默认隐藏，只有上面的 @media 块在手机模式下打开。

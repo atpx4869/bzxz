@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **#67 手机端「下载/收藏」入口双 entry 对齐**：之前 `web/src/styles/responsive.css:191-206` 已经把手机端的下载中心、卡片下载/收藏按钮、「只看收藏」chip、「下载历史」入口全部 `display:none`，但 legacy `public/index.html` 直接 `<link>` 的 `public/styles.css` 漏了同步 → 用 legacy 入口进访的手机端还能看到这些按钮，违反 CSS 迁移期「重复加载、cascade 等价」契约。本次在 `public/styles.css` 的 `@media (max-width:640px)` 块末尾镜像同一段（注释 + 6 行规则），两个 HTML 入口行为一致。
+  - **JS 端键盘 `d` 也补一道兜底（`public/js/app-search.js:1281`）**：原本 `toggleSavedStandard` 已有 `isMobile()` early-return、右键菜单按 `onMobile` 过滤，但快捷键 `d` 没检查 —— 手机外接键盘场景能绕 CSS 触发 `downloadOne`。现在 `d` 分支也加 `if (window.isMobile && window.isMobile()) return;`，与 `s` / 右键菜单的兜底风格一致。
 - **#66 本地文件库独立成顶级 tab + 5 项管理能力**：之前"本地文件库"是「下载历史」tab 里的一个 card，随着用户积累的标准 PDF 增多，已不堪用。本次拆出为独立 sidebar 入口 `data-tab="local"`，改表格布局（标准号 / 文件名 / 来源 / 大小 / 时间 / 操作），去掉原"路径"列；每行 5 个动作：`预览 / 下载 / 打开路径 / 编辑 / 删除`；表头复选 + 单行复选 + "全选 / 批量删除"工具条。
   - **后端新增 4 端点（`src/api/preview-routes.ts`）**：`DELETE /api/preview/file/:id` 物理删 PDF + 删 `standard_files` 行；`POST /api/preview/files/batch-delete` 批删，body `{ ids: number[] }`，返回 `{ deleted, failed }`；`POST /api/preview/file/:id/reveal` 桌面端"在资源管理器中定位"，靠 `process.env.BZXZ_ELECTRON` 卡口 + `process.emit('bzxz:reveal-in-folder', absPath)` 喂主进程，Web 端 501；`PATCH /api/preview/file/:id` rename，body `{ fileName }`，校验非法字符 + `isInsideLibrary` 防越界 + 409 拒绝覆盖同名，`std_code_norm` 索引键保留不动（避免绿点/搜索失效）。
   - **Electron 主进程（`electron/main.ts`）**：启动时 `process.env.BZXZ_ELECTRON = '1'` 喂卡口；`process.on('bzxz:reveal-in-folder', absPath => shell.showItemInFolder(absPath))` 监听后端事件总线。

@@ -1280,6 +1280,9 @@ document.addEventListener('keydown', e => {
     showDetail(_activeRowId);
   } else if (e.key === 'd') {
     e.preventDefault();
+    // 手机端禁用下载快捷键：CSS 已隐掉触发入口，这里再防一道外接键盘绕过。
+    // 与 toggleSavedStandard 的兜底风格对齐。
+    if (typeof window.isMobile === 'function' && window.isMobile()) return;
     const btn = card.querySelector('[data-action="download"]');
     if (btn && !btn.disabled) downloadOne(_activeRowId, btn); else showToast('该标准无可用文本', 'fail');
   } else if (e.key === 's') {
