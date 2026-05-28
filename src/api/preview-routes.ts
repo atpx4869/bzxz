@@ -31,8 +31,12 @@ import { StandardService } from '../services/standard-service';
 
 const sourceEnum = z.enum(['gbw', 'bz', 'by', 'labr']);
 const DEFAULT_SOURCE_PRIORITY: SourceName[] = ['gbw', 'bz', 'by'];
-// labr 默认不进 lookupFile 自动选源（多源 picker 显式选才用），但允许 library_source_priority
-// 配置里写。getConfiguredSourcePriority 会用 'gbw'|'bz'|'by'|'labr' 全集过滤。
+// 语义对照（很容易混）：
+// - DEFAULT_SOURCE_PRIORITY / getConfiguredSourcePriority：用于 lookupFile / 自动选源 /
+//   预览 priority 排序 —— labr 默认不进，避免污染主搜索精确匹配
+// - ALL_LIBRARY_SOURCES：用于 library-check（"绿点 = 库里有没有"，OR 语义） —— labr
+//   入库的文件也要让绿点亮，否则用户从 labr 下载后在主搜索看不到命中
+const ALL_LIBRARY_SOURCES: SourceName[] = ['gbw', 'bz', 'by', 'labr'];
 
 /**
  * 从 settings.library_source_priority 读全局优先级；坏数据 / 缺设置 → 用默认。
@@ -145,9 +149,12 @@ export function createPreviewRoutes(
         sources: z.array(sourceEnum).optional(),
       });
       const { items, sources } = schema.parse(req.body);
+      // 绿点 = "库里有没有"（OR 语义），不是"该选哪个"（priority 语义）。
+      // 默认用全集 ALL_LIBRARY_SOURCES，让 labr 入库的文件也能在主搜索亮绿。
+      // 显式传 sources 时仍尊重调用方意图。
       const effectiveSources = sources && sources.length > 0
         ? sources
-        : getConfiguredSourcePriority(db);
+        : ALL_LIBRARY_SOURCES;
       const map = bulkLookup(db, items, effectiveSources);
       // 重建平行数组：每个 item 重新算一次 key，去 map 查
       const fileIds = items.map((it) => {

@@ -398,6 +398,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **labr #64 双 fix** — ① Labr 搜索结果 title 不再字面出现 `<font color="red">`：`sanitizeLabrTitle` 把上游高亮 `<font>` 整体转 `<mark>` 再统一 escape，规避之前 escape 链没转 `"` 导致白名单正则永远失配的 bug。② labr 入库的标准在主搜索预览也亮绿点：`/api/preview/library-check` 默认改用 4 源全集 `ALL_LIBRARY_SOURCES`（"绿点 = 库里有没有"OR 语义），与 `/api/preview/files` / `runAutoDownload` 的"自动选源"priority 语义解耦
 - **labr sidebar 入口镜像到 legacy `public/index.html`** — #62 修复用户装包后看不到 Labr 入口的问题。根因：Electron 装包跑起来加载 `http://localhost:port` → Express 把 `public/` 当静态根 → 实际入口是 legacy `public/index.html`；但 #56 sidebar `<button data-tab="labr">` 与 `<div id="page-labr">` 只加到了 `web/index.html`，#61 也只镜像了 CSS。本次把 sidebar 按钮（qual 之后、stats 之前）+ `#page-labr` 容器 + `<script src="/js/app-labr.js">` 三件套全部镜像到 `public/index.html`。两步切换契约：未来砍 legacy 入口时整段删
 - **labr 第 4 标准源接入** — 新增 `labr.cc` 检索 / 下载（独立 service，不挂 SourceRegistry）。`info.kind=0` 直拉文件系统、无配额；`info.kind=1` 需登录 + preview2 链路、5/天硬限速。新 sidebar tab 「Labr库检索」（独立 keyword + 翻页 + 全选/批量下载，下载结果就地渲染、限速被跳过的条目单独提示）。新表 `labr_temp_urls` 跨 token 持久化短时下载链；源级 semaphore=2 防限频；`std_code_norm/_base` 三层归一化沾资质徽章。详见 [`docs/sources/labr-source-plan.md`](./docs/sources/labr-source-plan.md)
 - **多源 preview picker** — 同一标准号在库内同时存在多个版本（多年份 / 多扩展名 / 多来源）时，预览顶部展开切换条，按钮显示 `源名 · year · ext`，点击秒切 iframe（跳过 `/preview/request` RTT，候选已确定在库）。仅 overlay 路径实装，popup 路径暂不支持

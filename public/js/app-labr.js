@@ -245,15 +245,20 @@ function extractStdCodeFromLabrTitle(title) {
 }
 
 /**
- * labr 的 hl_title 含 <font color=red>...</font> 高亮标签。直接写入 DOM 不安全，
- * 但完全 strip 又丢了用户视觉信号。折中：只白名单 <font color="red"|"#xxx"> / <mark> / <b>，
- * 其余 escape。
+ * labr 的 hl_title 含 <font color="red">...</font> 高亮标签。
+ * 策略：先把 <font ...> / </font> 整体替换成 <mark> / </mark>（语义对齐搜索高亮，
+ * 且无 attribute 需要白名单），然后整串 escape，最后把 <mark>/<b> 解回。
+ *
+ * 注：之前的实现想白名单保留 <font color=...>，但 escape 后原始 " 没变 &quot;，
+ * 正则里写的是 [&quot;'] 永远匹配不上 → 标签被 escape 后字面泄漏成
+ * "<font color=\"red\">"。改成统一转 <mark> 后 attribute 数=0，规则更稳。
  */
 function sanitizeLabrTitle(html) {
   if (!html) return '';
-  // 先把所有 < > 转义
-  var safe = String(html).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  // 再把白名单标签解回
-  safe = safe.replace(/&lt;(\/?)(font|mark|b)(\s+color\s*=\s*[&quot;']?#?[A-Za-z0-9]+[&quot;']?)?&gt;/g, '<$1$2$3>');
-  return safe;
+  // 1) labr 的高亮 <font color="red">x</font> 统一转 <mark>x</mark>
+  var converted = String(html).replace(/<font[^>]*>/gi, '<mark>').replace(/<\/font>/gi, '</mark>');
+  // 2) 全部 escape
+  var safe = converted.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // 3) 把白名单 <mark>/<b> 解回
+  return safe.replace(/&lt;(\/?)(mark|b)&gt;/g, '<$1$2>');
 }
