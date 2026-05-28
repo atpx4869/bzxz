@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix: tooltip detach 后样式失效(独立 floating class)** — 用户反馈强刷后 tooltip 还是大字 + 重叠看不清,跟前一版 polish 完全没生效。根因:JS portal `setupQualTooltipPortal` 把 tooltip 节点 detach 出 `.qual-badge` 后,CSS 后代选择器 `.qual-badge .qual-tooltip` 不再命中 → 字号 10px / 半透背景 / 毛玻璃 / box-shadow / padding / 宽度 / line-height 等全部失效,只剩 JS 设的 inline style(position/top/left/opacity 等几个),tooltip 视觉回退到 browser default(大字、无背景、占屏宽)。
+  - 改 `public/styles.css` + `web/src/styles/pages/qualifications.css`:新增 `.qual-tooltip.qual-tooltip-floating` 独立选择器,复制一份样式(背景 + 毛玻璃 + 字号 10px + padding + 宽度 + shadow + line-height 等),只有 position/opacity 由 JS 管
+  - 改 `public/js/app-qual.js` `setupQualTooltipPortal`:`showTip` detach 后立即 `tip.classList.add('qual-tooltip-floating')`;`hideTip` 复位前 `tip.classList.remove('qual-tooltip-floating')`
+  - 顺手调整 showTip 流程:先设 `opacity: 0` 让 tooltip 不可见,设完 position:fixed 后用 getBoundingClientRect 拿到正确尺寸再算定位,最后 `opacity: 1` 显示。避免之前在 (0,0) 闪一下的视觉跳
 - **polish: 资质徽章 tooltip 毛玻璃 + 字号收窄** — 用户反馈 tooltip 浮层 1) 背景透明导致与后面文字重叠看不清,2) 字号 12px 比 CMA/CNAS badge 字号 10px 大显眼,希望再小一号。改 `public/styles.css` + `web/src/styles/pages/qualifications.css` 两份 `.qual-badge .qual-tooltip`:
   - 背景从纯不透 `var(--surface)` 改成 `oklch(19% 0.014 255 / 0.78)` 半透(sRGB fallback `rgba(22,26,34,0.78)`)+ `backdrop-filter: blur(12px) saturate(140%)` 毛玻璃效果。降级:老 Chrome ≤74 不支持 backdrop-filter 直接忽略,半透背景仍生效,只是无毛玻璃质感
   - `font-size: 12px` → `10px`,跟 badge 一致

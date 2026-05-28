@@ -908,6 +908,18 @@ function qualBadgeHtml(standardNumber) {
     activePlaceholder = document.createComment('qual-tooltip-placeholder');
     badge.insertBefore(activePlaceholder, tip);
     document.body.appendChild(tip);
+    // detach 出 badge 后 `.qual-badge .qual-tooltip` 后代选择器不再命中,样式全失效。
+    // 加 floating class 触发 `.qual-tooltip.qual-tooltip-floating` 独立选择器,
+    // 把背景/字号/毛玻璃/阴影等样式重新喂上
+    tip.classList.add('qual-tooltip-floating');
+
+    // 先把 tooltip 显示出来才能拿正确的 getBoundingClientRect(尺寸)
+    tip.style.position = 'fixed';
+    tip.style.opacity = '0';                        // 暂不可见,免得在 (0,0) 闪一下
+    tip.style.left = '0px';
+    tip.style.top = '0px';
+    tip.style.transform = 'none';                   // 抹掉原 CSS 里的 translateX(-50%)
+    tip.style.zIndex = '9999';                      // 高于所有 stacking context
 
     // 用 viewport 坐标定位 —— badge.getBoundingClientRect 拿到的就是 viewport 系
     const rect = badge.getBoundingClientRect();
@@ -919,16 +931,14 @@ function qualBadgeHtml(standardNumber) {
     if (left < margin) left = margin;
     if (left + tipRect.width > window.innerWidth - margin) left = window.innerWidth - tipRect.width - margin;
     if (top < margin) top = rect.bottom + 8;
-    tip.style.position = 'fixed';
     tip.style.top = `${top}px`;
     tip.style.left = `${left}px`;
-    tip.style.transform = 'none';                   // 抹掉原 CSS 里的 translateX(-50%)
     tip.style.opacity = '1';
-    tip.style.zIndex = '9999';                      // 高于所有 stacking context
   }
 
   function hideTip() {
     if (!activeTip) return;
+    activeTip.classList.remove('qual-tooltip-floating');
     activeTip.style.opacity = '';
     activeTip.style.position = '';
     activeTip.style.top = '';
