@@ -1171,7 +1171,7 @@ async function loadPreviewSourcePicker(stdCode, year, activeFileId) {
     if (!res.ok) return; // 静默失败，picker 不显示
     const items = (data && data.items) || [];
     if (items.length < 2) return; // 只有 1 个源不显示 picker
-    const sourceLabel = { gbw: 'GBW', bz: 'BZ', by: 'BY', labr: 'Labr' };
+    const sourceLabel = { gbw: 'GBW', bz: 'BZ', by: 'BY', labr: 'Labr', spc: 'SPC' };
     const html = items.map(it => {
       const active = it.fileId === activeFileId ? 'active' : '';
       const label = sourceLabel[it.source] || it.source;

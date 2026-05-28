@@ -18,6 +18,10 @@ const FACTORIES: Partial<Record<SourceName, AdapterFactory>> = {
     const { ByAdapter } = require('../sources/by/by-adapter');
     return new ByAdapter();
   },
+  spc: () => {
+    const { getSpcAdapter } = require('../sources/spc/spc-adapter');
+    return getSpcAdapter();
+  },
 };
 
 export class SourceRegistry {

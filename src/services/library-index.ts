@@ -20,7 +20,7 @@ import { renderLibraryFilenameWithExt } from './library-naming';
 import { getSetting } from './db';
 import type { SourceName } from '../domain/standard';
 
-const SUPPORTED_SOURCES: ReadonlyArray<SourceName> = ['gbw', 'bz', 'by', 'labr'];
+const SUPPORTED_SOURCES: ReadonlyArray<SourceName> = ['gbw', 'bz', 'by', 'labr', 'spc'];
 
 // 文件名后缀里写的源名（用户可见标签）↔ 内部 canonical source。
 // 命名时用 LABEL（"BW 国标网"出现在 UI），索引和 API 用 canonical。
@@ -30,12 +30,14 @@ const SOURCE_LABEL_TO_CANONICAL: Record<string, SourceName> = {
   BZ: 'bz',
   BY: 'by',
   LB: 'labr', LABR: 'labr',
+  SPC: 'spc',
 };
 const CANONICAL_TO_LABEL: Record<SourceName, string> = {
   gbw: 'BW',
   bz: 'BZ',
   by: 'BY',
   labr: 'LB',
+  spc: 'SPC',
 };
 
 // labr 可能落非 PDF（docx/xlsx/pptx），需要按扩展名给 MIME；其它 ext 兜 octet-stream。

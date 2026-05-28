@@ -30,14 +30,14 @@ import { createTask, updateTask, getTask, findActiveTaskByKey } from '../service
 import { trackEvent } from '../services/usage-tracker';
 import { StandardService } from '../services/standard-service';
 
-const sourceEnum = z.enum(['gbw', 'bz', 'by', 'labr']);
+const sourceEnum = z.enum(['gbw', 'bz', 'by', 'labr', 'spc']);
 const DEFAULT_SOURCE_PRIORITY: SourceName[] = ['gbw', 'bz', 'by'];
 // 语义对照（很容易混）：
 // - DEFAULT_SOURCE_PRIORITY / getConfiguredSourcePriority：用于 lookupFile / 自动选源 /
 //   预览 priority 排序 —— labr 默认不进，避免污染主搜索精确匹配
 // - ALL_LIBRARY_SOURCES：用于 library-check（"绿点 = 库里有没有"，OR 语义） —— labr
 //   入库的文件也要让绿点亮，否则用户从 labr 下载后在主搜索看不到命中
-const ALL_LIBRARY_SOURCES: SourceName[] = ['gbw', 'bz', 'by', 'labr'];
+const ALL_LIBRARY_SOURCES: SourceName[] = ['gbw', 'bz', 'by', 'labr', 'spc'];
 
 /**
  * 从 settings.library_source_priority 读全局优先级；坏数据 / 缺设置 → 用默认。
@@ -50,7 +50,7 @@ function getConfiguredSourcePriority(db: Database.Database): SourceName[] {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return DEFAULT_SOURCE_PRIORITY;
     const filtered = parsed.filter((s): s is SourceName =>
-      s === 'gbw' || s === 'bz' || s === 'by' || s === 'labr');
+      s === 'gbw' || s === 'bz' || s === 'by' || s === 'labr' || s === 'spc');
     return filtered.length > 0 ? filtered : DEFAULT_SOURCE_PRIORITY;
   } catch {
     return DEFAULT_SOURCE_PRIORITY;
@@ -195,8 +195,8 @@ export function createPreviewRoutes(
         return;
       }
       const priority = getConfiguredSourcePriority(db);
-      // labr 没在默认优先级里但库里可能有 → 把所有源列出，priority 内的按其顺序，外的尾随
-      const allSources: SourceName[] = ['gbw', 'bz', 'by', 'labr'];
+      // labr / spc 没在默认优先级里但库里可能有 → 把所有源列出，priority 内的按其顺序，外的尾随
+      const allSources: SourceName[] = ['gbw', 'bz', 'by', 'labr', 'spc'];
       const ordered: SourceName[] = [
         ...priority,
         ...allSources.filter(s => !priority.includes(s)),

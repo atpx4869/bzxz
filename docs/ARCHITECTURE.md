@@ -166,6 +166,29 @@ src/sources/labr/
 - 把 labr 加进 `library_source_priority` 默认值 —— 它是补给源、用户主动选取，不应被精确搜索 fallback 链当默认候选
 - 在 labr-service 外再加 mutex —— 已经有 source-semaphore + activeByStandard 索引（如果未来用），别让请求排队等自己
 
+### 六-B. spc：第 5 源，**SourceAdapter 模式**
+
+`spc.org.cn`（中国标准在线服务网）是第 5 源，与 bz/gbw/by 同等地位挂 `SourceRegistry`。它的下载契约是「单 stdCode → 单 PDF」，跟 SourceAdapter 完美对齐，所以**不像 labr 另起 service**。
+
+```
+src/sources/spc/
+├── spc-client.ts     协议层：searchByKeyword (POST /queryfocus) /
+│                     getReaderToken (POST /stdlib/stdonline) /
+│                     downloadPdf (GET /stdlib/onlinereading?token=) /
+│                     submitLogin / getCaptcha + 纯函数 stripHighlightTags /
+│                     inferStandclass / extractTokenFromHtml / mergeCookies
+└── spc-adapter.ts    SourceAdapter 实现 + cookie 持久化（settings: spc.cookies /
+                      spc.cookies_expires_at）+ SpcAuthError → BadRequestError 自愈
+```
+
+**关键约束**：
+- **Token 单次有效**：stdonline 拿 token 必须立刻 onlinereading 用掉；detectPreview 不预拉，exportStandard 内部串联
+- **Cookie 不能自动获取**：submitlogin 需要 4 字母图形验证码；MVP 走 admin 面板「手动粘贴 Cookie」路径
+- **字节通道**：`downloadPdf` 必须 `arrayBuffer()`；Playwright/Chromium 因 `Content-Type: application/pdf;charset=utf-8` 会破坏 PDF 字节，但 Node undici 不看 charset
+
+**集成点**：`addFileToLibrary` —— spc 下载产物文件名带 `SPC` 标签，与 BW/BZ/BY/LB 并列落到 `standards_library_dir`。
+**关键资源**：源级 `Semaphore('spc', 2)`（spc 限速未压测，保守起步）+ settings 表 `spc.cookies` cookie 持久化（6 小时寿命）。
+
 ---
 
 ## 七、前端模块布局

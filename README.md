@@ -16,6 +16,7 @@
 | openstd.samr.gov.cn | `gbw` (显示为 BW) | JSON API | ddddocr 验证码 → 直接 PDF |
 | std.samr.gov.cn | `by` | JSON API | 直接 PDF |
 | 标准库补给源 | `labr` | JSON API + 独立 service（不挂 SourceRegistry） | kind=0 直拉 / kind=1 登录+preview2，限 5/天；带 multi-source preview picker |
+| spc.org.cn (中国标准在线服务网) | `spc` | POST `/queryfocus` JSON | stdonline 拿 token → onlinereading 直拉 PDF；需 Cookie（admin 面板手动粘贴） |
 
 ## 快速开始
 
@@ -51,7 +52,9 @@ start.bat
 
 ```bash
 cp .env.example .env.local
-# 编辑 .env.local 填入 LABR_USERNAME / LABR_PASSWORD 等
+# 编辑 .env.local 填入 LABR_USERNAME / LABR_PASSWORD / SPC_USERNAME / SPC_PASSWORD 等
+# 注：spc adapter 默认走 admin 面板「手动粘贴 Cookie」路径，SPC_USERNAME/PASSWORD 仅
+# 用于勘察脚本与未来 OCR-自动登录 polish，MVP 阶段可留空
 ```
 
 **桌面安装版**（NSIS 安装后）：在 `$INSTDIR`（默认 `C:\Program Files\标准盒子` 或自选目录）能直接看到 `.env.example`，复制为 `.env.local` 后填入凭据，**重启应用**即可生效。升级 / 重装会保留 `.env.local`，不必重填。
@@ -263,6 +266,9 @@ cp .env.example .env.local
 | DELETE | `/api/admin/users/:id` | 删除用户 |
 | GET | `/api/admin/users/:id/events` | 用户使用明细 |
 | POST | `/api/admin/library/rescan` | 全量重扫标准库目录 |
+| GET | `/api/admin/spc/cookie` | SPC 凭据状态：是否配置 + 过期时间（不返 cookie 真值） |
+| POST | `/api/admin/spc/cookie` | body `{ cookie, lifetimeHours? }` 粘贴浏览器拷的 SPC Cookie 字符串到 settings 表 |
+| DELETE | `/api/admin/spc/cookie` | 清空 SPC cookie（用户报告失效 / 想强制重粘） |
 | GET | `/api/admin/qual/diagnose?code=` | 资质漏命中诊断：返回 DB 行的归一化列状态、Phase1/Phase2/索引等值各路径命中情况 |
 | GET | `/api/admin/db/backups` | 列出所有 db 自动备份（userData/bzxz-db-backups/*）：name / size / mtime |
 | POST | `/api/admin/db/backups` | 手动触发一次 db 备份（打补丁 / 升级前主动留底） |
@@ -281,7 +287,7 @@ cp .env.example .env.local
 | POST | `/api/preview/request` | 查本地库；命中返回 `{status:'ready', fileId, url}`；未命中后台触发自动下载并返回 `{status:'downloading', taskId, tried}` |
 | GET | `/api/preview/task/:taskId` | 轮询自动下载任务：`pending`/`downloading`/`ready{fileId,url}`/`failed{error}` |
 | GET | `/api/preview/file/:id` | 流式回 PDF（HTTP Range + ETag + 304；`?attachment=1` 强制另存） |
-| GET | `/api/preview/files?stdCode=&year=` | 多源候选：列出该 `(stdCode, year)` 在 `gbw/bz/by/labr` 4 源里能找到的所有本地文件，供 multi-source preview picker 渲染切换条 |
+| GET | `/api/preview/files?stdCode=&year=` | 多源候选：列出该 `(stdCode, year)` 在 `gbw/bz/by/labr/spc` 5 源里能找到的所有本地文件，供 multi-source preview picker 渲染切换条 |
 | POST | `/api/preview/library-check` | 批量本地库命中检查：body `{ items: [{stdCode, year}] }`，返回每条 `{ stdCode, year, hit, fileId? }`，用于搜索结果绿点指示器 |
 | DELETE | `/api/preview/file/:id` | 删除本地文件库中的标准 PDF（物理删 + 删 `standard_files` 行；库根外路径拒绝）|
 | POST | `/api/preview/files/batch-delete` | 批量删除：body `{ ids: number[] }`；返回 `{ deleted: number[], failed: [{id,message}] }` |
@@ -425,6 +431,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **labr fix: 标准号直连中文时不再 fallback 成 `LABR-${did}`** — 实测 `GB/T 35607-2024绿色产品评价 家具`（labr title 标准号末位直接连中文，无 `|` / 空白）抽不出 stdCode → 走 `LABR-${did}` 兜底命名成 `LABR-14718 GB_T 35607-2024绿色产品评价 家具 - LB.pdf`。修：`STD_CODE_FROM_TITLE_RE` 末尾分隔符改 lookahead `(?=[|｜:：\s]|[一-鿿]|$)`，允许 CJK 字符 / 末尾终止；不消费分隔符，rest 切片改用 `m[1].length` + 单独 `^[|｜:：\s]+` strip。原有 9 个 case 全数通过 + 2 个新回归 case。历史 `LABR-${did} ...` 文件需手动改名（库内 std_code 已存成 LABR-xxx）
 - **#73 本地文件库：统一命名（批量 + 单文件，含整库快捷入口）** — 库里 V1 (`{stdCode} - {source}.pdf`) 和 V2 (`{stdCode} {title} - {source}.pdf`) 并存 + 手拷杂乱命名，给用户一键统一工具。`computeNormalizedName(input, pattern)` 复用 `parseLibraryFilename` + `renderLibraryFilenameWithExt`，保留原扩展名（labr 可能 docx/xlsx）；V1 title 缺失 → 模板引擎自动剥占位符 → willChange=false（不强行渲染会产生空段）。`renameLibraryFile` helper 抽出，PATCH / normalize 端点共用 rename + abs_path 同步逻辑。新增 `POST /api/preview/file/:id/normalize`（单文件，支持 `?dryRun=1` query）+ `POST /api/preview/files/normalize`（批量，body `{ids?, scope?, dryRun?}`，`scope='all'` 服务端拉全库 ID；三遍扫：compute → self-conflict（小写比对 Windows 文件系统）→ existing-file conflict；dryRun=true 返回 `{preview, libraryTotal}`，dryRun=false 执行）。前端工具栏 `btn-ghost`「统一命名」按钮（启用条件与批量删除一致，配色避让红色批量删除）；点击 → dryRun → `showConfirmHtml`（扩展 `confirmDisabled` + `onMount(overlay)` 钩子）渲改名列表：scope chip「仅选中 N 项 / 整个文件库 M 项」可一键切换（200ms setTimeout 防点击冒泡关闭新弹窗）、3 个 `<details>` 折叠分组（不变 / 冲突 / 无法解析，冲突默认展开）、>20 行带「全部展开」按钮、确认后实际执行。rename modal 重写为 input + 「套用内置格式」prefill 按钮 + 异步 dryRun 实时预览框（`.rename-preview-box` 绿底显示「按内置格式将变为：xxx」，已是内置格式 / 不可解析则灰字提示）。CSS 双写 `pages/local-library.css` + `public/styles.css` 加 `.normalize-chip(.active)` / `.normalize-group(.conflict/.error/.neutral)` 折叠三角动画 / `.rename-preview-box/-label/-name/-skip` 等，所有 oklch 都带 sRGB fallback。V1 title 补全（要跑源 detail）留作 #74
 - **#72 资质卡 scope chip + 部分参数限制项 + 全部参数折叠态精简** — 产品标准（GB/T、GB 等含「全部参数」/「部分参数」标记）卡头扫读力度不足。`buildQualUnifiedList` 新增 groupScope 计算（全部参数 ≻ 部分参数 ≻ null），卡头标准名称后渲 `qual-scope-badge` chip（全部=绿、部分=橙）。全部参数组 `collapsible=false`、不渲 body、arrow 替换为 16px 占位；部分参数组在卡头下方长驻 `.qual-scope-limit-row`（聚合该组所有 `limitDesc` 去重、`；` join，橙左竖线 + 6% 橙底），但仍可展开看明细（生效/到期日期）。CSS 双写 `web/src/styles/pages/qualifications.css` + `public/styles.css`，oklch 都带 sRGB fallback。搜索结果卡 `qualBadgeHtml` 不动（hint 维度 vs scope 维度语义不同）
 - **#71 搜索结果命中本地库时跳过源拉取** — 用户点搜索结果「下载」时，若绿点亮着（`_libraryFileIds` 有 fileId）+ `download_prefer_local`（默认开）未关，`downloadOne` 走新增的 `downloadFromLocal` → `/api/preview/file/:id?attachment=1`（纯本地流，无 source adapter），零联网。`/api/auth/status` 响应新增 `publicSettings.downloadPreferLocal` 让所有用户拿到全局开关（普通用户拿不到 `/api/admin/settings`）。admin 在「文件库」设置区可关 toggle，保存后通过 `window.bzxzPublicSettings` 当前会话立即生效。命中失败（用户删了物理文件）自动清缓存 + 回退源下载。「指定来源下载」不走短路（保留「我要这个源的版本」语义）。history 记 `r.sources[0]` 而非 `'local'` 避免按源统计被污染
