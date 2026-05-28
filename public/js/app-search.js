@@ -159,7 +159,6 @@ async function doSearch() {
   });
 
   let receivedCount = 0; const receivedResults = [];
-  let qualFetched = false;
   for (const p of promises) {
     const outcome = await p; receivedCount++;
     if (searchAborted) break;
@@ -178,9 +177,10 @@ async function doSearch() {
     document.getElementById('toolbar').style.display = results.length > 0 ? 'flex' : 'none';
     if (results.length > 0) renderResults();
     updateToolbar();
-    // Fetch qual badges as soon as first source returns (non-blocking)
-    if (!qualFetched && results.length > 0) {
-      qualFetched = true;
+    // 每个源返回都增量拉徽章 —— fetchQualBadges 内部按 stdCode 去重,只查新增的。
+    // 不能等"第一个源返回"就锁死(qualFetched 旧逻辑的坑):某些源返回慢、结果集差异大,
+    // 后到的结果(如 BZ 截断 size=20 漏掉、但 GBW/BY 返回的 stdCode)会拿不到徽章。
+    if (results.length > 0) {
       const stdNums = results.map(r => r.standardNumber).filter(Boolean);
       fetchQualBadges(stdNums).then(() => { if (results.length > 0) renderResults(); });
     }
@@ -199,11 +199,6 @@ async function doSearch() {
     setTimeout(hideSearchStatus, 1800);
   } else {
     hideSearchStatus();
-  }
-  // If qual badges weren't fetched yet (no results on first source), fetch now
-  if (!qualFetched && results.length > 0) {
-    const stdNums = results.map(r => r.standardNumber).filter(Boolean);
-    fetchQualBadges(stdNums).then(() => { if (results.length > 0) renderResults(); });
   }
   // Final poll for GBW text availability
   pollGbwTextAvailability();

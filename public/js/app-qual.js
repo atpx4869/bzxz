@@ -923,15 +923,23 @@ function buildQualTooltip(quals, source) {
 async function fetchQualBadges(standardNumbers) {
   if (!standardNumbers.length) return;
   try {
+    // 只查 qualData 里还没有的 stdCode —— 增量拉,避免重复网络请求
+    // 多源搜索时各源异步返回,每个源到达都调用一次本函数补查新增 stdCode
     const unique = [...new Set(standardNumbers)].filter(Boolean);
+    const pending = unique.filter(code => !(code in qualData));
+    if (!pending.length) return;
     const res = await fetch('/api/qualifications/batch-query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stdCodes: unique }),
+      body: JSON.stringify({ stdCodes: pending }),
     });
     if (!res.ok) return;
     const data = await readApiResponse(res);
-    qualData = data;
+    // merge 而非 replace:后端只返回有命中的 stdCode,但 pending 里全部 stdCode 都该
+    // 标记为"已查过"(用 [] 占位),避免下次 pending 过滤把没命中的又算成 pending
+    for (const code of pending) {
+      qualData[code] = data[code] || [];
+    }
   } catch { /* silent */ }
 }
 

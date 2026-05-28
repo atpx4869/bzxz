@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix: 资质徽章多源结果增量拉取(`app-search.js` / `app-qual.js`)** — 用户报告搜 `4463`(关键词片段)时结果列表里的 `QB/T 4463-2025` 没有任何 CMA/CNAS 徽章,但搜 `4463-2025`(精确)时同条结果有 CMA 徽章。
+  - **根因**:`app-search.js` 第一个源(通常是 BZ)返回后立即 `qualFetched = true` 锁死,只拉了 BZ 那 20 条 stdCode 的徽章 → 后到的 GBW/BY 源带来的新 stdCode(如 `QB/T 4463-2025` 在 BZ `size=20` 截断里漏掉、但 GBW 返回了)从来没被问过资质 → 自然无徽章。`fetchQualBadges` 本身 `qualData = data` 全量替换的写法,也会让后续若有补查发生时覆盖前面结果。
+  - **改 `app-search.js`**:去掉 `qualFetched` 标志位 + 收尾兜底,改为**每个源返回都调一次** `fetchQualBadges(stdNums)`(`stdNums` 是当前 `results` 全量,fetchQualBadges 内部去重)。
+  - **改 `app-qual.js`**:`fetchQualBadges` 改 **merge 而非 replace** —— 内部按 `qualData` 已有 key 过滤出 `pending`(只查新增 stdCode);响应回来后 `qualData[code] = data[code] || []` 写入(命中的填资质数组,没命中的填 `[]` 占位避免下次又被算成 pending,二次搜索同条结果不会重复请求)。新搜索时 `app-search.js:122` 仍把 `qualData = {}` 整体清空。
+  - **不动**:后端 `/api/qualifications/batch-query` 接口契约不变(z.array().max(200) 上限够 4 源 × 20 = 80);UI 渲染逻辑 `qualBadgeHtml` 不变。
 - **fix: 资质徽章收紧为同号同年命中(`queryByStdCodes`)** — 用户报告搜 `QB/T 4463-2025` 时主搜索显示有 CNAS 徽章,但「资质查询」页里 CNAS 没有这版,只有 2013 版。诊断验证:CNAS DB 里只有 `QB/T 4463-2013`(实验室 L0290),CMA DB 里 2013/2025 两版都有(机构 221700110366)。根因:`queryByStdCodes` 原本用 `WHERE std_code_base IN (...)` 跨年模糊匹配,设计意图是"实验室持有老版能力 → 新版搜索也亮徽章",但**前端 `qualBadgeHtml` / `buildQualTooltip` 并没有标年版差异**(代码注释「前端 tooltip 自行靠 year 对比标 ⚠ 跨年提示」从未兑现),用户体感就是"标准检索骗我说有 CNAS"。
   - 改:`queryByStdCodes` SQL `WHERE q.std_code_base IN (...)` → `WHERE q.std_code_norm IN (...)`,参数 `baseCodes` → `fullCodes`,反向映射 `baseToInputs` → `fullToInputs`,CNAS / CMA 两段相同改动。函数顶部注释更新:"严格同号同年命中,同号不同年视作不同资质"。删 `baseCodes` / `baseToInputs` 局部变量、`fullCodes` 那条「`void fullCodes` 占位」注释。
   - **不动 `searchQualifications`**(资质查询关键词搜) — 它本来 ORDER BY 把精确同年靠前,且 UI 列表展示完整带年 `stdCode` 让用户明确看到命中年版,跨年命中对用户是可见的有价值兜底
