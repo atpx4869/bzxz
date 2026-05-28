@@ -79,6 +79,8 @@ async function checkAuthStatus() {
     const res = await fetch('/api/auth/status', { credentials: 'same-origin' });
     const data = await readApiResponse(res);
     lastLoginRequired = !!data.loginRequired;
+    // 全站公共设置（包括 downloadPreferLocal 等下载短路开关），所有页面共用
+    window.bzxzPublicSettings = data.publicSettings || {};
     updateGuestContinueVisibility();
     if (data.user) {
       currentUser = data.user;

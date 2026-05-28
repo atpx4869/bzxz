@@ -74,7 +74,13 @@ export function createAuthRoutes(db: Database.Database, requireAuth: (req: Reque
     if (!user && !effectiveLoginRequired) {
       user = getGuestAuthUser(db);
     }
-    respond(res, { needsSetup: userCount === 0, user: toCamelCase(user), registrationEnabled, loginRequired: effectiveLoginRequired });
+    // publicSettings：所有用户都需要知道的全站行为开关。downloadPreferLocal 是命中本地
+    // 库时下载按钮短路用的（searches downloadOne 每次都要读），写在 /status 让首屏一次拿。
+    // admin PUT /api/admin/settings 改完后下次刷新页面才会生效，符合设置类配置的常规预期。
+    const publicSettings = {
+      downloadPreferLocal: getSetting(db, 'download_prefer_local', '1') === '1',
+    };
+    respond(res, { needsSetup: userCount === 0, user: toCamelCase(user), registrationEnabled, loginRequired: effectiveLoginRequired, publicSettings });
   });
 
   // POST /api/auth/register

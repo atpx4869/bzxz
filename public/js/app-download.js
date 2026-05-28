@@ -159,6 +159,64 @@ async function downloadByCurrentMode(rowId, sources, label, onProgress) {
   throw new AggregateError(errors, '所有来源下载失败');
 }
 
+/**
+ * 本地库命中场景的"下载" —— 零联网，纯文件复制。
+ *
+ * 复用 /api/preview/file/:id?attachment=1（已存在）：后端走纯本地流式读，
+ * isInsideLibrary 二次校验，不碰任何源 adapter。
+ *
+ * 行为对齐普通下载：setRowDownloadState/markLibraryHit/recordDownload/Toast/history。
+ * 唯一差异在 Toast 文案前缀「本地库命中」，便于用户排查「这次为什么秒完成」。
+ *
+ * 记录到 history 的 source 用 r.sources[0]（首选源）而非 'local'，避免
+ * 历史里多出一个 source 分类污染按源统计。
+ */
+async function downloadFromLocal(r, fileId) {
+  const sourceForHistory = (r.sources && r.sources[0]) || r._source || 'local';
+  const logId = addLog(`${r.standardNumber} 本地库命中，复制...`, 'pending');
+  const taskId = createDownloadTask({
+    standardId: r.id,
+    label: r.standardNumber,
+    sources: [sourceForHistory],
+    mode: '本地命中',
+    retry: () => downloadOne(r.id),
+  });
+  setRowDownloadState(r.id, 'downloading');
+  try {
+    // 通过物理文件名走 fetch + HEAD-less 拉取（用 GET 拿 Content-Disposition 反解文件名）
+    const res = await fetch(`/api/preview/file/${fileId}?attachment=1`);
+    if (!res.ok) throw new Error(`HTTP${res.status}`);
+    const disposition = res.headers.get('Content-Disposition') || '';
+    let fileName = r.standardNumber + '.pdf';
+    const utf8m = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+    if (utf8m) {
+      try { fileName = decodeURIComponent(utf8m[1]); } catch {}
+    }
+    const fileSize = Number(res.headers.get('Content-Length')) || undefined;
+    setRowDownloadState(r.id, 'success');
+    markLibraryHit(r.id, fileId);
+    // 用 downloadLocalFile 而不是 triggerDownload：后者在 Electron 时直接 return（避免
+    // 「源下载完已 rename 进库 + 再 will-download 拷一份」的双副本问题），但本地命中场景
+    // 文件本来就在库里，没有 rename 这步 —— Electron 用户**需要**触发 will-download 把
+    // 库里那份复制一份到 Desktop/bzxz/（用户自己的「我下载的文件」位置），跟普通下载体验一致。
+    downloadLocalFile(fileId, fileName);
+    recordDownload(sourceForHistory, fileName, r.standardNumber);
+    updateLog(logId, `${r.standardNumber} ✅ 本地库命中 ${fileName}`, 'success');
+    completeDownloadTask(taskId, 'success', { source: sourceForHistory, fileName, fileSize, progress: '本地库命中' });
+    showToast(`本地库命中，复制完成: ${fileName}`);
+  } catch (e) {
+    const msg = e?.message || '本地复制失败';
+    // 本地命中失败几乎只有「文件被用户在资源管理器里删了 / 移走了」一种可能 ——
+    // 这种降级到走源是正确做法，否则用户体验等于「绿点亮着但下载按钮罢工」。
+    updateLog(logId, `${r.standardNumber} 本地复制失败：${msg}，回退源下载`, 'pending');
+    completeDownloadTask(taskId, 'fail', { error: msg, progress: '本地复制失败，回退源下载' });
+    // 清掉脏缓存，downloadOne 重入时不会再触发本地短路
+    if (typeof _libraryFileIds !== 'undefined') _libraryFileIds.delete(r.id);
+    if (typeof applyLibraryDots === 'function') applyLibraryDots();
+    return downloadOne(r.id);
+  }
+}
+
 function summarizeDownloadError(e) {
   if (e instanceof AggregateError) {
     return [...new Set(e.errors.map(err => err.message || String(err)))].slice(0, 3).join('; ');
@@ -169,6 +227,17 @@ function summarizeDownloadError(e) {
 async function downloadOne(id, btn) {
   const r = findResultByAnyId(id); if (!r) return;
   downloadAborted = false;
+
+  // 本地优先短路：命中绿点 + 用户没关 download_prefer_local 时走本地文件直发，
+  // 跳过所有源 adapter。labr/by/gbw 有日配额，命中场景里再发一遍请求纯属浪费。
+  // 「指定来源下载」不走这里（用户明确指定源 = 隐含「我要这个源的版本」语义）。
+  // 默认 true：用户原话"本地有就优先本地"。 admin 在「文件库」设置区可关。
+  const preferLocal = !window.bzxzPublicSettings || window.bzxzPublicSettings.downloadPreferLocal !== false;
+  const localFid = (typeof _libraryFileIds !== 'undefined') ? _libraryFileIds.get(r.id) : null;
+  if (preferLocal && localFid) {
+    return downloadFromLocal(r, localFid);
+  }
+
   const sources = getOrderedDownloadSourcesForResult(r);
   if (!sources.length) { addLog(`${r.standardNumber} 无可用下载源`, 'fail'); return; }
   setRowDownloadState(r.id, 'downloading');

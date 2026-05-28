@@ -526,8 +526,10 @@ function renderFileLibrary() {
     const previewBtn = isLib && f.previewUrl
       ? `<button class="btn btn-ghost btn-xs" onclick="openLocalPreview(${f.fileId})">预览</button>`
       : '';
+    // Win 桌面端：库结果隐藏「下载」（用户可用「打开路径」直接拿物理文件，HTTP 下载多余）
+    // Web 浏览器端：保留（远程/内网用户唯一拷文件的路径）
     const downloadBtn = isLib
-      ? `<button class="btn btn-ghost btn-xs" onclick="downloadLocalFile(${f.fileId}, '${escapeAttr(f.fileName)}')">下载</button>`
+      ? (isElectron ? '' : `<button class="btn btn-ghost btn-xs" onclick="downloadLocalFile(${f.fileId}, '${escapeAttr(f.fileName)}')">下载</button>`)
       : `<button class="btn btn-ghost btn-xs" data-download-file="${escapeAttr(f.fileName)}">下载</button>`;
     const openPathBtn = isLib && isElectron
       ? `<button class="btn btn-ghost btn-xs" onclick="revealLocalFile(${f.fileId})">打开路径</button>`

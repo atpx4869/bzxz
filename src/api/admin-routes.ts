@@ -73,6 +73,9 @@ function readAdminSettings(db: Database.Database) {
       getSetting(db, 'library_source_priority', JSON.stringify(DEFAULT_SOURCE_PRIORITY)),
     ),
     libraryWatcherEnabled: getSetting(db, 'library_watcher_enabled', '1') === '1',
+    // 下载短路：搜索结果命中本地库时跳过源拉取，直接给用户那份 standards/ 的本地文件。
+    // 默认开（用户原话「本地有就优先本地」）。极少数想强刷源版本的场景可关。
+    downloadPreferLocal: getSetting(db, 'download_prefer_local', '1') === '1',
   };
 }
 
@@ -130,6 +133,8 @@ export function createAdminRoutes(db: Database.Database) {
         // chokidar 监听：用户把 PDF 拖到库目录后自动入索引。
         // 默认开启，少数 OneDrive/NAS/网盘场景手抖才需要关。
         libraryWatcherEnabled: z.boolean().optional(),
+        // 下载短路开关（详见 readAdminSettings）
+        downloadPreferLocal: z.boolean().optional(),
       });
       const updates = schema.parse(req.body);
       if (updates.registrationEnabled !== undefined) {
@@ -151,6 +156,9 @@ export function createAdminRoutes(db: Database.Database) {
         // 去重保序：用户传 ['bz','gbw','bz'] 时退化为 ['bz','gbw']
         const dedup = Array.from(new Set(updates.librarySourcePriority));
         setSetting(db, 'library_source_priority', JSON.stringify(dedup));
+      }
+      if (updates.downloadPreferLocal !== undefined) {
+        setSetting(db, 'download_prefer_local', updates.downloadPreferLocal ? '1' : '0');
       }
       if (updates.libraryWatcherEnabled !== undefined) {
         setSetting(db, 'library_watcher_enabled', updates.libraryWatcherEnabled ? '1' : '0');

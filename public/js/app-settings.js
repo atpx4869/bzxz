@@ -724,7 +724,32 @@ function renderLibraryStatus() {
       '<label class="library-toggle"><input type="checkbox" id="libraryWatcherEnabledChk"' +
         (s.libraryWatcherEnabled === false ? '' : ' checked') +
         ' onchange="saveLibraryWatcherEnabled(this.checked)"> 启用</label>' +
-      '<span class="library-hint">（用户手动拖 PDF 到库目录自动入索引；OneDrive/NAS 抖动可关）</span></div>';
+      '<span class="library-hint">（用户手动拖 PDF 到库目录自动入索引；OneDrive/NAS 抖动可关）</span></div>' +
+    '<div class="library-row"><span class="library-row-label">本地优先下载</span>' +
+      '<label class="library-toggle"><input type="checkbox" id="downloadPreferLocalChk"' +
+        (s.downloadPreferLocal === false ? '' : ' checked') +
+        ' onchange="saveDownloadPreferLocal(this.checked)"> 启用</label>' +
+      '<span class="library-hint">（搜索结果命中本地库时跳过源下载，省配额、秒完成；想强刷源版本可关）</span></div>';
+}
+
+async function saveDownloadPreferLocal(enabled) {
+  try {
+    var res = await apiFetch('/api/admin/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ downloadPreferLocal: !!enabled }),
+    });
+    var data = await readApiResponse(res);
+    libraryState.data = data;
+    // 当前会话立即生效（避免要求用户刷新页面才能看到行为变化）
+    if (!window.bzxzPublicSettings) window.bzxzPublicSettings = {};
+    window.bzxzPublicSettings.downloadPreferLocal = !!enabled;
+    showToast(enabled ? '已启用本地优先下载' : '已关闭本地优先下载');
+  } catch (e) {
+    showToast((e && e.message) || '保存失败', 'fail');
+    var chk = document.getElementById('downloadPreferLocalChk');
+    if (chk) chk.checked = !enabled;
+  }
 }
 
 async function saveLibraryWatcherEnabled(enabled) {

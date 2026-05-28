@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **#71 搜索结果命中本地库时跳过源拉取**：之前用户在搜索结果点「下载」，即使绿点亮着（本地已有）也会再走一遍 source 级联，labr/by/gbw 都有日配额，命中场景重复拉纯属浪费。本次：
+  - **`public/js/app-download.js` `downloadOne` 入口加短路**：`_libraryFileIds.get(r.id)` 有 fileId + `window.bzxzPublicSettings.downloadPreferLocal !== false` 时走新增的 `downloadFromLocal(r, fileId)` —— 复用 `/api/preview/file/:id?attachment=1`（纯本地流，无 source adapter），通过 `downloadLocalFile` 触发浏览器/Electron `will-download` 钩子，跟普通下载体验对齐（行状态、绿点、Toast、history 都正常）。Toast 文案前缀「本地库命中，复制完成」便于用户区分。
+  - **本地命中失败兜底**：用户在资源管理器里删了 / 移走文件后再点下载会失败，自动清缓存里的 fileId（防 stale 绿点）→ 回退源下载。
+  - **「指定来源下载」不走短路**：`downloadSpecificSource` 不受影响，保留「我要这个源的版本」语义（用于校对源差异）。
+  - **`src/api/admin-routes.ts` 新增 setting `download_prefer_local`（默认 `'1'`）**：admin 在「文件库」设置区可关；toggle 在 `public/js/app-settings.js` 的 `renderLibraryStatus` 加了一行，保存后通过 `window.bzxzPublicSettings` 当前会话立即生效，无需刷新。
+  - **`src/api/auth-routes.ts` GET /api/auth/status 响应新增 `publicSettings.downloadPreferLocal`**：写在 `/status` 让首屏一次拿（普通用户拿不到 `/api/admin/settings`），前端 `app-auth-admin.js` 的 `checkAuthStatus` 把它写到 `window.bzxzPublicSettings`，全局所有页面共用。
+  - **记 history 时 source 用 `r.sources[0]`** 而非 `'local'`，避免历史按源统计被污染（多一个 fake source 分类）。
+- **#70 Win 桌面端本地文件库 tab 隐藏「下载」按钮**：用户原话「内网用户才需要下载」—— 桌面端用户可用「打开路径」直接在资源管理器拿物理文件，HTTP 下载多余。`public/js/app-detail-utils.js` `renderFileLibrary` 库结果列 `isElectron === true` 时不渲染 `downloadBtn`；导出文件列（kind!=='library'）维持原样不动。Web 浏览器端（手机/局域网）保留，是远程用户唯一拷文件的路径。
 - **#69 本地文件库：标准号显示修复 + 标准名称列 + 默认命名带 title**：之前用户在本地文件库搜「3324」看到的是 `GB3324-2024`（应为 `GB/T 3324-2024`），表头是「文件名」（实际是物理 fileName 整串），新下载的文件名不带 title。三处一起改：
   - **`src/api/app.ts` /api/downloads**：library 行的 `standardNumber` 不再用 `std_code_norm + year` 拼装（`std_code_norm` 是 `extractBaseCode` 产物，故意剥掉 `/T` 大写化了，给索引用而非展示用），改成 `parseLibraryFilename(basename(abs_path)).stdCodeRaw` 反解物理文件名 → `GB/T 3324-2024` 原样还原。parse 失败（用户手放进库的非规范命名）兜底回旧逻辑。response 同时新增 `title` 字段（V2 命名 `{stdCode} {title} - {source}.pdf` 解析得到）冒给前端。
   - **默认命名模板从 `{stdCode} - {source}` 改为 `{stdCode} {title} - {source}`**：`src/api/admin-routes.ts:71` + `src/services/library-index.ts:597` 两处同步；`download-to-library.ts` 已经在拉 detail 把 title 传进 `addFileToLibrary`，新下载自动落成 `GB_T 3324-2024 木家具通用技术条件 - BW.pdf`。已在 admin 设置里改过 pattern 的用户不受影响（DB 已存的 setting 值优先）。
