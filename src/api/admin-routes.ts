@@ -68,7 +68,7 @@ function readAdminSettings(db: Database.Database) {
     lanGuestAllowed: getSetting(db, 'lan_guest_allowed', '0') === '1',
     defaultAllowedTabs: resolveDefaultAllowedTabs(db),
     standardsLibraryDir: getSetting(db, 'standards_library_dir', ''),
-    libraryFilenamePattern: getSetting(db, 'library_filename_pattern', '{stdCode} - {source}'),
+    libraryFilenamePattern: getSetting(db, 'library_filename_pattern', '{stdCode} {title} - {source}'),
     librarySourcePriority: parseSourcePriority(
       getSetting(db, 'library_source_priority', JSON.stringify(DEFAULT_SOURCE_PRIORITY)),
     ),

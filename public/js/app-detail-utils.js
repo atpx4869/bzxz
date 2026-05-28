@@ -507,7 +507,8 @@ function renderFileLibrary() {
   const count = document.getElementById('fileLibraryCount');
   if (!list || !count) return;
   const q = (document.getElementById('fileLibrarySearch')?.value || '').trim().toLowerCase();
-  const items = fileLibraryItems.filter(f => !q || `${f.fileName} ${f.standardNumber}`.toLowerCase().includes(q));
+  // 搜索覆盖：fileName（用户记得原始物理名）+ standardNumber + title（标准中文名）
+  const items = fileLibraryItems.filter(f => !q || `${f.fileName} ${f.standardNumber} ${f.title || ''}`.toLowerCase().includes(q));
   count.textContent = String(items.length);
   // 清理已不在当前过滤集合内的选中项
   const visibleIds = new Set(items.filter(f => f.kind === 'library').map(f => f.fileId));
@@ -537,10 +538,13 @@ function renderFileLibrary() {
     const delBtn = isLib
       ? `<button class="btn btn-ghost btn-xs danger" onclick="deleteLibraryFile(${f.fileId}, '${escapeAttr(f.fileName)}')">删除</button>`
       : `<button class="btn btn-ghost btn-xs danger" onclick="deleteExportFile('${escapeAttr(f.fileName)}')">删除</button>`;
+    // 标准名称列优先用 title（V2 命名带 title）；老文件 title='' 时 fallback 用 fileName
+    // 让用户至少能看到一段标识。tooltip 始终是完整 fileName 便于排查物理路径。
+    const nameDisplay = f.title || f.fileName;
     return `<tr data-file-id="${isLib ? f.fileId : ''}">
       <td class="local-col-check">${isLib ? `<input type="checkbox" ${checked} onchange="onLocalCheck(${f.fileId}, this.checked)">` : ''}</td>
       <td><strong>${escapeHtml(f.standardNumber || f.fileName)}</strong></td>
-      <td class="local-col-name" title="${escapeHtml(f.fileName)}">${escapeHtml(f.fileName)}</td>
+      <td class="local-col-name" title="${escapeHtml(f.fileName)}">${escapeHtml(nameDisplay)}</td>
       <td>${escapeHtml(f.source || (isLib ? '本地' : '导出'))}</td>
       <td>${escapeHtml(formatSize(f.size))}</td>
       <td>${escapeHtml(utcToBeijing(f.mtime))}</td>

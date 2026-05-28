@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **#69 本地文件库：标准号显示修复 + 标准名称列 + 默认命名带 title**：之前用户在本地文件库搜「3324」看到的是 `GB3324-2024`（应为 `GB/T 3324-2024`），表头是「文件名」（实际是物理 fileName 整串），新下载的文件名不带 title。三处一起改：
+  - **`src/api/app.ts` /api/downloads**：library 行的 `standardNumber` 不再用 `std_code_norm + year` 拼装（`std_code_norm` 是 `extractBaseCode` 产物，故意剥掉 `/T` 大写化了，给索引用而非展示用），改成 `parseLibraryFilename(basename(abs_path)).stdCodeRaw` 反解物理文件名 → `GB/T 3324-2024` 原样还原。parse 失败（用户手放进库的非规范命名）兜底回旧逻辑。response 同时新增 `title` 字段（V2 命名 `{stdCode} {title} - {source}.pdf` 解析得到）冒给前端。
+  - **默认命名模板从 `{stdCode} - {source}` 改为 `{stdCode} {title} - {source}`**：`src/api/admin-routes.ts:71` + `src/services/library-index.ts:597` 两处同步；`download-to-library.ts` 已经在拉 detail 把 title 传进 `addFileToLibrary`，新下载自动落成 `GB_T 3324-2024 木家具通用技术条件 - BW.pdf`。已在 admin 设置里改过 pattern 的用户不受影响（DB 已存的 setting 值优先）。
+  - **本地文件库表头 + 列内容**：`public/index.html` + `web/index.html` 镜像，「文件名」改成「标准名称」；搜索框 placeholder 改「按标准号或标准名称筛选…」。`public/js/app-detail-utils.js` 的 `renderFileLibrary` 列内容改用 `f.title || f.fileName` 渲染，tooltip 仍是完整 fileName 方便排查物理路径；过滤搜索覆盖 `fileName + standardNumber + title` 三个字段。
+  - **老文件不批量重命名**：表里没存 title 列、老文件名也不带 title，要补必须按 source + stdCode 重新拉 detail。用户后续手动编辑或删后重下即可补全；批量改名留作 #70 评估（要协调多源限速 + 不同 source 不同登录链路）。
+- **#68 桌面安装版 .env.local 配置落地**：之前 `.env.example` 只在仓库根存在、`env-loader.ts` 只查 `process.cwd()/.env.local` —— 用户用 NSIS 安装包装完后，`$INSTDIR` 里既看不到模板也不知道把 `.env.local` 放哪，labr 等需要凭据的源直接报「凭据未配置」无法使用。本次三处补齐：
+  - **`package.json` 的 `extraResources` 加 `.env.example`** → 打包后落到 `$INSTDIR\resources\.env.example`
+  - **`build/installer.nsh` 的 `customInstall` 段把模板 `CopyFiles` 到 `$INSTDIR\.env.example`** → 用户在 INSTDIR 直接可见；`customUnInit` / `customRemoveFiles` 把 `$INSTDIR\.env.local` 也按"备份-Rename-还原"模式保留，升级 / 重装不丢凭据
+  - **`src/shared/env-loader.ts` 扩展搜索路径**：`cwd/.env.local` 不存在时再查 `dirname(process.execPath)/.env.local`，安装版 / portable 都能命中 exe 同级的 `.env.local`；命中后打一行 log 方便定位
+  - **README 凭据配置段补桌面安装版说明** —— 三种部署形态（源码 / 安装版 / portable）各自的 `.env.local` 放置位置都写清楚
 - **#67 手机端「下载/收藏」入口双 entry 对齐**：之前 `web/src/styles/responsive.css:191-206` 已经把手机端的下载中心、卡片下载/收藏按钮、「只看收藏」chip、「下载历史」入口全部 `display:none`，但 legacy `public/index.html` 直接 `<link>` 的 `public/styles.css` 漏了同步 → 用 legacy 入口进访的手机端还能看到这些按钮，违反 CSS 迁移期「重复加载、cascade 等价」契约。本次在 `public/styles.css` 的 `@media (max-width:640px)` 块末尾镜像同一段（注释 + 6 行规则），两个 HTML 入口行为一致。
   - **JS 端键盘 `d` 也补一道兜底（`public/js/app-search.js:1281`）**：原本 `toggleSavedStandard` 已有 `isMobile()` early-return、右键菜单按 `onMobile` 过滤，但快捷键 `d` 没检查 —— 手机外接键盘场景能绕 CSS 触发 `downloadOne`。现在 `d` 分支也加 `if (window.isMobile && window.isMobile()) return;`，与 `s` / 右键菜单的兜底风格一致。
 - **#66 本地文件库独立成顶级 tab + 5 项管理能力**：之前"本地文件库"是「下载历史」tab 里的一个 card，随着用户积累的标准 PDF 增多，已不堪用。本次拆出为独立 sidebar 入口 `data-tab="local"`，改表格布局（标准号 / 文件名 / 来源 / 大小 / 时间 / 操作），去掉原"路径"列；每行 5 个动作：`预览 / 下载 / 打开路径 / 编辑 / 删除`；表头复选 + 单行复选 + "全选 / 批量删除"工具条。

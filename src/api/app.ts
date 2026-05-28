@@ -15,7 +15,7 @@ import { createQualificationRoutes } from './cnas-routes';
 import { createStandardsRoutes } from './standards-routes';
 import { createPreviewRoutes } from './preview-routes';
 import { createLabrRoutes } from './labr-routes';
-import { scanLibrary, startLibraryWatcher } from '../services/library-index';
+import { scanLibrary, startLibraryWatcher, parseLibraryFilename } from '../services/library-index';
 import { getSetting } from '../services/db';
 import { AppError } from '../shared/errors';
 import { respond, respondError } from '../shared/response';
@@ -167,19 +167,31 @@ export function createApp() {
         `SELECT id, std_code_norm, year, source, abs_path, size, mtime, indexed_at
          FROM standard_files ORDER BY indexed_at DESC`
       ).all() as Array<{ id: number; std_code_norm: string; year: string; source: string; abs_path: string; size: number; mtime: number; indexed_at: string }>;
-      const libraryItems = libraryRows.map(r => ({
-        fileName: path.basename(r.abs_path),
-        size: r.size,
-        mtime: new Date(r.mtime).toISOString(),
-        standardNumber: r.std_code_norm + (r.year ? `-${r.year}` : ''),
-        source: r.source,
-        path: r.abs_path,
-        // 预览端点既支持 inline（默认）也支持 attachment=1，前端按需拼参数
-        downloadUrl: `/api/preview/file/${r.id}?attachment=1`,
-        previewUrl: `/api/preview/file/${r.id}`,
-        kind: 'library' as const,
-        fileId: r.id,
-      }));
+      const libraryItems = libraryRows.map(r => {
+        const fileName = path.basename(r.abs_path);
+        // 反解 fileName 拿真正的 stdCode 形态（带 /T、大小写正确）和 title。
+        // std_code_norm 经过 extractBaseCode 剥前缀大写化、不适合直接展示给用户。
+        // 兜底：parse 失败（用户手放进库的不规范命名）退回归一化拼装。
+        const parsed = parseLibraryFilename(fileName);
+        const standardNumber = parsed
+          ? (parsed.stdCodeRaw || (r.std_code_norm + (r.year ? `-${r.year}` : '')))
+          : (r.std_code_norm + (r.year ? `-${r.year}` : ''));
+        const title = parsed?.title || '';
+        return {
+          fileName,
+          size: r.size,
+          mtime: new Date(r.mtime).toISOString(),
+          standardNumber,
+          title,
+          source: r.source,
+          path: r.abs_path,
+          // 预览端点既支持 inline（默认）也支持 attachment=1，前端按需拼参数
+          downloadUrl: `/api/preview/file/${r.id}?attachment=1`,
+          previewUrl: `/api/preview/file/${r.id}`,
+          kind: 'library' as const,
+          fileId: r.id,
+        };
+      });
       const items = [...libraryItems, ...exportItems].sort((a, b) =>
         String(b.mtime).localeCompare(String(a.mtime)));
       respond(res, { items });

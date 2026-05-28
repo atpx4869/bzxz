@@ -244,7 +244,7 @@
       <button class="btn btn-sm btn-ghost" onclick="refreshFileLibrary()">刷新</button>
     </div>
     <div class="local-toolbar">
-      <input class="library-search" id="fileLibrarySearch" placeholder="按标准号或文件名筛选…" oninput="renderFileLibrary()">
+      <input class="library-search" id="fileLibrarySearch" placeholder="按标准号或标准名称筛选…" oninput="renderFileLibrary()">
       <div class="local-toolbar-actions">
         <span class="badge-count"><span id="fileLibraryCount">0</span> 项 · 已选 <span id="fileLibrarySelectedCount">0</span></span>
         <button class="btn btn-sm btn-ghost" id="fileLibrarySelectAll" onclick="toggleLocalSelectAll()">全选</button>
@@ -257,7 +257,7 @@
           <tr>
             <th class="local-col-check"><input type="checkbox" id="fileLibraryCheckAll" onchange="onLocalCheckAll(this.checked)"></th>
             <th>标准号</th>
-            <th>文件名</th>
+            <th>标准名称</th>
             <th>来源</th>
             <th>大小</th>
             <th>时间</th>

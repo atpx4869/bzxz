@@ -47,14 +47,21 @@ start.bat
 
 部分源需要账号登录。复制 `.env.example` 为 `.env.local` 填入真实凭据：
 
+**开发 / 源码运行**（仓库根目录）：
+
 ```bash
 cp .env.example .env.local
 # 编辑 .env.local 填入 LABR_USERNAME / LABR_PASSWORD 等
 ```
 
+**桌面安装版**（NSIS 安装后）：在 `$INSTDIR`（默认 `C:\Program Files\标准盒子` 或自选目录）能直接看到 `.env.example`，复制为 `.env.local` 后填入凭据，**重启应用**即可生效。升级 / 重装会保留 `.env.local`，不必重填。
+
+**Portable 版**：在 portable exe 同级目录创建 `.env.local`，与安装版同样被 `dirname(process.execPath)` 命中。
+
 `.env.local` 已在 `.gitignore` 中，绝不会被提交。加载时机：
 - Web 后端 `src/index.ts` / Electron 主进程 `electron/main.ts` 启动时
 - `scripts/sources/**/inspect-*.ts` 勘察脚本自行加载
+- 搜索顺序：`process.cwd()/.env.local` → `dirname(process.execPath)/.env.local`，命中第一个就停
 - 真实环境变量（CI / shell `set`）优先级高于 `.env.local`（`override: false`）
 
 支持的键见 `.env.example`。新增源的凭据按 `<SOURCE>_USERNAME` / `<SOURCE>_PASSWORD` 命名约定。
@@ -418,6 +425,9 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **#69 本地文件库标准号显示修复 + 标准名称列 + 默认命名带 title** — 本地文件库搜「3324」之前看到 `GB3324-2024`（应为 `GB/T 3324-2024`），表头「文件名」实际渲染物理 fileName。修：① `/api/downloads` library 行的 `standardNumber` 改为 `parseLibraryFilename(basename(abs_path)).stdCodeRaw` 反解物理名（带 `/T`，原大小写），不再用归一化列拼装；response 同时新增 `title` 字段。② 默认 `library_filename_pattern` 从 `{stdCode} - {source}` 升级为 `{stdCode} {title} - {source}`（新下载自动落成 `GB_T 3324-2024 木家具通用技术条件 - BW.pdf`；已改过 admin 设置的用户不动）。③ 表头「文件名」改「标准名称」（`public/index.html` + `web/index.html` 双镜像），列内容用 `title || fileName`，tooltip 仍是完整 fileName 便于排查物理路径。老文件批量改名留作 #70 评估（要协调多源限速 / 不同登录链路）
+- **#68 桌面安装版 .env.local 配置落地** — `.env.example` 进 `extraResources` + NSIS `customInstall` CopyFiles 到 `$INSTDIR\.env.example` 让用户直接看到模板；`env-loader.ts` 扩展搜索路径加 `dirname(process.execPath)/.env.local`，安装版 / portable 都能命中 exe 同级；NSIS `customUnInit` + `customRemoveFiles` 把 `.env.local` 按"备份-Rename-还原"模式保留，升级 / 重装不丢凭据
+- **#67 手机端「下载/收藏」入口双 entry 对齐** — 之前 `web/src/styles/responsive.css:191-206` 已把手机端下载中心、卡片下载/收藏按钮、「只看收藏」chip、「下载历史」入口全部 `display:none`，但 legacy `public/styles.css` 漏了同步 → legacy 入口的手机端还能看到。本次镜像同段 + `app-search.js` 键盘 `d` 加 isMobile early-return（防外接键盘绕过）
 - **#66 本地文件库独立成顶级 tab + 完整管理能力** — 把"本地文件库"从「下载历史」tab 抽出来成独立侧边栏入口 `data-tab="local"`，改为表格布局（标准号 / 文件名 / 来源 / 大小 / 时间 / 操作），去掉原"路径"列。每行 5 个动作：`预览`（新 tab 打开 `/api/preview/file/:id`） / `下载`（`?attachment=1`） / `打开路径`（仅 Electron 桌面端显示，通过 IPC 走 `shell.showItemInFolder`；Web 端 fallback 为"复制路径"） / `编辑`（rename 物理文件名，保留 `std_code_norm` 索引键不动） / `删除`（带二次确认 `showConfirm`）。新增表头复选框 + 单行复选 + 「全选 / 批量删除」工具条，批量删走 `POST /api/preview/files/batch-delete`。后端新增 4 个端点：`DELETE /api/preview/file/:id`、`POST /api/preview/files/batch-delete`、`POST /api/preview/file/:id/reveal`（Electron-only，`process.env.BZXZ_ELECTRON` 卡口）、`PATCH /api/preview/file/:id`（rename，校验非法字符 + 防路径越界 + 拒绝覆盖同名）。Electron `electron/main.ts` 加 `BZXZ_ELECTRON=1` + 监听 `process.on('bzxz:reveal-in-folder')` 调 `shell.showItemInFolder`。「下载历史」tab 留下"收藏标准"和"下载历史"两个 card，标题改为"下载历史"，副标题点明"收藏夹用于监控收藏标准是否有新版本"
 - **#65 Labr sidebar 文案 + 位置调整** — 把 「Labr库检索」按钮从「资质查询」之后挪到「标准检索」紧下方（高频使用→放高优先级位置）；副标题从 `labr.cc 标准库补给` 简化为 `标准库补给`（不在 UI 中暴露具体上游域名）。`public/index.html` + `web/index.html` 双 entry 镜像；`public/js/app-auth-admin.js` 的 `TAB_LABELS` / `TAB_ITEMS` 同步。README 的"支持的标准源"表行 `labr.cc` 改为 `标准库补给源`（用户向描述），API 表里的 `source=labr` 保留（开发者文档参考）
 - **labr #64 双 fix** — ① Labr 搜索结果 title 不再字面出现 `<font color="red">`：`sanitizeLabrTitle` 把上游高亮 `<font>` 整体转 `<mark>` 再统一 escape，规避之前 escape 链没转 `"` 导致白名单正则永远失配的 bug。② labr 入库的标准在主搜索预览也亮绿点：`/api/preview/library-check` 默认改用 4 源全集 `ALL_LIBRARY_SOURCES`（"绿点 = 库里有没有"OR 语义），与 `/api/preview/files` / `runAutoDownload` 的"自动选源"priority 语义解耦

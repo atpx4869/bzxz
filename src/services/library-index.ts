@@ -594,7 +594,7 @@ export async function addFileToLibrary(
     }
   }
 
-  const pattern = getSetting(db, 'library_filename_pattern', '{stdCode} - {source}');
+  const pattern = getSetting(db, 'library_filename_pattern', '{stdCode} {title} - {source}');
   const ext = (params.ext || path.extname(params.srcPath).replace(/^\./, '') || 'pdf').toLowerCase();
   const fileName = renderLibraryFilenameWithExt(pattern, {
     stdCode: params.stdCode,
