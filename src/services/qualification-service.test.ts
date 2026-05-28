@@ -190,7 +190,7 @@ function makeTestDb() {
   return db;
 }
 
-describe('queryByStdCodes (Step 2-3: index-based exact + fuzzy match)', () => {
+describe('queryByStdCodes (Step 2-3: index-based exact match, strict same-year)', () => {
   it('finds GB/T 3325-2024 across stray-whitespace variant via std_code_base index', () => {
     // 老回归 case 升级：原来用 800 行 GB 噪音测 LIKE+LIMIT 截断；
     // 新算法用 std_code_base 索引等值匹配，根本不用 LIMIT 兜底，但回归 case 留着确保
@@ -219,9 +219,10 @@ describe('queryByStdCodes (Step 2-3: index-based exact + fuzzy match)', () => {
     db.close();
   });
 
-  it('cross-year fuzzy match: searching 2024 returns 2017 / 2008 versions of same standard', () => {
-    // 产品语义"同一标准的所有版本都标徽章"。诊断面板验证过：DB 真实情况下 CMA 有 2017/2008/1995 三版，
-    // 用户搜 2024 时全都应该回 —— 上层 tooltip 靠 year 对比标 ⚠ 跨年提示
+  it('does NOT match different years of same standard: search 2024 ignores 2017/2008/1995 versions', () => {
+    // 产品语义"同号不同年 = 不同资质"。DB 里有 GB/T 3325 的 2017/2008/1995 三版,
+    // 用户搜 2024 时全都不命中 —— 防止"实验室持有老版能力 → 新版搜索误亮徽章"。
+    // 跨年复用需求请走 /resources/standard-search 关键词查询(用户能看到具体年版)。
     const db = makeTestDb();
     db.prepare("INSERT INTO cma_labs (cert_number, lab_name) VALUES ('CERT001', 'Test CMA')").run();
     const insert = db.prepare(`
@@ -235,12 +236,28 @@ describe('queryByStdCodes (Step 2-3: index-based exact + fuzzy match)', () => {
     const svc = new QualificationService(db as any);
     const result = svc.queryByStdCodes(['GB/T 3325-2024']);
 
-    // 三版历史记录都该回来 —— 跨年模糊匹配是 base 列等值
+    // 同号跨年不再命中 —— 严格同年同号才贴徽章
+    expect(result['GB/T 3325-2024']).toBeUndefined();
+    db.close();
+  });
+
+  it('matches when DB has the exact same year as input', () => {
+    // 同号同年正常命中 —— 收紧逻辑不影响正常路径
+    const db = makeTestDb();
+    db.prepare("INSERT INTO cma_labs (cert_number, lab_name) VALUES ('CERT001', 'Test CMA')").run();
+    const insert = db.prepare(`
+      INSERT INTO cma_qualifications (cert_number, std_code, std_code_norm, std_code_base, std_name, effective_date, expiry_date, category, test_item, test_standard, limit_desc)
+      VALUES ('CERT001', ?, ?, ?, '', '', '', '', '', '', '')
+    `);
+    const code = 'GB/T 3325-2024';
+    insert.run(code, extractFullCode(code), extractBaseCode(code));
+
+    const svc = new QualificationService(db as any);
+    const result = svc.queryByStdCodes(['GB/T 3325-2024']);
+
     expect(result['GB/T 3325-2024']).toBeDefined();
-    const stdCodes = result['GB/T 3325-2024'].map(q => q.stdCode);
-    // 同 cert_number / source 的多条会被 addMatch 按 source+labNo 去重 —— 这里只剩 1 条
-    expect(stdCodes.length).toBe(1);
-    expect(stdCodes[0]).toMatch(/3325/);
+    expect(result['GB/T 3325-2024'].length).toBe(1);
+    expect(result['GB/T 3325-2024'][0].stdCode).toBe('GB/T 3325-2024');
     db.close();
   });
 

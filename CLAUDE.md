@@ -99,12 +99,12 @@ Chrome ≤109 上整条 declaration 解析失败，主题崩。
 `cnas_qualifications` / `cma_qualifications` 任何 INSERT 都必须三层防御一起做：
 
 1. **`cleanStdCode(raw)`** — 抓取入库前折叠年份连字符附近的多空格（不动前缀大小写）。让 DB 里 `std_code` 字段本身干净，保证 `LIKE '%3325-%'` 这种子串查询不漏命中
-2. **`std_code_norm = extractFullCode(std_code)`** — 保留年份的归一化（精确匹配用）
-3. **`std_code_base = extractBaseCode(std_code)`** — 剥年份的归一化（跨年模糊匹配用）
+2. **`std_code_norm = extractFullCode(std_code)`** — 保留年份的归一化（精确同号同年匹配用,**主搜索资质徽章 `queryByStdCodes` 只用这层**）
+3. **`std_code_base = extractBaseCode(std_code)`** — 剥年份的归一化（跨年模糊兜底,**仅「资质查询」页关键词搜 `searchQualifications` 在用**,UI 列表展示完整带年 stdCode 让用户看见命中年版）
 
 `src/shared/std-code.ts` 是单一真相源，db.ts 启动时检测列空自动回填 + 检测脏空格自动 fixup。
 
-**Why:** 三层各管一类问题。cleanStdCode 解决 CNAS 抓取写"年份连字符附近脏空格"导致 `LIKE` 子串漏命中；归一化列解决全角/无空格/ISO 冒号变体 + 跨年版本兜底。漏写任何一层 → 新写入的行某类查询路径会漏（已经踩过"诊断接口显示能拉到、用户搜片段匹不上"的坑）。
+**Why:** 三层各管一类问题。cleanStdCode 解决 CNAS 抓取写"年份连字符附近脏空格"导致 `LIKE` 子串漏命中；`std_code_norm` 解决全角/无空格/ISO 冒号变体 + 让批量徽章走索引等值查询；`std_code_base` 解决跨年版本兜底,但要避免污染主搜索徽章 —— 同号不同年视作不同资质(实验室持有 2013 版能力不等于持有 2025 版能力),由"资质查询"页用户主动跨年搜索时才呈现。漏写任何一层 → 新写入的行某类查询路径会漏（已经踩过"诊断接口显示能拉到、用户搜片段匹不上"的坑、以及"搜 2025 版徽章亮但实际只有 2013 版资质"的语义坑）。
 
 **How to apply:**
 

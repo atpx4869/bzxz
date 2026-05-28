@@ -106,33 +106,26 @@ export class QualificationService {
 
   /** Batch query qualifications by standard codes (for search result badges).
    *
-   * 算法（用 std_code_norm / std_code_base 归一化列做索引等值查询，O(log N)，
-   * 不再需要 LIKE + LIMIT 兜底）：
+   * 语义：**严格同号同年命中** —— 输入 'QB/T 4463-2025' 只匹 DB 里 2025 版的资质，
+   * 不会因为 DB 里有 2013 版而误亮徽章。同号不同年视作不同资质（实验室持有 2013 版
+   * 不等于持有 2025 版能力）。跨年复用需求请走 /resources/standard-search 关键词查询。
    *
-   * 1. 把每个输入 stdCode 算出 fullCode（含年）+ baseCode（剥年）
-   * 2. SQL 一次 IN (fullCodes) 拉出"同号同年"精确命中
-   * 3. SQL 一次 IN (baseCodes) 拉出"同号跨年"模糊命中（含上一步的超集）
-   * 4. 用 fullCode → input、baseCode → inputs 映射回写到每个 input key
-   * 5. 用 source+labNo 去重，跨年命中的同源同号会自动并入
+   * 算法：把每个输入 stdCode 算成 fullCode（含年的归一化形态），用 std_code_norm
+   * 列做索引等值 IN 查询，O(log N)。
    */
   queryByStdCodes(stdCodes: string[]): Record<string, Qualification[]> {
     if (stdCodes.length === 0) return {};
 
     const result: Record<string, Qualification[]> = {};
 
-    // 算每个 input 的 fullCode / baseCode，并建反向映射
+    // 算每个 input 的 fullCode 并建反向映射
     const fullToInputs = new Map<string, string[]>();
-    const baseToInputs = new Map<string, string[]>();
     for (const code of stdCodes) {
       const full = extractFullCode(code);
-      const base = extractBaseCode(code);
       if (!fullToInputs.has(full)) fullToInputs.set(full, []);
       fullToInputs.get(full)!.push(code);
-      if (!baseToInputs.has(base)) baseToInputs.set(base, []);
-      baseToInputs.get(base)!.push(code);
     }
     const fullCodes = Array.from(fullToInputs.keys());
-    const baseCodes = Array.from(baseToInputs.keys());
 
     const addMatch = (key: string, qual: Qualification) => {
       if (!result[key]) result[key] = [];
@@ -143,11 +136,10 @@ export class QualificationService {
       }
     };
 
-    // CNAS: 一次 IN (baseCodes) 拉出所有同号（含跨年）命中 —— 索引等值查询，
-    // baseCodes 是去重过的，几十个 input 也只查几十次索引
-    const basePlaceholders = baseCodes.map(() => '?').join(',');
+    // CNAS: 一次 IN (fullCodes) 拉出严格同号同年命中 —— 索引等值查询
+    const fullPlaceholders = fullCodes.map(() => '?').join(',');
     const cnasRows = this.db.prepare(`
-      SELECT q.std_code, q.std_code_base, q.std_name, q.lab_no,
+      SELECT q.std_code, q.std_code_norm, q.std_name, q.lab_no,
              COALESCE(link.display_name, l.lab_name) AS lab_name,
              link.display_name AS linked_lab_name,
              q.effective_date, q.expiry_date, q.category,
@@ -155,8 +147,8 @@ export class QualificationService {
       FROM cnas_qualifications q
       LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
       LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
-      WHERE q.std_code_base IN (${basePlaceholders})
-    `).all(...baseCodes) as any[];
+      WHERE q.std_code_norm IN (${fullPlaceholders})
+    `).all(...fullCodes) as any[];
 
     for (const row of cnasRows) {
       const qual: Qualification = {
@@ -168,15 +160,14 @@ export class QualificationService {
         testItem: [row.test_object, row.test_param].filter(Boolean).join(' > '),
         testStandard: row.test_standard, limitDesc: row.limit_desc,
       };
-      // 同号跨年的所有 input 都加上 —— 前端 tooltip 自行靠 year 对比标 ⚠ 跨年提示
-      for (const input of baseToInputs.get(row.std_code_base) ?? []) {
+      for (const input of fullToInputs.get(row.std_code_norm) ?? []) {
         addMatch(input, qual);
       }
     }
 
     // CMA: 同样逻辑
     const cmaRows = this.db.prepare(`
-      SELECT q.std_code, q.std_code_base, q.std_name, q.cert_number,
+      SELECT q.std_code, q.std_code_norm, q.std_name, q.cert_number,
              COALESCE(link.display_name, l.lab_name) AS lab_name,
              link.display_name AS linked_lab_name,
              q.effective_date, q.expiry_date, q.category,
@@ -184,8 +175,8 @@ export class QualificationService {
       FROM cma_qualifications q
       LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
       LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
-      WHERE q.std_code_base IN (${basePlaceholders})
-    `).all(...baseCodes) as any[];
+      WHERE q.std_code_norm IN (${fullPlaceholders})
+    `).all(...fullCodes) as any[];
 
     for (const row of cmaRows) {
       const qual: Qualification = {
@@ -196,14 +187,10 @@ export class QualificationService {
         category: row.category, testItem: row.test_item,
         testStandard: row.test_standard, limitDesc: row.limit_desc,
       };
-      for (const input of baseToInputs.get(row.std_code_base) ?? []) {
+      for (const input of fullToInputs.get(row.std_code_norm) ?? []) {
         addMatch(input, qual);
       }
     }
-
-    // fullCodes 暂时只用来调试一致性 —— 上面 baseCodes 已经覆盖（fullCodes ⊂ baseCodes 命中集），
-    // 保留映射以便未来需要"严格同年优先排序"时直接用。
-    void fullCodes;
 
     return result;
   }

@@ -3,6 +3,13 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix: 资质徽章收紧为同号同年命中(`queryByStdCodes`)** — 用户报告搜 `QB/T 4463-2025` 时主搜索显示有 CNAS 徽章,但「资质查询」页里 CNAS 没有这版,只有 2013 版。诊断验证:CNAS DB 里只有 `QB/T 4463-2013`(实验室 L0290),CMA DB 里 2013/2025 两版都有(机构 221700110366)。根因:`queryByStdCodes` 原本用 `WHERE std_code_base IN (...)` 跨年模糊匹配,设计意图是"实验室持有老版能力 → 新版搜索也亮徽章",但**前端 `qualBadgeHtml` / `buildQualTooltip` 并没有标年版差异**(代码注释「前端 tooltip 自行靠 year 对比标 ⚠ 跨年提示」从未兑现),用户体感就是"标准检索骗我说有 CNAS"。
+  - 改:`queryByStdCodes` SQL `WHERE q.std_code_base IN (...)` → `WHERE q.std_code_norm IN (...)`,参数 `baseCodes` → `fullCodes`,反向映射 `baseToInputs` → `fullToInputs`,CNAS / CMA 两段相同改动。函数顶部注释更新:"严格同号同年命中,同号不同年视作不同资质"。删 `baseCodes` / `baseToInputs` 局部变量、`fullCodes` 那条「`void fullCodes` 占位」注释。
+  - **不动 `searchQualifications`**(资质查询关键词搜) — 它本来 ORDER BY 把精确同年靠前,且 UI 列表展示完整带年 `stdCode` 让用户明确看到命中年版,跨年命中对用户是可见的有价值兜底
+  - **不动 `extractBaseCode` 函数本身** — 仍被 `searchQualifications` / CNAS/CMA INSERT 入库写 `std_code_base` 列 / admin `qual/diagnose` / library-index 等地方在用
+  - 单测翻转:`queryByStdCodes (Step 2-3)` 套件里原 "cross-year fuzzy match: searching 2024 returns 2017 / 2008 versions" 测试预期翻转为 "does NOT match different years",新增 "matches when DB has the exact same year as input" 同年正常命中回归 case
+  - Trade-off:"DB 有老版资质 → 新版搜索也亮"的复用能力从主搜索徽章移除。用户需要这类信息走「资质查询」页关键词搜索,UI 列表会明示具体年版
+  - 文档同步:`README.md` 三层归一化说明里 L2/L3 用途拆开标注、「近期重点」插入此次 fix 记录
 - **移除 spc 数据源接入** — `spc.org.cn` 这条路走不通,放弃接入。删除 `src/sources/spc/`(spc-client.ts + spc-adapter.ts + spc-client.test.ts)、`scripts/sources/spc/`(整目录)、`docs/sources/spc-source-plan.md`,清理所有引用点:
   - 类型与注册:`SourceName` 联合类型、`VALID_SOURCES` Set、`SUPPORTED_SOURCES` / `SOURCE_LABEL_TO_CANONICAL` / `CANONICAL_TO_LABEL`(library-index)、`SOURCE_LABELS`(library-naming)、`SourceRegistry.FACTORIES`、`getSourceSemaphore` defaults
   - API:`sourceEnum` / `ALL_LIBRARY_SOURCES` / `library_source_priority` 过滤器 / `preview/files` allSources;admin `GET/POST/DELETE /api/admin/spc/cookie` 三端点删除;health 测试期望数组回退到 `['bz','gbw','by']`

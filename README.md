@@ -123,8 +123,8 @@ cp .env.example .env.local
 - 增量同步：对比证书日期避免不必要的全量抓取
 - **标准号三层归一化匹配**（`src/shared/std-code.ts`）：
   - **L1 `cleanStdCode`** 抓取入库前清洗（折叠"年份连字符附近的多空格"，如 `'GB/T 3325 -2024'` → `'GB/T 3325-2024'`），让原始 `std_code` 字段子串 LIKE 一致工作
-  - **L2 `std_code_norm`** 保留年份的归一化列（`'GB3325-2024'`），用于同号同年精确匹配；走 B-tree 索引等值查询
-  - **L3 `std_code_base`** 剥年份的归一化列（`'GB3325'`），用于跨年版本兜底匹配（搜 2024 命中 2017 版）
+  - **L2 `std_code_norm`** 保留年份的归一化列（`'GB3325-2024'`），用于同号同年精确匹配；走 B-tree 索引等值查询。**主搜索结果资质徽章**只用这层(`queryByStdCodes`),收紧到"同号同年才亮"
+  - **L3 `std_code_base`** 剥年份的归一化列（`'GB3325'`），用于跨年版本兜底 —— 仅"资质查询"页关键词搜索(`searchQualifications`)使用,UI 列表展示完整带年 `stdCode` 让用户明确看到命中的是哪个年版
   - 覆盖变体：脏空格 / 全角字符 / 无空格 (`GB/T3325`) / ISO 冒号年份 (`ISO 4287:1997`) / 修订标记 (`2010A`)
   - 启动时自动回填旧数据（`backfillNormalizedStdCodes`）+ 清洗历史脏 `std_code`（`fixupDirtyStdCodes`），幂等
 - 后台定时同步：默认每周日凌晨 3 点（可配置 cron 表达式）
@@ -427,6 +427,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **fix: 资质徽章收紧为同号同年命中** — 用户报告搜 `QB/T 4463-2025` 显示有 CNAS,但资质查询页里 CNAS 没有这版(只有 2013 版)。根因:`queryByStdCodes`(批量徽章) 原本用 `std_code_base = ?` 跨年模糊匹配,DB 里只要有同号任意年版资质就会亮徽章,UI 上又没标年版差异 → 用户误以为"2025 版也被 CNAS 认证"。改:`queryByStdCodes` 改用 `std_code_norm IN (...)` 严格同号同年命中。同号不同年视作不同资质(实验室持有 2013 版能力不等于持有 2025 版能力)。**跨年复用需求请走「资质查询」页关键词搜索**(`searchQualifications` 保留 L3 `std_code_base` 兜底,且 UI 列表展示完整带年 `stdCode`,用户明确看到命中年版)。
 - **移除 spc 数据源接入** — `spc.org.cn` 这条路走不通,放弃。删除 `src/sources/spc/`、`scripts/sources/spc/`、`docs/sources/spc-source-plan.md`,回退 `SourceName` / `VALID_SOURCES` / `SOURCE_LABELS` / source-semaphore / source-registry / sourceEnum / ALL_LIBRARY_SOURCES / `library_source_priority` 过滤器 / 前端 chip / 前端 download switch / sourceLabel dict / admin 三 cookie endpoint(`GET/POST/DELETE /api/admin/spc/cookie`) / `.env.example` SPC_* 段 / health 测试期望。`settings` 表里历史残留 `spc.cookies` / `spc.cookies_expires_at` 两行不主动清,无害(adapter 已不再读)。
 - **#73 fix: `parseLibraryFilename` 放宽 source 前分隔符，救回上一个 bug 砸坏的文件** — 用户报告 `GB_T 24456-2009 BW.pdf`（上一个 bug 砸坏的 V1 文件，缺 ` - `）「统一命名」卡在「无法解析」组，scanLibrary 不入索引 → 「编辑」/「删除」/「统一命名」全用不上。修：正则 `\s*[-—]\s*` → `(?:\s*[-—]\s*|\s+)`，允许「`-`/`—` 或纯空格」当 source 分隔符；重启 scanLibrary 自动捡回，「统一命名」按 V2 pattern 渲染时补回 ` - `。副作用：source label 字典只有 4 个（BW/BZ/BY/LB），手塞 PDF 末尾命中字典的概率极低
 - **#73 fix: V1 文件按 V2 pattern 渲染时不再丢 ` - ` 分隔符** — 用户报告 `GB_T 4893.2-2020 - BZ.pdf`（V1）「统一命名」被预览成 `GB_T 4893.2-2020 BZ.pdf`，把规范名劣化掉。根因：`renderLibraryFilename` 处理空 `{title}` 时两侧 sep 用 `left||right`，左 ` `（空格）优先保留把右 ` - ` 吞了。修：两侧 sep 都非空时优先含强分隔字符（`-` / `_` / `·` / `—`）的那一侧，弱 sep（纯空白）让位。V1 文件按默认 V2 pattern 渲染后与原名一致 → willChange=false → 跳过
