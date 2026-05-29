@@ -506,3 +506,327 @@ body::before {
   box-shadow: 0 1px 0 oklch(100% 0 0 / 0.25) inset,
               0 2px 6px -1px oklch(52% 0.20 250 / 0.30);
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   Paper theme · Claude Linen 温暖印刷品 overrides
+   设计哲学:
+     1. 米白不是白 — bg 奶油亚麻色,永远不让屏幕反光晃眼
+     2. 边界靠 1px 边线,不靠阴影 — claude.ai 卡 99% 是白底 + 米褐 1px
+     3. accent Burnt Sienna 赤陶(Anthropic 品牌色) #c96342
+     4. 文字带暖色调 — 暖墨色而非中性黑,油墨印刷感
+     5. frosted glass 全面退场 — 不用 backdrop-filter blur
+   差异点:
+     - html 纯 var(--bg) 米色平铺,无 ambient gradient
+     - body::before 网格 display:none
+     - btn-primary 纯色赤陶,不用渐变
+   ───────────────────────────────────────────────────────────────────── */
+
+/* html 不做径向晕染 — 纯米色平铺,这是 paper 的灵魂 */
+:root[data-theme="paper"] html {
+  background: var(--bg);
+}
+
+/* body::before 网格整段消失 — 纸质感不需要坐标格 */
+:root[data-theme="paper"] body::before {
+  display: none;
+}
+
+/* Topbar:半透奶油白 + 1px 米褐边,无 frosted blur */
+:root[data-theme="paper"] .topbar {
+  background: rgba(251, 250, 245, 0.85); background: oklch(98% 0.010 80 / 0.85);
+  border-bottom-color: rgba(223, 216, 198, 0.6); border-bottom-color: oklch(86% 0.025 75 / 0.6);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+:root[data-theme="paper"] .topbar-logo {
+  filter: drop-shadow(0 1px 2px rgba(60, 50, 30, 0.08));
+  filter: drop-shadow(0 1px 2px oklch(40% 0.04 70 / 0.08));
+}
+:root[data-theme="paper"] .topbar-btn { color: var(--text-2); }
+:root[data-theme="paper"] .topbar-btn:hover {
+  background: rgba(201, 99, 66, 0.08); background: oklch(58% 0.13 35 / 0.08);
+  color: var(--accent);
+}
+
+/* Sidebar:极淡米色,无 frosted */
+:root[data-theme="paper"] .sidebar {
+  background: rgba(245, 241, 232, 0.92); background: oklch(95% 0.018 75 / 0.92);
+  border-right-color: rgba(223, 216, 198, 0.6); border-right-color: oklch(86% 0.025 75 / 0.5);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+:root[data-theme="paper"] .sidebar-item { color: var(--text-2); }
+:root[data-theme="paper"] .sidebar-item:hover {
+  background: rgba(201, 99, 66, 0.06); background: oklch(58% 0.13 35 / 0.06);
+  color: var(--text);
+}
+:root[data-theme="paper"] .sidebar-item.active {
+  background: rgba(201, 99, 66, 0.10); background: oklch(58% 0.13 35 / 0.10);
+  color: #b85436; color: oklch(48% 0.14 32);
+  box-shadow: 0 0 0 1px rgba(201, 99, 66, 0.18) inset;
+  box-shadow: 0 0 0 1px oklch(58% 0.13 35 / 0.18) inset;
+}
+:root[data-theme="paper"] .sidebar-item.active::before {
+  background: #c96342;
+  background: oklch(58% 0.13 35);
+  box-shadow: 0 0 8px rgba(201, 99, 66, 0.35);
+  box-shadow: 0 0 8px oklch(58% 0.13 35 / 0.35);
+}
+:root[data-theme="paper"] .sidebar-item.active .sidebar-desc {
+  color: #c96342; color: oklch(58% 0.13 35);
+}
+:root[data-theme="paper"] .sidebar-user {
+  border-top-color: rgba(223, 216, 198, 0.6); border-top-color: oklch(86% 0.025 75 / 0.6);
+}
+:root[data-theme="paper"] .sidebar-user-avatar {
+  background: rgba(201, 99, 66, 0.18);
+  background: oklch(58% 0.13 35 / 0.18);
+  box-shadow: 0 0 0 1px rgba(223, 216, 198, 0.5) inset;
+  box-shadow: 0 0 0 1px oklch(86% 0.025 75 / 0.5) inset;
+}
+
+/* Primary button:纯色赤陶,无渐变(关键差异,claude.ai 风格) */
+:root[data-theme="paper"] .btn-primary {
+  background: #c96342;
+  background: oklch(58% 0.13 35);
+  border: none;
+  color: #fff;
+  filter: none;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.15) inset,
+              0 1px 2px rgba(160, 60, 30, 0.20),
+              0 1px 3px rgba(60, 50, 30, 0.06);
+  box-shadow: 0 1px 0 oklch(100% 0 0 / 0.15) inset,
+              0 1px 2px oklch(40% 0.13 30 / 0.20),
+              0 1px 3px oklch(40% 0.04 70 / 0.06);
+}
+:root[data-theme="paper"] .btn-primary:hover {
+  background: #b85436;
+  background: oklch(53% 0.14 32);
+  filter: none;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.20) inset,
+              0 2px 6px -1px rgba(160, 60, 30, 0.28),
+              0 1px 3px rgba(60, 50, 30, 0.08);
+  box-shadow: 0 1px 0 oklch(100% 0 0 / 0.20) inset,
+              0 2px 6px -1px oklch(40% 0.13 30 / 0.28),
+              0 1px 3px oklch(40% 0.04 70 / 0.08);
+}
+
+/* Glass cards / panels(dropdown / modal 顶层):接近不透白 + 极轻 frosted */
+:root[data-theme="paper"] .confirm-card,
+:root[data-theme="paper"] .download-center,
+:root[data-theme="paper"] .auth-card-fallback,
+:root[data-theme="paper"] .user-dropdown,
+:root[data-theme="paper"] .shortcuts-panel {
+  background: rgba(255, 255, 255, 0.96); background: oklch(100% 0 0 / 0.96);
+  border-color: rgba(223, 216, 198, 0.6); border-color: oklch(86% 0.025 75 / 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 12px 32px -8px rgba(60, 50, 30, 0.12),
+              0 4px 12px rgba(60, 50, 30, 0.06);
+  box-shadow: 0 12px 32px -8px oklch(40% 0.05 70 / 0.12),
+              0 4px 12px oklch(40% 0.04 70 / 0.06);
+}
+
+/* Search-row:几近白 + 1px 米褐边,无 frosted */
+:root[data-theme="paper"] .search-row {
+  background: rgba(255, 255, 255, 0.70); background: oklch(100% 0 0 / 0.70);
+  border-color: rgba(223, 216, 198, 1); border-color: oklch(86% 0.025 75);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 1px 2px rgba(60, 50, 30, 0.04) inset;
+  box-shadow: 0 1px 2px oklch(40% 0.04 70 / 0.04) inset;
+}
+:root[data-theme="paper"] .search-row:focus-within {
+  border-color: rgba(201, 99, 66, 0.6); border-color: oklch(58% 0.13 35 / 0.6);
+  box-shadow: 0 0 0 4px rgba(201, 99, 66, 0.12),
+              0 6px 18px -4px rgba(201, 99, 66, 0.22);
+  box-shadow: 0 0 0 4px oklch(58% 0.13 35 / 0.12),
+              0 6px 18px -4px oklch(58% 0.13 35 / 0.22);
+}
+
+/* Result cards:偏白米色 + 1px 米褐边 + 极淡暖阴影 */
+:root[data-theme="paper"] .result-card {
+  background: #fbfaf5; background: oklch(98% 0.010 80);
+  border-color: rgba(223, 216, 198, 1); border-color: oklch(86% 0.025 75);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 1px 2px rgba(60, 50, 30, 0.05);
+  box-shadow: 0 1px 2px oklch(40% 0.04 70 / 0.05);
+}
+:root[data-theme="paper"] .result-card:hover {
+  background: #ffffff; background: oklch(100% 0 0);
+  border-color: rgba(197, 184, 160, 1); border-color: oklch(76% 0.035 75);
+  box-shadow: 0 4px 10px -3px rgba(60, 50, 30, 0.10),
+              0 2px 6px rgba(60, 50, 30, 0.05);
+  box-shadow: 0 4px 10px -3px oklch(40% 0.05 70 / 0.10),
+              0 2px 6px oklch(40% 0.04 70 / 0.05);
+}
+
+/* Toolbar:偏白米色 + 1px 边,无 frosted */
+:root[data-theme="paper"] .toolbar {
+  background: rgba(251, 250, 245, 0.85); background: oklch(98% 0.010 80 / 0.85);
+  border-color: rgba(223, 216, 198, 0.6); border-color: oklch(86% 0.025 75 / 0.6);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Source/filter chips active:纯色赤陶,不用渐变 */
+:root[data-theme="paper"] .source-tag.active,
+:root[data-theme="paper"] .filter-chip.active {
+  background: #c96342;
+  background: oklch(58% 0.13 35);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.15) inset,
+              0 2px 6px -2px rgba(160, 60, 30, 0.30);
+  box-shadow: 0 1px 0 oklch(100% 0 0 / 0.15) inset,
+              0 2px 6px -2px oklch(40% 0.13 30 / 0.30);
+}
+
+/* mobile-tabbar:偏白米色,无 frosted */
+:root[data-theme="paper"] .mobile-tabbar {
+  background: rgba(251, 250, 245, 0.92); background: oklch(98% 0.010 80 / 0.92);
+  border-top-color: rgba(223, 216, 198, 0.6); border-top-color: oklch(86% 0.025 75 / 0.6);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 -1px 2px rgba(60, 50, 30, 0.04);
+  box-shadow: 0 -1px 2px oklch(40% 0.04 70 / 0.04);
+}
+:root[data-theme="paper"] .mobile-tab { color: var(--text-3); }
+:root[data-theme="paper"] .mobile-tab.active { color: var(--accent); }
+
+/* 手机端搜索结果卡 / 资质组 / labr-row:米白 + 米褐 1px */
+@media (max-width: 640px) {
+  :root[data-theme="paper"] body:not(.force-desktop) .result-card,
+  :root[data-theme="paper"] body:not(.force-desktop) .qual-result-group,
+  :root[data-theme="paper"] body:not(.force-desktop) .labr-row {
+    background: #fbfaf5; background: oklch(98% 0.010 80);
+    border-color: rgba(223, 216, 198, 1); border-color: oklch(86% 0.025 75);
+    box-shadow: 0 1px 2px rgba(60, 50, 30, 0.05);
+    box-shadow: 0 1px 2px oklch(40% 0.04 70 / 0.05);
+  }
+  :root[data-theme="paper"] body:not(.force-desktop) #page-search.search-stage-active .search-area,
+  :root[data-theme="paper"] body:not(.force-desktop) #page-qual.search-stage-active .qual-search-row,
+  :root[data-theme="paper"] body:not(.force-desktop) #page-qual.search-stage-active .qual-filters,
+  :root[data-theme="paper"] body:not(.force-desktop) #page-labr.search-stage-active .labr-search-row {
+    background: rgba(251, 250, 245, 0.92); background: oklch(98% 0.010 80 / 0.92);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-bottom-color: rgba(223, 216, 198, 0.7); border-bottom-color: oklch(86% 0.025 75 / 0.7);
+  }
+  :root[data-theme="paper"] body:not(.force-desktop) .result-card .card-actions button,
+  :root[data-theme="paper"] body:not(.force-desktop) .batch-result-card .card-actions button {
+    background: #c96342;
+    background: oklch(58% 0.13 35);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.15) inset,
+                0 1px 3px rgba(160, 60, 30, 0.25);
+    box-shadow: 0 1px 0 oklch(100% 0 0 / 0.15) inset,
+                0 1px 3px oklch(40% 0.13 30 / 0.25);
+  }
+  :root[data-theme="paper"] body:not(.force-desktop) .result-card .card-actions button:disabled,
+  :root[data-theme="paper"] body:not(.force-desktop) .result-card .card-actions button[disabled] {
+    background: rgba(239, 234, 223, 0.85) !important;
+    background: oklch(93% 0.020 75 / 0.85) !important;
+    color: oklch(70% 0.020 75) !important;
+    box-shadow: none;
+  }
+}
+
+/* 资质徽章 paper 配色 — CNAS 浅蓝(国际),CMA 浅赤陶(与 accent 同系) */
+:root[data-theme="paper"] .qual-badge-cnas {
+  background: rgba(225, 235, 250, 1); background: oklch(94% 0.030 245);
+  color: #2c52b8; color: oklch(42% 0.20 250);
+  border-color: rgba(168, 192, 230, 1); border-color: oklch(82% 0.10 245);
+}
+:root[data-theme="paper"] .qual-badge-cma {
+  background: rgba(244, 232, 224, 1); background: oklch(93% 0.030 50);
+  color: #b85436; color: oklch(48% 0.14 32);
+  border-color: rgba(220, 195, 175, 1); border-color: oklch(80% 0.08 50);
+}
+
+/* source-chip 实色版 */
+:root[data-theme="paper"] .qual-source-chip-cnas {
+  background: #3160b8; background: oklch(48% 0.18 250);
+  color: #fff;
+}
+:root[data-theme="paper"] .qual-source-chip-cma {
+  background: #c96342; background: oklch(58% 0.13 35);
+  color: #fff;
+}
+
+/* source-badge(BZ/BW/BY):浅米色 chip */
+:root[data-theme="paper"] .source-badge {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  color: var(--text-2);
+  border-color: rgba(223, 216, 198, 0.8); border-color: oklch(86% 0.025 75);
+}
+
+/* status indicator */
+:root[data-theme="paper"] .status-indicator.current,
+:root[data-theme="paper"] .has-text-badge {
+  background: rgba(225, 240, 215, 1); background: oklch(93% 0.030 130);
+  color: #4d6b35; color: oklch(40% 0.13 130);
+  border: 1px solid rgba(175, 205, 150, 1);
+  border: 1px solid oklch(80% 0.06 130);
+}
+:root[data-theme="paper"] .status-indicator.expired {
+  background: rgba(245, 220, 215, 1); background: oklch(93% 0.04 30);
+  color: var(--danger);
+  border: 1px solid rgba(225, 175, 168, 1);
+  border: 1px solid oklch(78% 0.10 30);
+}
+:root[data-theme="paper"] .status-indicator.upcoming {
+  background: rgba(248, 235, 210, 1); background: oklch(95% 0.04 75);
+  color: var(--warning);
+  border: 1px solid rgba(225, 195, 155, 1);
+  border: 1px solid oklch(82% 0.08 75);
+}
+:root[data-theme="paper"] .no-text-badge {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.015 75);
+  color: var(--text-2);
+  border: 1px solid rgba(216, 205, 185, 1);
+  border: 1px solid oklch(85% 0.020 75);
+}
+
+/* qual scope badge */
+:root[data-theme="paper"] .qual-scope-badge.scope-all {
+  color: #4d6b35; color: oklch(40% 0.13 130);
+  background: rgba(90, 125, 62, 0.12); background: oklch(52% 0.13 130 / 0.12);
+}
+:root[data-theme="paper"] .qual-scope-badge.scope-partial {
+  color: var(--warning);
+  background: rgba(168, 117, 32, 0.12); background: oklch(58% 0.13 75 / 0.12);
+}
+
+/* Modal/Preview overlay:半透暖墨色,非纯黑 */
+:root[data-theme="paper"] .modal-overlay,
+:root[data-theme="paper"] .confirm-overlay,
+:root[data-theme="paper"] .preview-overlay {
+  background: rgba(50, 40, 25, 0.35); background: oklch(25% 0.018 60 / 0.35);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+/* Search history dropdown:纯白 + 1px 米褐 */
+:root[data-theme="paper"] .search-history {
+  background: #ffffff; background: oklch(100% 0 0);
+  border-color: rgba(223, 216, 198, 0.8); border-color: oklch(86% 0.025 75 / 0.8);
+  box-shadow: 0 12px 32px -8px rgba(60, 50, 30, 0.14);
+  box-shadow: 0 12px 32px -8px oklch(40% 0.05 70 / 0.14);
+}
+:root[data-theme="paper"] .search-history-item:hover {
+  background: rgba(244, 232, 224, 0.6); background: oklch(93% 0.030 50 / 0.6);
+}
+
+/* 「我」页主题切换 chip active:赤陶纯色,不用渐变 */
+:root[data-theme="paper"] .me-theme-btn.active {
+  background: #c96342;
+  background: oklch(58% 0.13 35);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.15) inset,
+              0 1px 3px rgba(160, 60, 30, 0.25);
+  box-shadow: 0 1px 0 oklch(100% 0 0 / 0.15) inset,
+              0 1px 3px oklch(40% 0.13 30 / 0.25);
+}

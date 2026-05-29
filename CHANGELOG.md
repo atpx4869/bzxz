@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat: 第三主题 Paper · Claude Linen 温暖印刷品** — 在 dark / light(Arctic Blue) 之外新增 paper 主题,模仿 Claude.ai 同色调:米白底 + Burnt Sienna 赤陶 accent + 暖墨色文字 + 1px 米褐边线,杂志内页 / 书页质感。
+  - **设计哲学**:① 米白不是白(bg oklch(95% 0.018 75) 奶油亚麻) ② 边界靠 1px 边线不靠阴影(claude.ai 几乎无 shadow) ③ accent #c96342 赤陶 Anthropic 品牌色 ④ 文字带暖色调(hue=60-75)油墨印刷感 ⑤ frosted glass 全面退场 — 不用 backdrop-filter blur
+  - **差异点**:html 纯 `var(--bg)` 不做 ambient gradient / body::before 网格 `display:none` / btn-primary 纯色赤陶不用渐变 / topbar/sidebar/search-row 不用 frosted
+  - **Token 全套**(base.css + 镜像):4 层 surface 米白系 + 米褐 border + 暖墨 text + 赤陶 accent + 暖色 shadow + 苔藓绿 success + 暖红 danger
+  - **glass.css 30+ overrides**:html / body::before / topbar / sidebar / sidebar-item.active / btn-primary / 4 玻璃面板 / search-row / focus / result-card / hover / toolbar / source-tag.active / mobile-tabbar / 手机端 cards / sticky 吸顶 / chip 按钮 / 资质徽章 / source-chip / source-badge / status-indicator / scope-badge / modal-overlay / search-history / me-theme-btn.active
+  - **UI 入口 3 态切换**:app-theme.js `VALID=['dark','light','paper']`,加 `togglePicker/openPicker/closePicker`;topbar 单按钮改成「点击展开 picker」3 选 1 弹层,显示当前主题图标 + ✓ 标记选中项;手机「我」页主题行加第三个 `[📜 Paper]` chip
+  - **picker 容器** `.topbar-theme-picker`:dropdown 绝对定位 132px min-width,点击外部自动关闭,各主题各自配色(paper 用 white + 米褐边 + 暖 shadow / light 用 frosted + 蓝 shadow)
+  - 所有新 oklch 都带 sRGB rgba/hex fallback;legacy `bzxzTheme.toggle()` 接口保留(只在 dark↔light 切,paper 走 set 或 picker)
 - **redesign(theme/light): Arctic Blue 蓝调亮色重设计** — 用户反馈旧 light 主题"太丑"(只是简单白底+蓝字+灰阴影,Bootstrap 模板感)。整套重设计,参考 Linear / Apple HIG / 蓝图纸美学,工程师工作台感。
   - **设计哲学 5 条**:
     1. 永不纯白:`--bg` 极淡蓝白 oklch(98% 0.006 245) / `--surface` oklch(99.5% 0.003 245) 带一丁点蓝调 / `--surface-elevated` 纯白只留 dropdown 顶层

@@ -24,7 +24,14 @@
   <div class="topbar-actions">
     <button class="topbar-btn download-center-toggle" id="downloadCenterToggle" onclick="toggleDownloadCenter()" title="下载中心">下载 <span id="downloadCenterBadge">0</span></button>
     <button class="topbar-btn" onclick="switchTab('stats')" title="使用统计">📊</button>
-    <button class="topbar-btn" id="topbarThemeToggle" onclick="bzxzTheme.toggle()" title="切换到浅色">☀️</button>
+    <div class="topbar-theme-wrap">
+      <button class="topbar-btn" id="topbarThemeToggle" onclick="bzxzTheme.togglePicker()" title="切换主题">☀️</button>
+      <div class="topbar-theme-picker" id="topbarThemePicker" role="menu" aria-label="主题选择">
+        <button class="topbar-theme-picker-item" data-theme="dark" role="menuitem" onclick="bzxzTheme.set('dark')"><span>🌙</span><span>深色</span></button>
+        <button class="topbar-theme-picker-item" data-theme="light" role="menuitem" onclick="bzxzTheme.set('light')"><span>☀️</span><span>浅色</span></button>
+        <button class="topbar-theme-picker-item" data-theme="paper" role="menuitem" onclick="bzxzTheme.set('paper')"><span>📜</span><span>Paper</span></button>
+      </div>
+    </div>
     <button class="topbar-btn" onclick="toggleUserDropdown()" id="sidebarUserToggle" title="用户">👤</button>
   </div>
 </header>

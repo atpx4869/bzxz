@@ -125,6 +125,83 @@
   background: oklch(72% 0.018 245);
 }
 
+/* ─── Paper theme · Claude Linen 温暖印刷品 ─────────────────────────
+   设计哲学:模仿 Claude.ai 的"杂志内页 / 书页"美学。
+     1. 米白不是白 — bg 是奶油亚麻色,永远不让屏幕"反光晃眼"
+     2. 边界靠 1px 边线,不靠阴影 — Claude.ai 的卡 99% 是白底+米褐 1px,无 shadow
+     3. accent 是 Burnt Sienna 赤陶色 — Anthropic 品牌色 #c96342
+     4. 文字带暖色调 — 暖墨色而非中性黑,看起来像油墨印刷
+     5. frosted glass 全面退场 — 不用 backdrop-filter blur,米色平铺
+   差异点:
+     - 不做 ambient radial gradient(html 纯 var(--bg))
+     - 不做 body::before 网格(纸面要"干净")
+     - btn 用纯色赤陶,不用渐变 */
+:root[data-theme="paper"] {
+  /* Surface 4 层(米白系) */
+  --bg:        #f5f1e8;
+  --bg:        oklch(95% 0.018 75);
+  --surface:   #fbfaf5;
+  --surface:   oklch(98% 0.010 80);
+  --surface-h: #efeadf;
+  --surface-h: oklch(93% 0.020 75);
+  --surface-elevated: #ffffff;
+  --surface-elevated: oklch(100% 0 0);
+  /* Border 米褐 */
+  --border:    #dfd8c6;
+  --border:    oklch(86% 0.025 75);
+  --border-strong: #c5b8a0;
+  --border-strong: oklch(76% 0.035 75);
+  /* Text 暖墨色(带 hue=60-75 黄褐倾向) */
+  --text:      #2b2820;
+  --text:      oklch(22% 0.012 60);
+  --text-2:    #615a4b;
+  --text-2:    oklch(45% 0.018 70);
+  --text-3:    #8d8470;
+  --text-3:    oklch(60% 0.020 75);
+  /* Accent 赤陶 Burnt Sienna(Anthropic 品牌) */
+  --accent:    #c96342;
+  --accent:    oklch(58% 0.13 35);
+  --accent-h:  #b85436;
+  --accent-h:  oklch(53% 0.14 32);
+  --accent-g:  #b09d8c;
+  --accent-g:  oklch(70% 0.04 60);
+  --accent-soft: #f4e8e0;
+  --accent-soft: oklch(93% 0.030 50);
+  /* Status(暖系) */
+  --success:   #5a7d3e;
+  --success:   oklch(52% 0.13 130);
+  --danger:    #b94432;
+  --danger:    oklch(50% 0.18 30);
+  --warning:   #a87520;
+  --warning:   oklch(58% 0.13 75);
+  /* Glass(用得少,只 dropdown 半透) */
+  --glass-bg:     rgba(251, 250, 245, 0.78);
+  --glass-bg:     oklch(98% 0.010 80 / 0.78);
+  --glass-bg-strong: rgba(255, 255, 255, 0.94);
+  --glass-bg-strong: oklch(100% 0 0 / 0.94);
+  --glass-border: rgba(223, 216, 198, 0.6);
+  --glass-border: oklch(86% 0.025 75 / 0.6);
+  /* Shadow 极克制 + 暖色调(hue=70) */
+  --shadow-sm:    0 1px 2px rgba(60, 50, 30, 0.05);
+  --shadow-sm:    0 1px 2px oklch(40% 0.04 70 / 0.05);
+  --shadow-md:    0 4px 12px -2px rgba(60, 50, 30, 0.08), 0 2px 6px rgba(60, 50, 30, 0.04);
+  --shadow-md:    0 4px 12px -2px oklch(40% 0.04 70 / 0.08), 0 2px 6px oklch(40% 0.04 70 / 0.04);
+  --shadow-lg:    0 12px 32px -8px rgba(60, 50, 30, 0.12), 0 4px 12px rgba(60, 50, 30, 0.06);
+  --shadow-lg:    0 12px 32px -8px oklch(40% 0.05 70 / 0.12), 0 4px 12px oklch(40% 0.04 70 / 0.06);
+  --shadow-glow-accent: 0 0 0 4px rgba(201, 99, 66, 0.12), 0 6px 18px -4px rgba(201, 99, 66, 0.22);
+  --shadow-glow-accent: 0 0 0 4px oklch(58% 0.13 35 / 0.12), 0 6px 18px -4px oklch(58% 0.13 35 / 0.22);
+}
+
+/* Paper theme 滚动条 — 米褐 */
+:root[data-theme="paper"] ::-webkit-scrollbar-thumb {
+  background: #d4cbb5;
+  background: oklch(82% 0.025 75);
+}
+:root[data-theme="paper"] ::-webkit-scrollbar-thumb:hover {
+  background: #b8ac90;
+  background: oklch(72% 0.035 75);
+}
+
 html {
   background: var(--bg);
   color: var(--text);
