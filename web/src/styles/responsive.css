@@ -121,8 +121,10 @@
 
   /* 资质查询页：手机端隐掉「可视化」tab。窄屏下可视化卡片矩阵没有密度优势，
      搜索 tab 单独够用。tab-bar 只剩一项时去掉底线避免空 chrome。 */
+  /* 手机端隐掉可视化 tab,只剩"搜索"孤独一个 tab → 整个 tab-bar 干脆藏掉
+     (用户原话:"搜索俩字纯纯多余")。可视化在手机端意义不大,搜索独占即可 */
   body:not(.force-desktop) .qual-tab[data-qual-tab="visual"] { display: none; }
-  body:not(.force-desktop) .qual-tab-bar { border-bottom: none; margin-bottom: 4px; }
+  body:not(.force-desktop) .qual-tab-bar { display: none; }
 
   /* modal.css —— detail modal */
   .modal { width: calc(100% - 20px); padding: 18px; max-height: 88vh; }

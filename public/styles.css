@@ -1147,8 +1147,9 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
   /* 资质查询页：手机端隐掉「可视化」tab。Why：可视化卡片矩阵在窄屏一列摊开
      没有信息密度优势，徒增滚屏；搜索 tab 单独够用。tab-bar 只剩一项时也无
      需保留 border-bottom，给一个干净的 16px 间隔。 */
+  /* 手机端隐可视化 tab + 整个 tab-bar(只剩搜索孤独一个 tab 时多余) */
   body:not(.force-desktop) .qual-tab[data-qual-tab="visual"] { display: none; }
-  body:not(.force-desktop) .qual-tab-bar { border-bottom: none; margin-bottom: 4px; }
+  body:not(.force-desktop) .qual-tab-bar { display: none; }
 
   /* 筛选条折叠（A 方案）：手机端默认收成"筛选 ▾"一行按钮，
      .filter-bar.open 时再展开。桌面端 .filter-collapse 永远 display:none、
