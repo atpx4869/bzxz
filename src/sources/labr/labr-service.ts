@@ -37,6 +37,7 @@ import { addFileToLibrary } from '../../services/library-index';
 import { getSourceSemaphore } from '../../shared/source-semaphore';
 import { BadRequestError, UpstreamError } from '../../shared/errors';
 import { assertNonEmptyDownload } from '../../shared/download-integrity';
+import { searchCache } from '../../shared/cache';
 import { cleanStdCode } from '../../shared/std-code';
 import {
   LabrAuthError,
@@ -158,19 +159,77 @@ export class LabrService {
 
   // ─── 查询（不需要登录的 anonymous 流） ────────────────────────────────
 
-  /** 首屏内联 ≤4 条，匿名 */
+  /** 首屏内联 ≤4 条，匿名。5min TTL 缓存（公共数据，跨用户安全） */
   async searchInline(keyword: string): Promise<LabrListItem[]> {
-    return this.client.searchInline(keyword);
+    const key = `labr:inline:${keyword}`;
+    const cached = searchCache.get<LabrListItem[]>(key);
+    if (cached) return cached;
+    const result = await this.client.searchInline(keyword);
+    searchCache.set(key, result);
+    return result;
   }
 
   /**
    * 翻页接口。带 session 拿用户态，没 session 也能拉公共字段。
    * 我们默认带 session（如果已有），避免 401-类边缘；session 缺失时跑匿名。
+   * 5min TTL 缓存：搜索结果是公共数据（user-token 仅给 isFav 等私字段，列表本身一致），跨用户共享安全
    */
   async recList(keyword: string, pageNo: number, opts: { pageSize?: number } = {}): Promise<LabrRecListResponse> {
+    const pageSize = opts.pageSize ?? 100;
+    const key = `labr:rec:${keyword}:${pageNo}:${pageSize}`;
+    const cached = searchCache.get<LabrRecListResponse>(key);
+    if (cached) return cached;
     const db = getDb();
     const session = await this.tryGetSession(db);
-    return this.client.recList(keyword, pageNo, { pageSize: opts.pageSize, session: session ?? undefined });
+    const result = await this.client.recList(keyword, pageNo, { pageSize, session: session ?? undefined });
+    searchCache.set(key, result);
+    return result;
+  }
+
+  /**
+   * page=1 优化路径：并行调 searchInline + recList(pageNo=2)，merge 并按 did 去重。
+   *
+   * 背景：labr 上游契约把首屏 SSR ≤4 条（dataList）和翻页 API（rec-list pageNo=2 起）拆开。
+   * 旧 page=1 只走 searchInline → 用户首屏只能看 ≤4 条,体验差。
+   *
+   * 新策略：page=1 并行拉两路,总耗时 ≈ max(inline 800ms, rec-list 800ms) = 800ms,
+   * 而结果集是 4 + 100 = 最多 104 条(dedup 后),首屏一次到位。
+   *
+   * 缓存：两个内部方法各自走 searchCache,所以本方法不再单独 cache（避免双层 TTL）。
+   */
+  async searchPage1(keyword: string, opts: { pageSize?: number } = {}): Promise<LabrRecListResponse> {
+    const pageSize = opts.pageSize ?? 100;
+    // 并行,允许 inline 失败不致命（最差也有 rec-list 100 条；rec-list 失败抛错）
+    const [inlineResult, recResult] = await Promise.all([
+      this.searchInline(keyword).catch((e) => {
+        console.warn('[labr-service] searchInline soft fail:', e instanceof Error ? e.message : String(e));
+        return [] as LabrListItem[];
+      }),
+      this.recList(keyword, 2, { pageSize }),
+    ]);
+
+    // dedup by did,inline 在前（SSR 通常是最相关的几条,优先展示）
+    const seen = new Set<number>();
+    const merged: LabrListItem[] = [];
+    for (const it of inlineResult) {
+      if (it.did && !seen.has(it.did)) {
+        seen.add(it.did);
+        merged.push(it);
+      }
+    }
+    for (const it of recResult.list) {
+      if (it.did && !seen.has(it.did)) {
+        seen.add(it.did);
+        merged.push(it);
+      }
+    }
+
+    return {
+      total: recResult.total,        // 用 rec-list 返的 total（全集）
+      pageSize: recResult.pageSize,
+      pageCount: recResult.pageCount,
+      list: merged,
+    };
   }
 
   async getDetail(did: number): Promise<{ info: LabrInfo; detail: LabrDetail }> {

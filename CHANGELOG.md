@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **perf: Labr 搜索首屏一次拉 100 条 + searchCache 接入** — 用户反馈 Labr 库检索慢。诊断:① 旧 page=1 走 SSR `state.dataList` scrape 只返 ≤4 条,用户首屏看不到全量,体感"搜了没拉全"; ② labr-service 完全没接 searchCache(其它三个 adapter 都接了),重复搜索 / 翻页 100% 走上游。
+  - **page=1 并行路径**:新增 `searchPage1(keyword, opts)`,并行调 `searchInline` + `recList(pageNo=2, pageSize=100)`,merge 按 did 去重。总耗时 ≈ max(inline, rec-list) ≈ 800ms(并行不串行),结果集从 ≤4 条 → 最多 104 条,首屏一次到位
+  - **page≥2 偏移**:前端 page=2 → 上游 pageNo=3 (page=1 已吃掉 SSR + pageNo=2,page=N 对应 pageNo=N+1)。前端零改动,偏移逻辑只在 service / routes 层
+  - **searchCache 接入**:`searchInline` / `recList` 加 5min TTL 缓存(公共数据,跨用户共享安全。user-token 仅给 isFav 等私字段,列表本身一致)。重复搜索 / 翻页 = 0 延迟
+  - **失败容忍**:`searchPage1` 内 inline 失败软回退(catch + 返 []),最差也有 rec-list 100 条;rec-list 失败才抛错
+  - 改动:`src/sources/labr/labr-service.ts` `searchInline`/`recList`/新增 `searchPage1`; `src/api/labr-routes.ts` page=1 改调 searchPage1,page≥2 偏移 +1。前端 / labr-client / 下载流不动
 - **feat: 手机端搜索 / 资质 / Labr 结果卡片化 v2 + 资质徽章迁移到标准号后** — 用户反馈手机端三个 tab 的结果显示"很丑",同时希望 CNAS / CMA 徽章紧贴标准号(标识紧跟标识)。整体重设计:
   - **资质徽章位置(全局,桌面+手机都改)**:`buildResultCardHtml` 把 `qualBadgeHtml` 从 `.card-title-row` 和 `.card-meta-line` 一起搬到 `.card-id` 内新加的 `.card-number-row` 容器中,紧贴 `.card-number` 后面。桌面端 inline-flex 一行;手机端 wrap 时徽章跟在标准号后,不再与标题/状态/源混在一起
   - **手机端搜索结果卡(.result-card)卡片化**:`display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 12px; background + border 卡片边界`。信息层级三段清晰:①.card-number-row 标识行(标准号 16px + 徽章) ②.card-title 标题行(14px,允许 wrap 2 行) ③.card-meta-line 元数据行(状态/文本/源扁平化成纯文本 + ::before · 分隔符,不再彩色徽章砌墙) ④.card-date 日期行(11px 极灰) ⑤.card-actions 操作行(2 按钮等宽 44px 高,详情 + 预览,download/save 沿用既有"手机端隐藏管理入口"契约)

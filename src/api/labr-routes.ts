@@ -35,9 +35,15 @@ export function createLabrRoutes(
   /**
    * GET /api/labr/search
    *
-   * labr 翻页语义：pageNo=1 通常返回空（首屏 dataList 已用），实际从 2 开始翻。
-   * 我们把 page=1 映射成"首屏 dataList"，page≥2 映射成"rec-list 第 N 页"。
-   * 这样前端 page 参数就是 1-based 连续整数，无需感知 labr 的 1/2 不对称。
+   * labr 翻页语义：上游 SSR dataList(≤4 条) + rec-list(pageNo=2 起,pageSize 100)。
+   * 旧实现把 page=1 仅映射成 SSR dataList → 用户首屏只能看 4 条。
+   *
+   * 新策略：
+   *   - page=1 → searchPage1（并行 inline + rec-list pageNo=2,merge dedup → ~100+4 条）
+   *   - page≥2 → rec-list pageNo=page+1（上游 pageNo=2 已被 page=1 用,page=2 对应 pageNo=3）
+   * 前端 page 仍是 1-based 连续整数,labr pageNo 偏移由后端透明处理。
+   *
+   * 缓存：service 内部 5min TTL,重复搜索 / 翻页 0 延迟。
    */
   router.get('/api/labr/search', requireAuth, async (req, res, next) => {
     try {
@@ -49,19 +55,25 @@ export function createLabrRoutes(
       const { keyword, page, pageSize } = schema.parse(req.query);
 
       if (page === 1) {
-        // page=1 → 首屏 dataList（≤4 条，匿名抓 SSR）。total 此时未知，先报 list 长度
-        const list = await service.searchInline(keyword);
-        respond(res, { page, pageSize, total: list.length, list, hasMore: list.length >= 4 });
+        const r = await service.searchPage1(keyword, { pageSize });
+        respond(res, {
+          page,
+          pageSize: r.pageSize,
+          total: r.total,
+          list: r.list,
+          hasMore: r.pageCount > 1,
+        });
         return;
       }
-      // page≥2 → rec-list。labr 自己 pageNo 同名 → 直接传
-      const r = await service.recList(keyword, page, { pageSize });
+      // page≥2 → labr pageNo=page+1（page=2 → pageNo=3,page=3 → pageNo=4 ...）
+      const upstreamPageNo = page + 1;
+      const r = await service.recList(keyword, upstreamPageNo, { pageSize });
       respond(res, {
         page,
         pageSize: r.pageSize,
         total: r.total,
         list: r.list,
-        hasMore: page < r.pageCount,
+        hasMore: upstreamPageNo < r.pageCount,
       });
     } catch (error) {
       next(normalizeError(error));
