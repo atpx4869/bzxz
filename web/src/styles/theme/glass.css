@@ -1838,3 +1838,155 @@ body::before {
   background: rgba(239, 234, 223, 0.6); background: oklch(93% 0.020 75 / 0.6);
   color: var(--text-3);
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Phase 4 补丁段 — 整页级深色面板。pages/stats.css、pages/local-library.css、
+   pages/qualifications.css 里硬编码的 oklch(16-22% ...) surface 没有任何主题
+   覆盖,亮主题下整块渲染成深灰(使用统计 4 张卡 + 两张图、本地文件表、资质订阅
+   / 可视化卡片、下载历史的 .library-card)。这里按页补 light + paper。
+   注:.library-card 同时被「资质查询/下载历史」两页复用;.library-row 已在
+   Phase 3 覆盖。
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ─── Light · Arctic Blue Phase 4 ────────────────────────── */
+
+/* 使用统计页 */
+:root[data-theme="light"] .stat-card,
+:root[data-theme="light"] .stats-chart-box {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .stat-card:hover {
+  border-color: var(--border-strong);
+}
+
+/* 本地文件库表格 */
+:root[data-theme="light"] .local-table-wrap {
+  background: rgba(255, 255, 255, 0.7); background: oklch(100% 0 0 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .local-table thead th {
+  background: rgba(238, 242, 247, 0.96); background: oklch(96% 0.012 245 / 0.96);
+  color: var(--text-2);
+  border-bottom-color: var(--border-strong);
+}
+:root[data-theme="light"] .local-table tbody td {
+  border-bottom-color: rgba(216, 224, 234, 0.6); border-bottom-color: oklch(88% 0.018 245 / 0.6);
+}
+:root[data-theme="light"] .local-table tbody tr:hover td {
+  background: rgba(40, 85, 212, 0.05); background: oklch(52% 0.20 250 / 0.05);
+}
+:root[data-theme="light"] .normalize-list {
+  background: rgba(238, 242, 247, 0.6); background: oklch(96% 0.012 245 / 0.6);
+}
+
+/* 资质订阅 / 资质查询 / 可视化卡片 + 下载历史 .library-card */
+:root[data-theme="light"] .library-card,
+:root[data-theme="light"] .qual-result-item,
+:root[data-theme="light"] .qual-lab-card,
+:root[data-theme="light"] .qual-preset-item,
+:root[data-theme="light"] .qual-visual-card,
+:root[data-theme="light"] .qual-visual-lab-card,
+:root[data-theme="light"] .qual-visual-result {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .qual-lab-card.is-working {
+  background: rgba(40, 85, 212, 0.08); background: oklch(52% 0.20 250 / 0.08);
+  border-color: var(--accent);
+}
+:root[data-theme="light"] .qual-visual-query-head {
+  background: rgba(230, 237, 246, 0.7); background: oklch(95% 0.025 245 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .qual-visual-stats div,
+:root[data-theme="light"] .qual-visual-standard {
+  background: rgba(238, 242, 247, 0.7); background: oklch(96% 0.012 245 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .qual-visual-bars span,
+:root[data-theme="light"] .qual-visual-labs span,
+:root[data-theme="light"] .qual-visual-lab-head span,
+:root[data-theme="light"] .qual-visual-cap-chips span {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .qual-visual-source.empty {
+  background: rgba(238, 242, 247, 0.4); background: oklch(96% 0.012 245 / 0.4);
+}
+:root[data-theme="light"] .qual-visual-cap-list .qual-visual-cap:hover,
+:root[data-theme="light"] .qual-visual-more-btn:hover {
+  background: rgba(230, 237, 246, 0.85); background: oklch(95% 0.025 245 / 0.85);
+  color: var(--text);
+}
+
+
+/* ─── Paper · Claude Linen Phase 4 ───────────────────────── */
+
+:root[data-theme="paper"] .stat-card,
+:root[data-theme="paper"] .stats-chart-box {
+  background: rgba(251, 250, 245, 0.85); background: oklch(98% 0.010 80 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .stat-card:hover {
+  border-color: var(--border-strong);
+}
+
+:root[data-theme="paper"] .local-table-wrap {
+  background: rgba(251, 250, 245, 0.7); background: oklch(98% 0.010 80 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .local-table thead th {
+  background: rgba(239, 234, 223, 0.96); background: oklch(93% 0.020 75 / 0.96);
+  color: var(--text-2);
+  border-bottom-color: var(--border-strong);
+}
+:root[data-theme="paper"] .local-table tbody td {
+  border-bottom-color: rgba(223, 216, 198, 0.6); border-bottom-color: oklch(86% 0.025 75 / 0.6);
+}
+:root[data-theme="paper"] .local-table tbody tr:hover td {
+  background: rgba(201, 99, 66, 0.05); background: oklch(58% 0.13 35 / 0.05);
+}
+:root[data-theme="paper"] .normalize-list {
+  background: rgba(239, 234, 223, 0.6); background: oklch(93% 0.020 75 / 0.6);
+}
+
+:root[data-theme="paper"] .library-card,
+:root[data-theme="paper"] .qual-result-item,
+:root[data-theme="paper"] .qual-lab-card,
+:root[data-theme="paper"] .qual-preset-item,
+:root[data-theme="paper"] .qual-visual-card,
+:root[data-theme="paper"] .qual-visual-lab-card,
+:root[data-theme="paper"] .qual-visual-result {
+  background: rgba(251, 250, 245, 0.85); background: oklch(98% 0.010 80 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .qual-lab-card.is-working {
+  background: rgba(201, 99, 66, 0.08); background: oklch(58% 0.13 35 / 0.08);
+  border-color: var(--accent);
+}
+:root[data-theme="paper"] .qual-visual-query-head {
+  background: rgba(239, 234, 223, 0.8); background: oklch(93% 0.020 75 / 0.8);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .qual-visual-stats div,
+:root[data-theme="paper"] .qual-visual-standard {
+  background: rgba(239, 234, 223, 0.7); background: oklch(93% 0.020 75 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .qual-visual-bars span,
+:root[data-theme="paper"] .qual-visual-labs span,
+:root[data-theme="paper"] .qual-visual-lab-head span,
+:root[data-theme="paper"] .qual-visual-cap-chips span {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .qual-visual-source.empty {
+  background: rgba(239, 234, 223, 0.4); background: oklch(93% 0.020 75 / 0.4);
+}
+:root[data-theme="paper"] .qual-visual-cap-list .qual-visual-cap:hover,
+:root[data-theme="paper"] .qual-visual-more-btn:hover {
+  background: rgba(239, 234, 223, 0.9); background: oklch(93% 0.020 75 / 0.9);
+  color: var(--text);
+}

@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix(theme): light/paper Phase 4 补丁 — 整页级深色面板(使用统计 / 本地文件库 / 资质订阅·可视化 / 下载历史)** — 用户截图反馈 Phase 2/3 后仍有整页渲染成深灰:前几轮只审了 `glass.css` / `public/styles.css` 自身,漏掉 `pages/*.css` 里的硬编码暗 surface。补这几页 light + paper 覆盖:
+  - **使用统计**:`.stat-card` / `.stat-card:hover` / `.stats-chart-box`(原 `oklch(16% ...)` 4 张卡 + 趋势/分布两图)
+  - **本地文件库表格**:`.local-table-wrap` / `.local-table thead th`(吸顶表头)/ `tbody td` 边线 / `tbody tr:hover td` / `.normalize-list`
+  - **资质订阅 / 资质查询 / 可视化**:`.qual-result-item` / `.qual-lab-card`(含 `.is-working`)/ `.qual-preset-item` / `.library-card` / `.qual-visual-card` / `.qual-visual-result` / `.qual-visual-lab-card` / `.qual-visual-query-head` / `.qual-visual-stats div` / `.qual-visual-standard` / `.qual-visual-bars·labs·lab-head·cap-chips span` / `.qual-visual-source.empty` / cap·more-btn hover
+  - **下载历史页**:`收藏标准` + `下载历史` 容器复用 `.library-card`(同一选择器一并覆盖),行 `.library-row` 已在 Phase 3 覆盖
+  - 文件:`web/src/styles/theme/glass.css` + `public/styles.css` Phase 4 段镜像,所有 oklch 配 rgba/hex fallback
 - **fix(theme): light/paper Phase 3 补丁 — 详情卡 / 设置卡 / 标准库设置 / preview / normalize 容器** — 全量审计 hardcode 暗色未被 light/paper override 的选择器,补 24 个新规则 × 2 主题(共 48 条):
   - **预览容器**:`.preview-body` / `.preview-iframe` 原 `#1a1a1a` 在亮主题下是醒目黑框,light 改极淡蓝灰 `oklch(94% 0.008 245)`,paper 改米色 `oklch(91% 0.018 75)`
   - **标准库设置**:`.library-row` 边线、`.library-row code.library-row-value`、`.library-input` 暗背景
