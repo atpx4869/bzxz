@@ -345,17 +345,23 @@ body.compact-results .results-table-head { padding-bottom: 6px; }
 .source-by { background: rgba(198, 150, 18, 0.14); background: oklch(70% 0.14 85 / 0.14); color: #d8b260; color: oklch(78% 0.11 85); border-color: rgba(198, 150, 18, 0.22); border-color: oklch(70% 0.14 85 / 0.22); }
 .result-card:hover .source-badge { filter: brightness(1.08); }
 
-/* Search history dropdown */
-/* Frosted glass: 不透明 --surface 在手机端会与底下结果卡文字视觉重合，统一走 .user-dropdown 同款 frost 配方 */
+/* Search history dropdown
+ * 不用 backdrop-filter:手机端搜索框 sticky 吸顶后 .search-row 自身已是 backdrop-filter
+ * 容器,作为 stacking context 父级,子 .search-history 的 blur 拿不到 search-row 之外
+ * 的像素 → blur 实质失效。改用不透明 --surface + 双层 shadow 制造浮层感(详见
+ * web/src/styles/components/search-history.css 头部说明) */
 .search-history {
   display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 8px;
-  background: rgba(17, 22, 30, 0.72);
-  background: oklch(20% 0.018 260 / 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border: 1px solid oklch(100% 0 0 / 0.08);
-  border-radius: var(--radius); box-shadow: 0 16px 48px rgba(0,0,0,0.45); z-index: 350; overflow: hidden;
-  backdrop-filter: blur(22px) saturate(140%);
-  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  background: #161a22;
+  background: var(--surface);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border: 1px solid oklch(100% 0 0 / 0.10);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.55),
+              0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  box-shadow: 0 20px 56px oklch(0% 0 0 / 0.55),
+              0 0 0 1px oklch(100% 0 0 / 0.04) inset;
+  z-index: 350; overflow: hidden;
 }
 .search-history.open { display: block; animation: histIn 0.18s var(--ease-out); }
 @keyframes histIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }

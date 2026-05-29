@@ -1,18 +1,27 @@
 /* Search history dropdown —— 原 public/styles.css 行 293–302。
  * 搜索框聚焦时弹出的最近查询面板。 */
 
-/* Frosted glass: 不透明 --surface 在桌面端没问题，但手机端虚拟键盘弹出后下拉浮在结果卡片上，
- * 没 backdrop-filter 就会跟底下"标准编号 / 名称"文字视觉重合。统一走 .user-dropdown 同款 frost 配方。
- * Win7 Chrome ≤109 fallback 用 rgba/#； 现代浏览器接 oklch + backdrop-filter blur。 */
+/* 历史：曾试过 frosted glass(backdrop-filter blur),但手机端搜索框 sticky 吸顶后
+ * .search-row 自身已经是 backdrop-filter 容器,作为 stacking context 父级,
+ * 子节点 .search-history 的 blur 拿不到 search-row 之外(结果区)的像素去模糊
+ * (W3C spec 明文,不是 bug)→ blur 实质失效,半透明背景让底下结果卡文字直接透上来。
+ *
+ * 方案:彻底放弃 backdrop-filter,改用不透明 --surface + 双层 shadow(散射 + inset 高光)
+ * 制造强视觉浮层感。桌面 / 手机统一一套规则,与 .user-dropdown / context-menu 等
+ * 其它下拉的视觉语言一致。Win7 Chrome ≤109 fallback 用 rgba/#,现代浏览器接 oklch。 */
 .search-history {
   display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 8px;
-  background: rgba(17, 22, 30, 0.72);
-  background: oklch(20% 0.018 260 / 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border: 1px solid oklch(100% 0 0 / 0.08);
-  border-radius: var(--radius); box-shadow: 0 16px 48px rgba(0,0,0,0.45); z-index: 350; overflow: hidden;
-  backdrop-filter: blur(22px) saturate(140%);
-  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  background: #161a22;
+  background: var(--surface);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border: 1px solid oklch(100% 0 0 / 0.10);
+  border-radius: var(--radius);
+  /* 双层 shadow:外层 56px 散射制造浮层感 + 内 1px 高光贴边强化分离 */
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.55),
+              0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  box-shadow: 0 20px 56px oklch(0% 0 0 / 0.55),
+              0 0 0 1px oklch(100% 0 0 / 0.04) inset;
+  z-index: 350; overflow: hidden;
 }
 .search-history.open { display: block; animation: histIn 0.18s var(--ease-out); }
 @keyframes histIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
