@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix(settings): 修复深色主题下设置左导航未选中项露出浅灰原生按钮底色** — `.set-nav-item` 是 `<button>`,基础规则漏设 `background`,深色主题下浏览器原生 buttonface(浅灰)直接露出,只有 `.active`(设了 `var(--surface)`)正常。补 `background: transparent` + `text-align: left` + `font-family: inherit`(顺带 reset 原生按钮居中/系统字体)。`web/src/styles/pages/settings.css` + `public/styles.css` 镜像。
 - **fix(theme): 移除 `html` 的 ambient 径向晕染 —— 三主题统一纯色平铺** — 用户反馈内容顶部一坨"左深右浅的灰渐变,丑死了"。经 DevTools `elementsFromPoint` 确诊是 `html` 背景的三层 ambient 径向晕染(左上角 `80% 60% at 12% -8%` 那层 + `background-attachment: fixed`)在内容顶部糊出的色块,跟页面无关(search/settings 都有)、跟新做的扁平 `.set-*` 设计冲突:
   - 暗色(默认)`html` 去掉三层 radial,改纯 `var(--bg)`;亮色 `:root[data-theme="light"] html` 覆盖直接删除(base 平铺已随 token 自适应);纸张主题本就平铺,不动
   - 两文件镜像:`web/src/styles/theme/glass.css`(默认段 + 删亮色覆盖)+ `public/styles.css`(同步)

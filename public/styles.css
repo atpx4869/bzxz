@@ -4058,6 +4058,7 @@ body:not(.force-desktop) .preview-title { font-size: 13px; }
 .set-nav-item {
   display: flex; align-items: center; gap: 10px; padding: 9px 12px;
   border-radius: var(--radius-sm); border: 1px solid transparent;
+  background: transparent; text-align: left; font-family: inherit;
   color: var(--text-2); font-size: 13.5px; font-weight: 500; cursor: pointer;
   transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out);
 }
