@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat(settings): 设置面板重设计 Phase C — `renderSettings` 整体重排为 `.set-layout` 左导航 + 右内容 IA** — 在 `public/js/app-settings.js` 内就地重写渲染(不动 TS 模块树、零构建风险、可回退),把"一页两套渲染 + 6 种卡片方言 + 三种标题写法"收敛成统一 `.set-*` 元件:
+  - 四张卡片渲染函数(`renderUpdateCard` / `renderWebAccessCard` / `renderPortSettingCard` / `renderStartupSettingCard`)从 `.settings-card`/`.desktop-setting-card`/`.web-access-card`/`.port-setting-card` 等方言统一为 `.set-card` + `.set-row`(`.set-row-main`/`.set-row-control`),状态徽章 `.desktop-setting-status`→`.set-status`(is-ok/is-down/is-idle),版本号用 `.set-versions`,下载进度用 `.set-progress`;保留全部 `onclick`/`id`/state 钩子(`portSettingInput`/`.port-setting-row`/`.port-setting-status` 不动)
+  - `renderSettings` 主模板由 `.settings-grid` + 散落 `.setting-section` 重排为左侧 `#settingsNav`(`.set-nav`,admin 多"公告管理/标准库"两项,点击 `settingsNavTo` 平滑滚动 + 高亮)+ 右侧 `#settingsBody` 分区:下载与源 / 访问方式 / 软件更新 / 资质订阅 / (admin)公告 / (admin)标准库
+  - 并发/超时/搜索记录从 `.btn` 组换 `.set-seg`/`.set-seg-item`;源优先级行换 `.set-row.draggable`(`.set-drag-handle`+`.set-order`+`.set-chip`),`initDragSort`/`getDragAfter` 选择器同步 `.setting-row`→`.set-row`
+  - 公告管理卡 `renderAnnouncementAdminCard` 去掉自带 `.setting-section`,改 `.set-head-row` + `.set-card`(外层 section 由主模板提供)
+  - 两个入口 `web/index.html` + `public/index.html` 的 `#page-settings` 包裹为 `.set-layout > nav#settingsNav + .set-content(#settingsBody + 资质订阅块)`,资质块加 `id=set-sec-qual`、`.setting-section`→`.set-section`,折进同一两栏布局
+  - 新增辅助类 `.set-head-row`/`.set-actions`/`.set-subsection`/`.set-versions`(`web/src/styles/pages/settings.css` + 镜像 `public/styles.css`),延续纯 token 纪律(无裸 oklch / 无 color-mix)
+  - 旧卡片 class(`.settings-card`/`.settings-grid`/`.desktop-setting-*`/`.web-access-*` 等)的 CSS 规则暂留 styles.css(已无引用、无害),待 legacy 入口废弃时再清
 - **feat(settings): 设置面板重设计 Phase B — 资质订阅区块接入 `.set-*`(去内联 style)** — 把"系统设置"页里静态手写的资质订阅区块从满屏内联 `style` 切到 Phase A 元件,这是消除拼凑感最扎眼、风险最低的一刀:
   - 区块标题 `.field-label`(内联 flex + 副标题 span)→ `.set-section-head`(`h2` + `p`)
   - 子 Tab `.qual-settings-tabs` / `.qual-settings-tab`(每个按钮一长串内联 padding/color/border-bottom)→ 叠加 `.set-tabs` / `.set-tab`,外观全交给 CSS,保留 `qual-settings-tab` / `data-qual-settings-tab` / `onclick` 钩子不动

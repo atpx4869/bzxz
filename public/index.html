@@ -423,12 +423,15 @@
   <!-- Page: Settings -->
   <div class="page" id="page-settings">
     <h2 style="font-size:20px;font-weight:600;margin-bottom:18px">系统设置</h2>
-    <div id="settingsBody">
-      <span class="spinner"></span>加载中
-    </div>
-    <!-- 资质订阅（CNAS / CMA） -->
-    <div class="setting-section qual-settings-section" style="margin-top:24px">
-      <div class="set-section-head">
+    <div class="set-layout">
+      <nav class="set-nav" id="settingsNav"></nav>
+      <div class="set-content">
+        <div id="settingsBody">
+          <span class="spinner"></span>加载中
+        </div>
+        <!-- 资质订阅（CNAS / CMA） -->
+        <div class="set-section qual-settings-section" id="set-sec-qual">
+          <div class="set-section-head">
         <h2>资质订阅</h2>
         <p>CNAS / CMA 机构能力数据，订阅后定时同步至本地</p>
       </div>
@@ -464,6 +467,8 @@
           <button class="qual-filter-btn" data-log-source="cma" onclick="switchLogSource(this,'cma')">CMA</button>
         </div>
         <div id="qualSyncLogs" style="max-height:400px;overflow-y:auto;font-size:12px"></div>
+      </div>
+        </div>
       </div>
     </div>
   </div>

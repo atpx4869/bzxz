@@ -64,42 +64,47 @@ function renderUpdateCard() {
   var note = supported
     ? (appUpdateState.error || (info.updateAvailable ? 'GitHub Actions 已发布新版本，可打开下载页更新。' : '启动时会自动轻量检查，必要时也可以手动检查。'))
     : '当前是浏览器 Web 端，无法检查桌面客户端更新。';
-  var statusClass = appUpdateState.error ? ' danger' : (info.updateAvailable ? ' success' : '');
+  var statusCls = appUpdateState.error ? 'is-down' : (info.updateAvailable ? 'is-ok' : 'is-idle');
   var assets = Array.isArray(info.assets) ? info.assets.slice(0, 3) : [];
   var installerAsset = getInstallerAsset(info.assets);
+  var progressPct = Math.max(4, Math.min(100, appUpdateState.progress?.percent || 8));
   var progressText = appUpdateState.installing
     ? ('下载中' + (appUpdateState.progress?.percent ? ' ' + appUpdateState.progress.percent + '%' : '...'))
     : '';
-  var assetList = assets.length ? `
-        <div class="update-asset-list">
-          ${assets.map(function(asset) {
-            var size = formatAssetSize(asset.size);
-            return `<button class="update-asset" onclick="openAppUpdatePage(${jsStringArg(asset.url || info.releaseUrl || '')})">
-              <span>${escapeHtml(asset.name || '下载文件')}</span><em>${escapeHtml(size)}</em>
-            </button>`;
-          }).join('')}
-        </div>` : '';
+  var assetRows = assets.length ? assets.map(function(asset) {
+    var size = formatAssetSize(asset.size);
+    return `<div class="set-row">
+        <div class="set-row-main"><div class="set-row-title" style="font-weight:500">${escapeHtml(asset.name || '下载文件')}</div></div>
+        <div class="set-row-control">
+          ${size ? `<span class="set-chip">${escapeHtml(size)}</span>` : ''}
+          <button class="btn btn-sm btn-ghost" onclick="openAppUpdatePage(${jsStringArg(asset.url || info.releaseUrl || '')})">下载</button>
+        </div>
+      </div>`;
+  }).join('') : '';
   return `
-      <div class="settings-card wide update-card">
-        <div class="settings-card-header">
-          <div>
-            <div class="settings-kicker">在线更新</div>
-            <div class="settings-value">客户端版本</div>
-            <div class="setting-hint">${escapeHtml(note)}</div>
+      <div class="set-card update-card">
+        <div class="set-row">
+          <div class="set-row-main">
+            <div class="set-row-title">客户端版本</div>
+            <div class="set-row-note">${escapeHtml(note)}</div>
           </div>
-          <span class="desktop-setting-status${statusClass}">${title}</span>
+          <div class="set-row-control"><span class="set-status ${statusCls}">${title}</span></div>
         </div>
-        <div class="version-row">
-          <span>当前版本 <strong>v${escapeHtml(current)}</strong></span>
-          <span>最新版本 <strong>${latest === '—' ? '—' : 'v' + escapeHtml(latest)}</strong></span>
+        <div class="set-row">
+          <div class="set-row-main">
+            <div class="set-versions">
+              <span>当前 <strong>v${escapeHtml(current)}</strong></span>
+              <span>最新 <strong>${latest === '—' ? '—' : 'v' + escapeHtml(latest)}</strong></span>
+            </div>
+            ${progressText ? `<div style="display:flex;align-items:center;gap:8px;margin-top:8px"><div class="set-progress"><span style="width:${progressPct}%"></span></div><em style="font-size:11px;color:var(--text-3);font-style:normal">${escapeHtml(progressText)}</em></div>` : ''}
+          </div>
+          <div class="set-row-control">
+            <button class="btn btn-sm btn-primary" ${!supported || appUpdateState.checking ? 'disabled' : ''} onclick="checkAppUpdate(false)">检查更新</button>
+            <button class="btn btn-sm btn-primary" ${!supported || appUpdateState.installing || !info.updateAvailable || !installerAsset ? 'disabled' : ''} onclick="downloadAndInstallAppUpdate()">下载并安装</button>
+            <button class="btn btn-sm btn-ghost" ${!supported || !info.releaseUrl ? 'disabled' : ''} onclick="openAppUpdatePage(${jsStringArg(info.releaseUrl || '')})">打开下载页</button>
+          </div>
         </div>
-        ${progressText ? `<div class="update-progress"><div><span style="width:${Math.max(4, Math.min(100, appUpdateState.progress?.percent || 8))}%"></span></div><em>${escapeHtml(progressText)}</em></div>` : ''}
-        ${assetList}
-        <div class="settings-actions">
-          <button class="btn btn-sm btn-primary" ${!supported || appUpdateState.checking ? 'disabled' : ''} onclick="checkAppUpdate(false)">检查更新</button>
-          <button class="btn btn-sm btn-primary" ${!supported || appUpdateState.installing || !info.updateAvailable || !installerAsset ? 'disabled' : ''} onclick="downloadAndInstallAppUpdate()">下载并安装</button>
-          <button class="btn btn-sm btn-ghost" ${!supported || !info.releaseUrl ? 'disabled' : ''} onclick="openAppUpdatePage(${jsStringArg(info.releaseUrl || '')})">打开下载页</button>
-        </div>
+        ${assetRows}
       </div>`;
 }
 
@@ -229,44 +234,45 @@ function renderWebAccessCard() {
   var note = supported
     ? (webAccessState.error || info.firewallHint || '桌面程序最小化到托盘后，内置 Web 服务仍会继续运行。')
     : '当前是浏览器 Web 端，无法控制桌面内置服务。';
-  var statusClass = webAccessState.error ? ' danger' : (enabled && lanUrls.length ? ' success' : '');
+  var statusCls = webAccessState.error ? 'is-down' : (enabled && lanUrls.length ? 'is-ok' : 'is-idle');
   var urlRows = urls.length ? urls.map(function(url, idx) {
     var isLocal = idx === 0;
-    var label = isLocal ? '本机' : '内网';
-    var phoneHint = !isLocal ? ' <span class="web-access-phone-hint" title="手机浏览器或扫码访问的目标地址">📱 手机版</span>' : '';
+    var label = isLocal ? '本机' : '内网 📱';
     return `
-      <div class="web-access-url-row">
-        <span>${label}${phoneHint}</span>
-        <code title="${escapeHtml(url)}">${escapeHtml(url)}</code>
-        ${supported ? `<button class="btn btn-sm btn-ghost" onclick="copyWebAccessUrl('${escapeHtml(url)}')">复制</button>` : ''}
-        ${supported ? `<button class="btn btn-sm btn-ghost" onclick="openWebAccessUrl('${escapeHtml(url)}')">打开</button>` : ''}
+      <div class="set-row">
+        <div class="set-row-main">
+          <div class="set-row-title" style="font-weight:500">${label}</div>
+          <div class="set-field" style="margin-top:6px;max-width:100%"><code title="${escapeHtml(url)}">${escapeHtml(url)}</code></div>
+        </div>
+        <div class="set-row-control">
+          ${supported ? `<button class="btn btn-sm btn-ghost" onclick="copyWebAccessUrl('${escapeHtml(url)}')">复制</button>` : ''}
+          ${supported ? `<button class="btn btn-sm btn-ghost" onclick="openWebAccessUrl('${escapeHtml(url)}')">打开</button>` : ''}
+        </div>
       </div>`;
-  }).join('') : '<div class="setting-hint">未获取到访问地址</div>';
-  var phoneTipHtml = (supported && enabled && lanUrls.length) ? `
-        <div class="web-access-phone-tip">
-          <strong>📱 手机访问：</strong>
-          确认手机与本机在同一 Wi-Fi 下，在浏览器输入上方「内网」地址；
-          支持「添加到主屏」（iOS Safari / Android Chrome），独立窗口体验。
-          <span class="setting-hint" style="display:block;margin-top:4px">小贴士：HTTP 内网部署，离线缓存暂未启用。</span>
+  }).join('') : '<div class="set-row"><div class="set-row-main"><div class="set-row-note">未获取到访问地址</div></div></div>';
+  var phoneTipRow = (supported && enabled && lanUrls.length) ? `
+        <div class="set-row">
+          <div class="set-row-main">
+            <div class="set-row-note"><strong>📱 手机访问：</strong>确认手机与本机在同一 Wi-Fi 下，在浏览器输入上方「内网」地址；支持「添加到主屏」（iOS Safari / Android Chrome），独立窗口体验。HTTP 内网部署，离线缓存暂未启用。</div>
+          </div>
         </div>` : '';
   return `
-      <div class="settings-card wide web-access-card">
-        <div class="settings-card-header">
-          <div>
-            <div class="settings-kicker">网页版启动器</div>
-            <div class="settings-value">内置 Web 服务</div>
-            <div class="setting-hint">${escapeHtml(note)}</div>
+      <div class="set-card web-access-card">
+        <div class="set-row">
+          <div class="set-row-main">
+            <div class="set-row-title">内置 Web 服务</div>
+            <div class="set-row-note">${escapeHtml(note)}</div>
           </div>
-          <div class="desktop-setting-controls">
-            <span class="desktop-setting-status${statusClass}">${webAccessState.loading ? '读取中' : title}</span>
+          <div class="set-row-control">
+            <span class="set-status ${statusCls}">${webAccessState.loading ? '读取中' : title}</span>
             <label class="toggle-switch" title="${supported ? '允许同一局域网设备访问网页版' : '仅桌面程序可用'}">
               <input type="checkbox" ${enabled ? 'checked' : ''} ${!supported || webAccessState.loading ? 'disabled' : ''} onchange="toggleWebServiceSetting(this.checked)">
               <span class="toggle-track"><span class="toggle-thumb"></span></span>
             </label>
           </div>
         </div>
-        <div class="web-access-url-list">${urlRows}</div>
-        ${phoneTipHtml}
+        ${urlRows}
+        ${phoneTipRow}
       </div>`;
 }
 
@@ -326,10 +332,10 @@ function renderPortSettingCard() {
   var supported = hasDesktopPortApi();
   var s = portSettingState;
   var mode = supported ? (s.preferredPort ? '固定端口' : '随机端口') : '仅桌面端';
-  var statusClass = s.saveError ? ' danger'
-    : (s.checkResult && s.checkResult.available === false) ? ' danger'
-    : (s.preferredPort && s.preferredPort === s.actualPort) ? ' success'
-    : '';
+  var statusCls = s.saveError ? 'is-down'
+    : (s.checkResult && s.checkResult.available === false) ? 'is-down'
+    : (s.preferredPort && s.preferredPort === s.actualPort) ? 'is-ok'
+    : 'is-idle';
   var inputValue = s.inputValue != null ? s.inputValue : (s.preferredPort == null ? '' : String(s.preferredPort));
   var note;
   if (!supported) {
@@ -360,31 +366,35 @@ function renderPortSettingCard() {
     : (s.checkResult && s.checkResult.available === false) ? ' danger'
     : ' muted';
   var disabled = !supported || s.loading || s.saving;
+  var checkColor = checkClass.indexOf('success') >= 0 ? 'var(--success)' : checkClass.indexOf('danger') >= 0 ? 'var(--danger)' : 'var(--text-3)';
   return `
-      <div class="settings-card wide port-setting-card">
-        <div class="settings-card-header">
-          <div>
-            <div class="settings-kicker">桌面程序</div>
-            <div class="settings-value">内置服务端口</div>
-            <div class="setting-hint">${escapeHtml(note)}</div>
+      <div class="set-card port-setting-card">
+        <div class="set-row">
+          <div class="set-row-main">
+            <div class="set-row-title">内置服务端口</div>
+            <div class="set-row-note">${escapeHtml(note)}</div>
           </div>
-          <span class="desktop-setting-status${statusClass}">${s.loading ? '读取中' : escapeHtml(mode)}</span>
+          <div class="set-row-control"><span class="set-status ${statusCls}">${s.loading ? '读取中' : escapeHtml(mode)}</span></div>
         </div>
-        <div class="port-setting-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px">
-          <input id="portSettingInput" type="number" inputmode="numeric"
-            min="${s.minPort}" max="${s.maxPort}"
-            placeholder="留空 = 随机"
-            value="${escapeHtml(inputValue)}"
-            ${disabled ? 'disabled' : ''}
-            oninput="onPortInputChange(this.value)"
-            style="flex:0 0 160px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);font:13px 'DM Mono',monospace">
-          <button class="btn btn-sm btn-ghost" ${disabled || !s.inputValue ? 'disabled' : ''} onclick="checkPortNow()">${s.checking ? '检测中…' : '检测'}</button>
-          <button class="btn btn-sm btn-primary" ${disabled ? 'disabled' : ''} onclick="savePortConfig()">${s.saving ? '保存中…' : '保存'}</button>
-          <button class="btn btn-sm btn-ghost" ${disabled || !s.preferredPort ? 'disabled' : ''} onclick="clearPortConfig()">恢复随机</button>
-          ${s.needsRestart ? `<button class="btn btn-sm btn-primary" onclick="relaunchAppNow()">立即重启</button>` : ''}
+        <div class="set-row">
+          <div class="set-row-main">
+            <div class="port-setting-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <input id="portSettingInput" type="number" inputmode="numeric"
+                min="${s.minPort}" max="${s.maxPort}"
+                placeholder="留空 = 随机"
+                value="${escapeHtml(inputValue)}"
+                ${disabled ? 'disabled' : ''}
+                oninput="onPortInputChange(this.value)"
+                style="flex:0 0 160px;padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface-h);color:var(--text);font:13px 'DM Mono',monospace">
+              <button class="btn btn-sm btn-ghost" ${disabled || !s.inputValue ? 'disabled' : ''} onclick="checkPortNow()">${s.checking ? '检测中…' : '检测'}</button>
+              <button class="btn btn-sm btn-primary" ${disabled ? 'disabled' : ''} onclick="savePortConfig()">${s.saving ? '保存中…' : '保存'}</button>
+              <button class="btn btn-sm btn-ghost" ${disabled || !s.preferredPort ? 'disabled' : ''} onclick="clearPortConfig()">恢复随机</button>
+              ${s.needsRestart ? `<button class="btn btn-sm btn-primary" onclick="relaunchAppNow()">立即重启</button>` : ''}
+            </div>
+            <div class="set-row-note port-setting-status" style="margin-top:6px;min-height:18px;color:${checkColor}">${escapeHtml(checkText)}</div>
+            <div class="set-row-note" style="margin-top:2px">当前实际端口: <code>${s.actualPort || '—'}</code></div>
+          </div>
         </div>
-        <div class="setting-hint port-setting-status${checkClass}" style="margin-top:6px;min-height:18px">${escapeHtml(checkText)}</div>
-        <div class="setting-hint" style="margin-top:4px;color:var(--text-3)">当前实际端口: <code>${s.actualPort || '—'}</code></div>
       </div>`;
 }
 
@@ -502,20 +512,21 @@ function renderStartupSettingCard() {
   var note = supported
     ? (startupSettingState.error || '开启后，登录 Windows 时自动启动 bzxz 桌面程序。')
     : 'Web 端不能写入系统启动项，请在桌面程序中设置。';
-  var statusClass = startupSettingState.error ? ' danger' : (startupSettingState.enabled ? ' success' : '');
+  var statusCls = startupSettingState.error ? 'is-down' : (startupSettingState.enabled ? 'is-ok' : 'is-idle');
   return `
-      <div class="settings-card wide desktop-setting-card">
-        <div class="setting-row desktop-setting-row">
-          <div class="setting-row-main">
-            <div class="settings-kicker">桌面程序</div>
-            <div class="setting-row-title">开机自启</div>
-            <div class="setting-row-note">${escapeHtml(note)}</div>
+      <div class="set-card desktop-setting-card">
+        <div class="set-row desktop-setting-row">
+          <div class="set-row-main">
+            <div class="set-row-title">开机自启</div>
+            <div class="set-row-note">${escapeHtml(note)}</div>
           </div>
-          <span class="desktop-setting-status${statusClass}">${startupSettingState.loading ? '读取中' : title}</span>
-          <label class="toggle-switch" title="${supported ? '登录 Windows 后自动启动' : '仅桌面程序可用'}">
-            <input type="checkbox" ${startupSettingState.enabled ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="toggleStartupSetting(this.checked)">
-            <span class="toggle-track"><span class="toggle-thumb"></span></span>
-          </label>
+          <div class="set-row-control">
+            <span class="set-status ${statusCls}">${startupSettingState.loading ? '读取中' : title}</span>
+            <label class="toggle-switch" title="${supported ? '登录 Windows 后自动启动' : '仅桌面程序可用'}">
+              <input type="checkbox" ${startupSettingState.enabled ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="toggleStartupSetting(this.checked)">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </label>
+          </div>
         </div>
       </div>`;
 }
@@ -570,18 +581,30 @@ async function toggleStartupSetting(enabled) {
   renderSettings();
 }
 
+// 设置面板左侧分区导航：点击平滑滚动到目标分区并高亮。
+function settingsNavTo(id, el) {
+  var t = document.getElementById(id);
+  if (t && t.scrollIntoView) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (el && el.parentNode) {
+    el.parentNode.querySelectorAll('.set-nav-item').forEach(function (n) { n.classList.remove('active'); });
+    el.classList.add('active');
+  }
+}
+
 function renderSettings() {
+  const isAdmin = (typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin');
+
   const priorityRows = downloadPriority.map((s, i) => {
     const enabled = downloadSources.includes(s);
     return `
-    <div class="setting-row source-priority-row" data-priority="${s}" style="opacity:${enabled ? '1' : '0.45'}">
-      <span class="drag-handle">⋮</span>
-      <span class="priority-rank">${i + 1}</span>
-      <div class="setting-row-main">
-        <div class="setting-row-title">${SETTINGS_LABELS[s]}</div>
-        <div class="setting-row-note">${SETTINGS_NOTES[s]}</div>
+    <div class="set-row draggable source-priority-row" data-priority="${s}" style="opacity:${enabled ? '1' : '0.45'}">
+      <span class="set-drag-handle">⋮</span>
+      <span class="set-order">${i + 1}</span>
+      <div class="set-row-main">
+        <div class="set-row-title">${SETTINGS_LABELS[s]}</div>
+        <div class="set-row-note">${SETTINGS_NOTES[s]}</div>
       </div>
-      <span class="source-tag source-pill">${srcLabel(s)}</span>
+      <span class="set-chip">${srcLabel(s)}</span>
       <label class="toggle-switch">
         <input type="checkbox" ${enabled ? 'checked' : ''} onchange="toggleDownloadSource('${s}', this.checked);renderSettings()">
         <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -589,70 +612,91 @@ function renderSettings() {
     </div>`;
   }).join('');
 
-  const concurrencyOpts = VALID_CONCURRENCY.map(n => {
-    return `<button class="btn btn-sm ${n === downloadConcurrency ? 'btn-primary' : 'btn-ghost'}" onclick="setConcurrency(${n});renderSettings()">${n}</button>`;
-  }).join('');
+  const seg = (opts, current, fn, suffix) => `<div class="set-seg">${opts.map(n =>
+    `<button class="set-seg-item ${n === current ? 'active' : ''}" onclick="${fn}(${n});renderSettings()">${n}${suffix || ''}</button>`
+  ).join('')}</div>`;
+  const concurrencySeg = seg(VALID_CONCURRENCY, downloadConcurrency, 'setConcurrency', '');
+  const timeoutSeg = seg([10, 15, 20, 30, 60], downloadTimeout, 'setTimeoutVal', 's');
+  const historySeg = seg([3, 5, 8, 10, 15, 20], getHistoryLimit(), 'setHistoryLimit', '');
 
-  const timeoutOpts = [10, 15, 20, 30, 60].map(n => {
-    return `<button class="btn btn-sm ${n === downloadTimeout ? 'btn-primary' : 'btn-ghost'}" onclick="setTimeoutVal(${n});renderSettings()">${n}s</button>`;
-  }).join('');
-
-  const historyOpts = [3, 5, 8, 10, 15, 20].map(n => {
-    return `<button class="btn btn-sm ${n === getHistoryLimit() ? 'btn-primary' : 'btn-ghost'}" onclick="setHistoryLimit(${n});renderSettings()">${n}</button>`;
-  }).join('');
   const updateCard = renderUpdateCard();
   const webAccessCard = renderWebAccessCard();
   const startupCard = renderStartupSettingCard();
   const portCard = renderPortSettingCard();
   const announcementCard = renderAnnouncementAdminCard();
 
-  document.getElementById('settingsBody').innerHTML = `
-    <div class="settings-grid">
-      <div class="settings-card">
-        <div class="settings-kicker">并发数</div>
-        <div class="settings-value">${downloadConcurrency}</div>
-        <div class="setting-options">${concurrencyOpts}</div>
+  // 左侧分区导航（admin 多两项）
+  const navItems = [
+    ['set-sec-download', '⚙', '下载与源'],
+    ['set-sec-access', '🌐', '访问方式'],
+    ['set-sec-update', '⬆', '软件更新'],
+    ['set-sec-qual', '📋', '资质订阅'],
+  ];
+  if (isAdmin) {
+    navItems.push(['set-sec-ann', '📢', '公告管理']);
+    navItems.push(['set-sec-library', '📁', '标准库']);
+  }
+  const navEl = document.getElementById('settingsNav');
+  if (navEl) {
+    navEl.innerHTML = navItems.map((it, idx) =>
+      `<button class="set-nav-item${idx === 0 ? ' active' : ''}" onclick="settingsNavTo('${it[0]}', this)"><span class="set-nav-ico">${it[1]}</span>${it[2]}</button>`
+    ).join('');
+  }
+
+  const body = document.getElementById('settingsBody');
+  body.style.display = 'flex';
+  body.style.flexDirection = 'column';
+  body.style.gap = '30px';
+  body.innerHTML = `
+    <div class="set-section" id="set-sec-download">
+      <div class="set-section-head"><h2>下载与源</h2><p>并发、超时、搜索记录与源的优先级、连通性。</p></div>
+      <div class="set-card">
+        <div class="set-row">
+          <div class="set-row-main"><div class="set-row-title">并发数</div><div class="set-row-note">同时下载的任务数</div></div>
+          <div class="set-row-control">${concurrencySeg}</div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-main"><div class="set-row-title">超时时间</div><div class="set-row-note">单个请求的等待上限</div></div>
+          <div class="set-row-control">${timeoutSeg}</div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-main"><div class="set-row-title">搜索记录</div><div class="set-row-note">保留的历史搜索条数</div></div>
+          <div class="set-row-control">${historySeg}</div>
+        </div>
       </div>
-      <div class="settings-card">
-        <div class="settings-kicker">超时时间</div>
-        <div class="settings-value">${downloadTimeout}s</div>
-        <div class="setting-options">${timeoutOpts}</div>
-      </div>
-      <div class="settings-card">
-        <div class="settings-kicker">搜索记录</div>
-        <div class="settings-value">${getHistoryLimit()}条</div>
-        <div class="setting-options">${historyOpts}</div>
-      </div>
-      ${updateCard}
-      ${webAccessCard}
-      ${portCard}
-      ${startupCard}
-    </div>
-    ${announcementCard}
-    <div class="setting-section">
-      <div class="field-label">源优先级</div>
-      <div class="setting-hint">拖拽调整顺序，顺序模式下排前面的源会先尝试。</div>
-      <div id="priorityList" class="source-priority-list">${priorityRows}</div>
-    </div>
-    <div class="setting-section">
-      <div class="field-label settings-source-head">
-        数据源状态
+      <div class="set-section-head set-subsection"><h2>源优先级</h2><p>拖拽调整顺序，顺序模式下排前面的源会先尝试。</p></div>
+      <div id="priorityList" class="set-card">${priorityRows}</div>
+      <div class="set-head-row set-subsection">
+        <div class="set-section-head"><h2>数据源状态</h2><p>检测各下载源当前连通性与响应耗时。</p></div>
         <button class="btn btn-sm btn-ghost" onclick="checkAllSources()" id="checkSourcesBtn">全部检测</button>
       </div>
-      <div id="sourceStatusList" class="source-status-list">点击“全部检测”或单个源的“重试”按钮</div>
+      <div class="set-card" style="padding:6px 16px"><div id="sourceStatusList" class="source-status-list" style="font-size:13px;color:var(--text-3);padding:8px 0">点击“全部检测”或单个源的“重试”按钮</div></div>
+      <div class="set-actions set-subsection">
+        <button class="btn btn-ghost btn-sm" onclick="showDiagnostics()">🩺 诊断</button>
+        <button class="btn btn-ghost btn-sm" onclick="resetSettings();renderSettings()">恢复默认</button>
+      </div>
     </div>
-    <div class="settings-actions">
-      <button class="btn btn-ghost btn-sm" onclick="showDiagnostics()">🩺 诊断</button>
-      <button class="btn btn-ghost btn-sm" onclick="resetSettings();renderSettings()">恢复默认</button>
+
+    <div class="set-section" id="set-sec-access">
+      <div class="set-section-head"><h2>访问方式</h2><p>内置 Web 服务、服务端口与桌面端开机自启。</p></div>
+      ${webAccessCard}
+      <div class="set-subsection">${portCard}</div>
+      <div class="set-subsection">${startupCard}</div>
     </div>
-    ${(typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin') ? `
-    <div class="setting-section" id="librarySection">
-      <div class="field-label settings-source-head">
-        标准库
+
+    <div class="set-section" id="set-sec-update">
+      <div class="set-section-head"><h2>软件更新</h2><p>检查并安装桌面客户端的新版本。</p></div>
+      ${updateCard}
+    </div>
+
+    ${isAdmin ? `
+    <div class="set-section" id="set-sec-ann">${announcementCard}</div>
+    <div class="set-section" id="set-sec-library">
+      <div class="set-head-row">
+        <div class="set-section-head"><h2>标准库</h2><p>本地标准 PDF 存放目录。预览功能优先读取此目录里已下载的文件，命中即时打开。</p></div>
         <button class="btn btn-sm btn-ghost" id="libraryRescanBtn" onclick="rescanLibrary()">重新扫描</button>
       </div>
-      <div class="setting-hint">本地标准 PDF 存放目录。预览功能优先读取此目录里已下载的文件，命中即时打开。</div>
-      <div id="libraryStatusBox" class="library-status-box">加载中…</div>
+      <div class="set-card" style="padding:14px 16px"><div id="libraryStatusBox" class="library-status-box">加载中…</div></div>
     </div>` : ''}`;
   initDragSort();
   if (typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin') {
@@ -1086,7 +1130,7 @@ function resetSettings() {
 function initDragSort() {
   const list = document.getElementById('priorityList');
   if (!list) return;
-  list.querySelectorAll('.setting-row').forEach(row => {
+  list.querySelectorAll('.set-row').forEach(row => {
     row.setAttribute('draggable', 'true');
     row.addEventListener('dragstart', e => {
       e.dataTransfer.setData('text/plain', row.dataset.priority);
@@ -1101,14 +1145,14 @@ function initDragSort() {
     });
     row.addEventListener('drop', e => {
       e.preventDefault(); row.classList.remove('sortable-drag');
-      const order = [...list.querySelectorAll('.setting-row')].map(r => r.dataset.priority);
+      const order = [...list.querySelectorAll('.set-row')].map(r => r.dataset.priority);
       downloadPriority = order; saveSettings(); renderSettings();
     });
   });
 }
 
 function getDragAfter(container, y) {
-  const draggables = [...container.querySelectorAll('.setting-row:not(.sortable-drag)')];
+  const draggables = [...container.querySelectorAll('.set-row:not(.sortable-drag)')];
   return draggables.reduce((closest, child) => {
     const box = child.getBoundingClientRect();
     const offset = y - box.top - box.height / 2;
@@ -1122,11 +1166,11 @@ function getDragAfter(container, y) {
 function renderAnnouncementAdminCard() {
   if (!window.currentUser || window.currentUser.role !== 'admin') return '';
   return `
-    <div class="setting-section" id="ann-admin-section">
-      <div class="field-label">公告管理 <button class="btn btn-sm btn-primary" onclick="showAnnAdminCreate()" style="margin-left:8px">新建公告</button></div>
-      <div class="setting-hint">创建后，所有用户在下次登录后首次进入时弹出一次；可随时编辑或停用。</div>
-      <div id="annAdminList" class="ann-admin-list">加载中...</div>
-    </div>`;
+      <div class="set-head-row">
+        <div class="set-section-head"><h2>公告管理</h2><p>创建后，所有用户在下次登录后首次进入时弹出一次；可随时编辑或停用。</p></div>
+        <button class="btn btn-sm btn-primary" onclick="showAnnAdminCreate()">新建公告</button>
+      </div>
+      <div class="set-card" style="padding:8px 16px"><div id="annAdminList" class="ann-admin-list">加载中...</div></div>`;
 }
 
 async function loadAnnAdminList() {

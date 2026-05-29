@@ -121,14 +121,22 @@ web/src/styles/
 `pages/settings.css` 是**新增文件**，不是从 `public/styles.css` 抽出的段落 ——
 方向相反：先在 `web/` 写好，再**镜像追加**到 `public/styles.css` 末尾（维持两份并存
 契约）。它定义一套 `.set-*` 统一元件（layout / nav / section / card / row / seg /
-toggle 复用 / status / field / tabs / chip / progress / inline-add），取代旧设置页的
+toggle 复用 / status / field / tabs / chip / progress / inline-add / head-row /
+actions / subsection / versions），取代旧设置页的
 `.settings-card` / `.desktop-setting-card` / `.web-access-card` / `.setting-choice` /
 `.qual-settings-tabs` 等多种方言。
 
 **主题纪律（与其它文件不同）**：本文件只用 `var(--*)` token，无裸 oklch、无 `color-mix`，
 故**无需** `theme/glass.css` 的 light/paper override，也无需 oklch fallback。新增 `.set-*`
-样式务必延续此纪律。详见 `docs/SETTINGS-REDESIGN.md` 的分期路径（Phase A 已落地：纯样式，
-暂无 HTML 引用；B/C/D 逐步接上并最终把 legacy `app-settings.js` 重构为 TS 组件）。
+样式务必延续此纪律。详见 `docs/SETTINGS-REDESIGN.md` 的分期路径：
+- **Phase A 已落地**（纯样式，暂无 HTML 引用）
+- **Phase B 已落地**（资质订阅区块接 `.set-section-head`/`.set-tabs`）
+- **Phase C 已落地**（`app-settings.js` 内 `renderSettings` 整体重排为 `.set-layout` 左导航
+  + 右内容；四张卡片渲染函数统一为 `.set-card`/`.set-row`；两个 `index.html` 的
+  `#page-settings` 包裹为 `.set-layout`，资质块 `id=set-sec-qual` 折入同一两栏。新增辅助类
+  `.set-head-row`/`.set-actions`/`.set-subsection`/`.set-versions`）
+- **Phase D 待办**（有可用构建环境后，把 legacy `app-settings.js` 真正抽成
+  `web/src/modules/settings/` TS 组件并删除旧文件）
 
 ## 拆分执行顺序（P1）
 
