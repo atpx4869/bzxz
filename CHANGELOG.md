@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix(theme): light/paper 50+ "灰灰"残留补丁 + 设计文档** — 用户反馈切到 light/paper 后仍大量元素显示深灰色调:日志面板 / 通用按钮 / 结果卡内部按钮 / 工具栏 / batch+complete 卡片 / ctx-menu 右键 / modal 遮罩 / source-badge BZ/BW/BY / 状态徽章 / 进度条等。诊断:项目历史上大量 CSS hardcode `oklch(20% ...)` 暗色,没走 `var(--surface)`,light/paper 切换无效。新增 Phase 2 补丁段:
+  - **light 覆盖 50+ 处**:.log-panel/.log-summary span / .progress-track / .source-health-mini / .btn-ghost:hover / .btn:disabled / .search-templates button / .toolbar .btn.active / .badge-count / .filter-sep / .filter-sort select / .status-group-header / .ctx-menu / .result-card.row-active / .saved / .card-actions button(各 disabled/save.saved/download)/ .src-prog-chip(各 loading/ok/fail)/ .source-bz/.source-gbw/.source-by / .batch-card / .batch-mode-pill / .batch-results-empty / .batch-stat / .batch-result-card / .batch-textarea / .complete-card/.step(各 active/done/error)/ .complete-dropzone/.complete-status/.complete-options / .modal/.confirm-card/.modal-overlay/.confirm-overlay / .detail-chip
+  - **paper 同款选择器 50+ 处**:配色换米白 + 米褐 + 暖色阴影 + 赤陶 accent
+  - 文件:`web/src/styles/theme/glass.css` 末尾追加 ~610 行;`public/styles.css` 末尾镜像
+- **docs: 新增 `docs/THEME_DESIGN.md`** — 完整记录三主题设计哲学 / token 表 / 覆盖组件清单(80+) / 改一处的 workflow / 续作 AI 起手指南。方便换电脑或换 AI 时无缝接手主题设计工作
 - **feat: 第三主题 Paper · Claude Linen 温暖印刷品** — 在 dark / light(Arctic Blue) 之外新增 paper 主题,模仿 Claude.ai 同色调:米白底 + Burnt Sienna 赤陶 accent + 暖墨色文字 + 1px 米褐边线,杂志内页 / 书页质感。
   - **设计哲学**:① 米白不是白(bg oklch(95% 0.018 75) 奶油亚麻) ② 边界靠 1px 边线不靠阴影(claude.ai 几乎无 shadow) ③ accent #c96342 赤陶 Anthropic 品牌色 ④ 文字带暖色调(hue=60-75)油墨印刷感 ⑤ frosted glass 全面退场 — 不用 backdrop-filter blur
   - **差异点**:html 纯 `var(--bg)` 不做 ambient gradient / body::before 网格 `display:none` / btn-primary 纯色赤陶不用渐变 / topbar/sidebar/search-row 不用 frosted

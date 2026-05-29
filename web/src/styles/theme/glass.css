@@ -830,3 +830,614 @@ body::before {
   box-shadow: 0 1px 0 oklch(100% 0 0 / 0.15) inset,
               0 1px 3px oklch(40% 0.13 30 / 0.25);
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Phase 2 补丁段 — 修复"灰灰"残留:大量 hardcode 暗色没走 var(--surface)
+   系列,light/paper 切换后仍显深色。这里追加 50+ override 覆盖到位。
+   选择器策略:`:root[data-theme="X"] .selector` specificity (0,2,1) 高于
+   原始 .selector (0,1,0),自动赢且 dark 时不命中。
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ─── Light · Arctic Blue 补丁(50+) ──────────────────────────── */
+
+/* 日志面板:深色 → 半透白 frosted */
+:root[data-theme="light"] .log-panel {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-top-color: rgba(220, 226, 234, 0.6); border-top-color: oklch(85% 0.020 245 / 0.6);
+}
+:root[data-theme="light"] .log-header:hover {
+  background: rgba(40, 85, 212, 0.05); background: oklch(52% 0.20 250 / 0.05);
+}
+:root[data-theme="light"] .log-summary span {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .log-item {
+  border-bottom-color: rgba(216, 224, 234, 0.5); border-bottom-color: oklch(88% 0.018 245 / 0.5);
+}
+:root[data-theme="light"] .progress-track {
+  background: rgba(216, 224, 234, 1); background: oklch(88% 0.018 245);
+}
+
+/* topbar 上的源健康徽章 */
+:root[data-theme="light"] .source-health-mini {
+  background: rgba(255, 255, 255, 0.75); background: oklch(100% 0 0 / 0.75);
+  border-color: rgba(220, 226, 234, 0.8); border-color: oklch(85% 0.020 245);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .source-health-mini:hover {
+  background: rgba(40, 85, 212, 0.06); background: oklch(52% 0.20 250 / 0.06);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* download center badge */
+:root[data-theme="light"] #downloadCenterBadge {
+  background: rgba(40, 85, 212, 0.15); background: oklch(52% 0.20 250 / 0.15);
+  color: var(--accent-h);
+}
+:root[data-theme="light"] #downloadCenterBadge.warn {
+  background: rgba(200, 56, 56, 0.15); background: oklch(54% 0.20 25 / 0.15);
+  color: var(--danger);
+}
+
+/* sidebar-sep */
+:root[data-theme="light"] .sidebar-sep {
+  background: rgba(216, 224, 234, 0.6); background: oklch(88% 0.018 245 / 0.6);
+}
+
+/* 通用 btn-ghost & btn:disabled */
+:root[data-theme="light"] .btn-ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .btn-ghost:hover {
+  background: rgba(40, 85, 212, 0.06); background: oklch(52% 0.20 250 / 0.06);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+:root[data-theme="light"] .btn:disabled,
+:root[data-theme="light"] .btn[disabled] {
+  background: rgba(238, 242, 247, 0.5); background: oklch(96% 0.012 245 / 0.5);
+  color: var(--text-3);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+/* search-templates 模板 chip(GB/T / GB / 等) */
+:root[data-theme="light"] .search-templates button {
+  background: rgba(255, 255, 255, 0.6); background: oklch(100% 0 0 / 0.6);
+  border-color: rgba(216, 224, 234, 0.8); border-color: oklch(85% 0.020 245);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .search-templates button:hover {
+  background: rgba(230, 237, 246, 0.8); background: oklch(95% 0.025 245 / 0.8);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* toolbar 工具栏内 chip */
+:root[data-theme="light"] .toolbar .btn.active {
+  background: rgba(40, 85, 212, 0.10); background: oklch(52% 0.20 250 / 0.10);
+  border-color: var(--accent);
+  color: var(--accent-h);
+}
+:root[data-theme="light"] .badge-count {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .filter-sep {
+  background: rgba(216, 224, 234, 0.7); background: oklch(88% 0.018 245 / 0.7);
+}
+:root[data-theme="light"] .filter-sort select {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+/* status-group-header(分组折叠头) */
+:root[data-theme="light"] .status-group-header {
+  background: rgba(238, 242, 247, 0.7); background: oklch(96% 0.012 245 / 0.7);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .status-group-header:hover {
+  background: rgba(230, 237, 246, 0.9); background: oklch(95% 0.025 245 / 0.9);
+}
+
+/* ctx-menu 右键菜单 */
+:root[data-theme="light"] .ctx-menu {
+  background: rgba(255, 255, 255, 0.96); background: oklch(100% 0 0 / 0.96);
+  border-color: rgba(220, 226, 234, 0.8); border-color: oklch(85% 0.020 245);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  box-shadow: 0 12px 32px -8px rgba(40, 60, 100, 0.18);
+  box-shadow: 0 12px 32px -8px oklch(50% 0.12 245 / 0.18);
+}
+:root[data-theme="light"] .ctx-menu-item:hover {
+  background: rgba(40, 85, 212, 0.08); background: oklch(52% 0.20 250 / 0.08);
+  color: var(--accent-h);
+}
+
+/* result-card.row-active(选中行) + saved */
+:root[data-theme="light"] .result-card.row-active {
+  background: rgba(230, 237, 246, 0.9); background: oklch(95% 0.025 245 / 0.9);
+  outline-color: var(--accent);
+  box-shadow: 0 4px 18px rgba(40, 85, 212, 0.15);
+  box-shadow: 0 4px 18px oklch(52% 0.20 250 / 0.15);
+}
+:root[data-theme="light"] .result-card.saved {
+  background: linear-gradient(90deg, rgba(168, 117, 32, 0.06), rgba(251, 252, 254, 1) 24%);
+  background: linear-gradient(90deg, oklch(58% 0.14 80 / 0.06), oklch(99.5% 0.003 245) 24%);
+  border-color: rgba(225, 195, 155, 0.6); border-color: oklch(82% 0.08 80 / 0.6);
+}
+
+/* result-card 内部按钮(桌面端) */
+:root[data-theme="light"] .result-card .card-actions button {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .result-card .card-actions button:hover {
+  background: rgba(230, 237, 246, 1); background: oklch(95% 0.025 245);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+:root[data-theme="light"] .result-card .card-actions button[data-action="download"] {
+  background: linear-gradient(135deg, #2855d4, #1f4ac9);
+  background: linear-gradient(135deg, oklch(56% 0.22 250), oklch(48% 0.22 255));
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 2px 8px rgba(40, 85, 212, 0.20);
+  box-shadow: 0 2px 8px oklch(52% 0.20 250 / 0.20);
+}
+:root[data-theme="light"] .result-card .card-actions button[data-action="save"].saved {
+  background: rgba(248, 235, 215, 1); background: oklch(96% 0.04 80);
+  border-color: rgba(225, 198, 165, 1); border-color: oklch(83% 0.10 80);
+  color: var(--warning);
+}
+:root[data-theme="light"] .result-card .card-actions button:disabled,
+:root[data-theme="light"] .result-card .card-actions button[disabled] {
+  background: rgba(238, 242, 247, 0.5); background: oklch(96% 0.012 245 / 0.5);
+  color: var(--text-3);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* src-prog-chip(每源进度条) */
+:root[data-theme="light"] .src-prog-chip {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .src-prog-loading {
+  background: rgba(40, 85, 212, 0.08); background: oklch(52% 0.20 250 / 0.08);
+  border-color: rgba(40, 85, 212, 0.35); border-color: oklch(52% 0.20 250 / 0.35);
+  color: var(--accent);
+}
+:root[data-theme="light"] .src-prog-ok {
+  background: rgba(225, 240, 215, 0.85); background: oklch(93% 0.030 130);
+  border-color: rgba(165, 205, 150, 1); border-color: oklch(80% 0.06 130);
+  color: var(--success);
+}
+:root[data-theme="light"] .src-prog-fail {
+  background: rgba(247, 220, 215, 0.85); background: oklch(95% 0.04 25);
+  border-color: rgba(225, 175, 168, 1); border-color: oklch(82% 0.10 25);
+  color: var(--danger);
+}
+
+/* source-badge BZ/GBW/BY(桌面端结果卡) */
+:root[data-theme="light"] .source-bz {
+  background: rgba(225, 235, 250, 1); background: oklch(94% 0.030 245);
+  color: #1f4ac9; color: oklch(42% 0.20 250);
+  border-color: rgba(168, 192, 230, 1); border-color: oklch(82% 0.10 245);
+}
+:root[data-theme="light"] .source-gbw {
+  background: rgba(225, 240, 215, 1); background: oklch(93% 0.030 130);
+  color: #4d6b35; color: oklch(40% 0.13 130);
+  border-color: rgba(175, 205, 150, 1); border-color: oklch(80% 0.06 130);
+}
+:root[data-theme="light"] .source-by {
+  background: rgba(248, 235, 215, 1); background: oklch(96% 0.04 80);
+  color: #a3771a; color: oklch(48% 0.13 80);
+  border-color: rgba(225, 198, 165, 1); border-color: oklch(83% 0.10 80);
+}
+
+/* batch / complete 卡片们 */
+:root[data-theme="light"] .batch-card,
+:root[data-theme="light"] .complete-card {
+  background: rgba(255, 255, 255, 0.75); background: oklch(100% 0 0 / 0.75);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .batch-mode-pill {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .batch-results-empty {
+  background: rgba(248, 250, 253, 0.5); background: oklch(98% 0.008 245 / 0.5);
+  border-color: rgba(216, 224, 234, 0.7); border-color: oklch(88% 0.018 245 / 0.7);
+  color: var(--text-3);
+}
+:root[data-theme="light"] .batch-stat {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .batch-result-card {
+  background: rgba(251, 252, 254, 0.9); background: oklch(99.5% 0.003 245 / 0.9);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .batch-result-card:hover {
+  background: rgba(255, 255, 255, 1); background: oklch(100% 0 0);
+  border-color: var(--border-strong);
+}
+:root[data-theme="light"] .batch-result-card .card-src {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .batch-textarea {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+  color: var(--text);
+}
+:root[data-theme="light"] .batch-textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(40, 85, 212, 0.10);
+  box-shadow: 0 0 0 4px oklch(52% 0.20 250 / 0.10);
+}
+:root[data-theme="light"] .complete-step {
+  background: rgba(251, 252, 254, 0.75); background: oklch(99.5% 0.003 245 / 0.75);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .complete-step > span {
+  background: rgba(238, 242, 247, 0.9); background: oklch(96% 0.012 245);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .complete-step.active {
+  background: rgba(230, 237, 246, 0.7); background: oklch(95% 0.025 245 / 0.7);
+  border-color: var(--accent);
+}
+:root[data-theme="light"] .complete-step.done > span {
+  background: rgba(225, 240, 215, 1); background: oklch(93% 0.030 130);
+  color: var(--success);
+}
+:root[data-theme="light"] .complete-step.error > span {
+  background: rgba(247, 220, 215, 1); background: oklch(95% 0.04 25);
+  color: var(--danger);
+}
+:root[data-theme="light"] .complete-dropzone,
+:root[data-theme="light"] .complete-status {
+  background: rgba(248, 250, 253, 0.5); background: oklch(98% 0.008 245 / 0.5);
+  border-color: rgba(216, 224, 234, 0.8); border-color: oklch(88% 0.018 245 / 0.8);
+  color: var(--text-3);
+}
+:root[data-theme="light"] .complete-options .check-option {
+  background: rgba(251, 252, 254, 0.7); background: oklch(99.5% 0.003 245 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .complete-result-stats div {
+  background: rgba(238, 242, 247, 0.6); background: oklch(96% 0.012 245 / 0.6);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .complete-download-card {
+  background: rgba(225, 240, 215, 0.45); background: oklch(93% 0.030 130 / 0.45);
+  border-color: rgba(165, 205, 150, 0.6); border-color: oklch(80% 0.06 130 / 0.6);
+}
+
+/* modal 模态 + detail-chip */
+:root[data-theme="light"] .modal-overlay {
+  background: rgba(35, 50, 80, 0.30); background: oklch(30% 0.05 245 / 0.30);
+  backdrop-filter: blur(6px) saturate(140%);
+  -webkit-backdrop-filter: blur(6px) saturate(140%);
+}
+:root[data-theme="light"] .confirm-overlay {
+  background: rgba(35, 50, 80, 0.45); background: oklch(30% 0.05 245 / 0.45);
+  backdrop-filter: blur(4px) saturate(140%);
+  -webkit-backdrop-filter: blur(4px) saturate(140%);
+}
+:root[data-theme="light"] .modal,
+:root[data-theme="light"] .confirm-card {
+  background: rgba(255, 255, 255, 0.96); background: oklch(100% 0 0 / 0.96);
+  border-color: var(--border);
+  box-shadow: 0 24px 80px -16px rgba(40, 60, 100, 0.30);
+  box-shadow: 0 24px 80px -16px oklch(50% 0.12 245 / 0.30);
+}
+:root[data-theme="light"] .detail-chip {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+}
+
+
+/* ─── Paper · Claude Linen 补丁(50+) ─────────────────────────── */
+
+:root[data-theme="paper"] .log-panel {
+  background: rgba(251, 250, 245, 0.92); background: oklch(98% 0.010 80 / 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-top-color: rgba(223, 216, 198, 0.6); border-top-color: oklch(86% 0.025 75 / 0.6);
+}
+:root[data-theme="paper"] .log-header:hover {
+  background: rgba(201, 99, 66, 0.05); background: oklch(58% 0.13 35 / 0.05);
+}
+:root[data-theme="paper"] .log-summary span {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .log-item {
+  border-bottom-color: rgba(223, 216, 198, 0.5); border-bottom-color: oklch(86% 0.025 75 / 0.5);
+}
+:root[data-theme="paper"] .progress-track {
+  background: rgba(223, 216, 198, 1); background: oklch(86% 0.025 75);
+}
+
+:root[data-theme="paper"] .source-health-mini {
+  background: rgba(255, 255, 255, 0.7); background: oklch(100% 0 0 / 0.7);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .source-health-mini:hover {
+  background: rgba(201, 99, 66, 0.06); background: oklch(58% 0.13 35 / 0.06);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+:root[data-theme="paper"] #downloadCenterBadge {
+  background: rgba(201, 99, 66, 0.18); background: oklch(58% 0.13 35 / 0.18);
+  color: var(--accent-h);
+}
+:root[data-theme="paper"] #downloadCenterBadge.warn {
+  background: rgba(185, 68, 50, 0.18); background: oklch(50% 0.18 30 / 0.18);
+  color: var(--danger);
+}
+
+:root[data-theme="paper"] .sidebar-sep {
+  background: rgba(223, 216, 198, 0.6); background: oklch(86% 0.025 75 / 0.6);
+}
+
+:root[data-theme="paper"] .btn-ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .btn-ghost:hover {
+  background: rgba(201, 99, 66, 0.06); background: oklch(58% 0.13 35 / 0.06);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+:root[data-theme="paper"] .btn:disabled,
+:root[data-theme="paper"] .btn[disabled] {
+  background: rgba(239, 234, 223, 0.5); background: oklch(93% 0.020 75 / 0.5);
+  color: var(--text-3);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+:root[data-theme="paper"] .search-templates button {
+  background: rgba(255, 255, 255, 0.6); background: oklch(100% 0 0 / 0.6);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .search-templates button:hover {
+  background: rgba(244, 232, 224, 0.7); background: oklch(93% 0.030 50 / 0.7);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+:root[data-theme="paper"] .toolbar .btn.active {
+  background: rgba(201, 99, 66, 0.10); background: oklch(58% 0.13 35 / 0.10);
+  border-color: var(--accent);
+  color: var(--accent-h);
+}
+:root[data-theme="paper"] .badge-count {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .filter-sep {
+  background: rgba(223, 216, 198, 0.7); background: oklch(86% 0.025 75 / 0.7);
+}
+:root[data-theme="paper"] .filter-sort select {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+:root[data-theme="paper"] .status-group-header {
+  background: rgba(239, 234, 223, 0.7); background: oklch(93% 0.020 75 / 0.7);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .status-group-header:hover {
+  background: rgba(244, 232, 224, 0.9); background: oklch(93% 0.030 50 / 0.9);
+}
+
+:root[data-theme="paper"] .ctx-menu {
+  background: rgba(255, 255, 255, 0.96); background: oklch(100% 0 0 / 0.96);
+  border-color: var(--border);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 12px 32px -8px rgba(60, 50, 30, 0.16);
+  box-shadow: 0 12px 32px -8px oklch(40% 0.05 70 / 0.16);
+}
+:root[data-theme="paper"] .ctx-menu-item:hover {
+  background: rgba(201, 99, 66, 0.08); background: oklch(58% 0.13 35 / 0.08);
+  color: var(--accent-h);
+}
+
+:root[data-theme="paper"] .result-card.row-active {
+  background: rgba(244, 232, 224, 0.7); background: oklch(93% 0.030 50 / 0.7);
+  outline-color: var(--accent);
+  box-shadow: 0 4px 18px rgba(201, 99, 66, 0.15);
+  box-shadow: 0 4px 18px oklch(58% 0.13 35 / 0.15);
+}
+:root[data-theme="paper"] .result-card.saved {
+  background: linear-gradient(90deg, rgba(168, 117, 32, 0.06), rgba(251, 250, 245, 1) 24%);
+  background: linear-gradient(90deg, oklch(58% 0.13 75 / 0.06), oklch(98% 0.010 80) 24%);
+  border-color: rgba(225, 195, 155, 0.6); border-color: oklch(82% 0.08 75 / 0.6);
+}
+
+:root[data-theme="paper"] .result-card .card-actions button {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .result-card .card-actions button:hover {
+  background: rgba(244, 232, 224, 1); background: oklch(93% 0.030 50);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+:root[data-theme="paper"] .result-card .card-actions button[data-action="download"] {
+  background: #c96342;
+  background: oklch(58% 0.13 35);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 2px 8px rgba(160, 60, 30, 0.20);
+  box-shadow: 0 2px 8px oklch(40% 0.13 30 / 0.20);
+}
+:root[data-theme="paper"] .result-card .card-actions button[data-action="save"].saved {
+  background: rgba(248, 235, 210, 1); background: oklch(95% 0.04 75);
+  border-color: rgba(225, 195, 155, 1); border-color: oklch(82% 0.08 75);
+  color: var(--warning);
+}
+:root[data-theme="paper"] .result-card .card-actions button:disabled,
+:root[data-theme="paper"] .result-card .card-actions button[disabled] {
+  background: rgba(239, 234, 223, 0.5); background: oklch(93% 0.020 75 / 0.5);
+  color: var(--text-3);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+:root[data-theme="paper"] .src-prog-chip {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .src-prog-loading {
+  background: rgba(201, 99, 66, 0.08); background: oklch(58% 0.13 35 / 0.08);
+  border-color: rgba(201, 99, 66, 0.35); border-color: oklch(58% 0.13 35 / 0.35);
+  color: var(--accent);
+}
+:root[data-theme="paper"] .src-prog-ok {
+  background: rgba(225, 240, 215, 0.85); background: oklch(93% 0.030 130);
+  border-color: rgba(175, 205, 150, 1); border-color: oklch(80% 0.06 130);
+  color: var(--success);
+}
+:root[data-theme="paper"] .src-prog-fail {
+  background: rgba(245, 220, 215, 0.85); background: oklch(93% 0.04 30);
+  border-color: rgba(225, 175, 168, 1); border-color: oklch(78% 0.10 30);
+  color: var(--danger);
+}
+
+:root[data-theme="paper"] .source-bz {
+  background: rgba(225, 235, 250, 1); background: oklch(94% 0.030 245);
+  color: #2c52b8; color: oklch(42% 0.20 250);
+  border-color: rgba(168, 192, 230, 1); border-color: oklch(82% 0.10 245);
+}
+:root[data-theme="paper"] .source-gbw {
+  background: rgba(225, 240, 215, 1); background: oklch(93% 0.030 130);
+  color: #4d6b35; color: oklch(40% 0.13 130);
+  border-color: rgba(175, 205, 150, 1); border-color: oklch(80% 0.06 130);
+}
+:root[data-theme="paper"] .source-by {
+  background: rgba(248, 235, 210, 1); background: oklch(95% 0.04 75);
+  color: var(--warning);
+  border-color: rgba(225, 195, 155, 1); border-color: oklch(82% 0.08 75);
+}
+
+:root[data-theme="paper"] .batch-card,
+:root[data-theme="paper"] .complete-card {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .batch-mode-pill {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .batch-results-empty {
+  background: rgba(245, 241, 232, 0.5); background: oklch(95% 0.018 75 / 0.5);
+  border-color: rgba(223, 216, 198, 0.7); border-color: oklch(86% 0.025 75 / 0.7);
+  color: var(--text-3);
+}
+:root[data-theme="paper"] .batch-stat {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .batch-result-card {
+  background: rgba(251, 250, 245, 0.9); background: oklch(98% 0.010 80 / 0.9);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .batch-result-card:hover {
+  background: rgba(255, 255, 255, 1); background: oklch(100% 0 0);
+  border-color: var(--border-strong);
+}
+:root[data-theme="paper"] .batch-result-card .card-src {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .batch-textarea {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+  color: var(--text);
+}
+:root[data-theme="paper"] .batch-textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(201, 99, 66, 0.10);
+  box-shadow: 0 0 0 4px oklch(58% 0.13 35 / 0.10);
+}
+:root[data-theme="paper"] .complete-step {
+  background: rgba(251, 250, 245, 0.75); background: oklch(98% 0.010 80 / 0.75);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .complete-step > span {
+  background: rgba(239, 234, 223, 0.9); background: oklch(93% 0.020 75);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .complete-step.active {
+  background: rgba(244, 232, 224, 0.7); background: oklch(93% 0.030 50 / 0.7);
+  border-color: var(--accent);
+}
+:root[data-theme="paper"] .complete-step.done > span {
+  background: rgba(225, 240, 215, 1); background: oklch(93% 0.030 130);
+  color: var(--success);
+}
+:root[data-theme="paper"] .complete-step.error > span {
+  background: rgba(245, 220, 215, 1); background: oklch(93% 0.04 30);
+  color: var(--danger);
+}
+:root[data-theme="paper"] .complete-dropzone,
+:root[data-theme="paper"] .complete-status {
+  background: rgba(245, 241, 232, 0.5); background: oklch(95% 0.018 75 / 0.5);
+  border-color: rgba(223, 216, 198, 0.8); border-color: oklch(86% 0.025 75 / 0.8);
+  color: var(--text-3);
+}
+:root[data-theme="paper"] .complete-options .check-option {
+  background: rgba(251, 250, 245, 0.7); background: oklch(98% 0.010 80 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .complete-result-stats div {
+  background: rgba(239, 234, 223, 0.6); background: oklch(93% 0.020 75 / 0.6);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .complete-download-card {
+  background: rgba(225, 240, 215, 0.45); background: oklch(93% 0.030 130 / 0.45);
+  border-color: rgba(165, 205, 150, 0.6); border-color: oklch(80% 0.06 130 / 0.6);
+}
+
+:root[data-theme="paper"] .modal {
+  background: rgba(255, 255, 255, 0.96); background: oklch(100% 0 0 / 0.96);
+  border-color: var(--border);
+  box-shadow: 0 24px 80px -16px rgba(60, 50, 30, 0.25);
+  box-shadow: 0 24px 80px -16px oklch(40% 0.05 70 / 0.25);
+}
+:root[data-theme="paper"] .detail-chip {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+}
