@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix(theme): 移除 `html` 的 ambient 径向晕染 —— 三主题统一纯色平铺** — 用户反馈内容顶部一坨"左深右浅的灰渐变,丑死了"。经 DevTools `elementsFromPoint` 确诊是 `html` 背景的三层 ambient 径向晕染(左上角 `80% 60% at 12% -8%` 那层 + `background-attachment: fixed`)在内容顶部糊出的色块,跟页面无关(search/settings 都有)、跟新做的扁平 `.set-*` 设计冲突:
+  - 暗色(默认)`html` 去掉三层 radial,改纯 `var(--bg)`;亮色 `:root[data-theme="light"] html` 覆盖直接删除(base 平铺已随 token 自适应);纸张主题本就平铺,不动
+  - 两文件镜像:`web/src/styles/theme/glass.css`(默认段 + 删亮色覆盖)+ `public/styles.css`(同步)
+  - `body::before` 蓝图网格(0.018 极淡 1px 线,非渐变)保留不动
 - **feat(settings): 设置面板重设计 Phase C — `renderSettings` 整体重排为 `.set-layout` 左导航 + 右内容 IA** — 在 `public/js/app-settings.js` 内就地重写渲染(不动 TS 模块树、零构建风险、可回退),把"一页两套渲染 + 6 种卡片方言 + 三种标题写法"收敛成统一 `.set-*` 元件:
   - 四张卡片渲染函数(`renderUpdateCard` / `renderWebAccessCard` / `renderPortSettingCard` / `renderStartupSettingCard`)从 `.settings-card`/`.desktop-setting-card`/`.web-access-card`/`.port-setting-card` 等方言统一为 `.set-card` + `.set-row`(`.set-row-main`/`.set-row-control`),状态徽章 `.desktop-setting-status`→`.set-status`(is-ok/is-down/is-idle),版本号用 `.set-versions`,下载进度用 `.set-progress`;保留全部 `onclick`/`id`/state 钩子(`portSettingInput`/`.port-setting-row`/`.port-setting-status` 不动)
   - `renderSettings` 主模板由 `.settings-grid` + 散落 `.setting-section` 重排为左侧 `#settingsNav`(`.set-nav`,admin 多"公告管理/标准库"两项,点击 `settingsNavTo` 平滑滚动 + 高亮)+ 右侧 `#settingsBody` 分区:下载与源 / 访问方式 / 软件更新 / 资质订阅 / (admin)公告 / (admin)标准库

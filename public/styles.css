@@ -1797,18 +1797,10 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
    over the legacy rules above without us having to touch each block.
    ───────────────────────────────────────────────────────────────────── */
 
-/* Ambient gradient + faint orbs behind everything */
+/* 背景:纯色平铺,无 ambient 径向晕染（2026-05 移除：左上角晕染在内容顶部糊出
+   一坨左深右浅的灰带，跟扁平 .set-* 设计冲突。三主题统一纯 var(--bg)）。 */
 html {
-  background:
-    radial-gradient(80% 60% at 12% -8%, rgba(13, 20, 44, 0.55) 0%, transparent 60%),
-    radial-gradient(70% 55% at 105% 110%, rgba(30, 16, 33, 0.45) 0%, transparent 60%),
-    radial-gradient(60% 55% at 50% 110%, rgba(0, 21, 23, 0.35) 0%, transparent 60%),
-    var(--bg); background:
-    radial-gradient(80% 60% at 12% -8%, oklch(20% 0.05 270 / 0.55) 0%, transparent 60%),
-    radial-gradient(70% 55% at 105% 110%, oklch(20% 0.04 320 / 0.45) 0%, transparent 60%),
-    radial-gradient(60% 55% at 50% 110%, oklch(18% 0.03 200 / 0.35) 0%, transparent 60%),
-    var(--bg);
-  background-attachment: fixed;
+  background: var(--bg);
 }
 body::before {
   content: "";
@@ -1957,17 +1949,7 @@ body::before {
      4. accent L=52 — 保 a11y 对比度,不刺眼
      5. 同色系明暗渐变 — btn-primary 走 50%→48% 同蓝不同明度
    ─── */
-:root[data-theme="light"] html {
-  background:
-    radial-gradient(80% 60% at 12% -8%,  rgba(190, 215, 245, 0.18)  0%, transparent 60%),
-    radial-gradient(70% 55% at 105% 110%, rgba(220, 210, 240, 0.14)  0%, transparent 60%),
-    radial-gradient(60% 55% at 50% 110%,  rgba(200, 225, 235, 0.12) 0%, transparent 60%),
-    var(--bg); background:
-    radial-gradient(80% 60% at 12% -8%,  oklch(85% 0.08 240 / 0.18)  0%, transparent 60%),
-    radial-gradient(70% 55% at 105% 110%, oklch(85% 0.06 290 / 0.14)  0%, transparent 60%),
-    radial-gradient(60% 55% at 50% 110%,  oklch(88% 0.05 200 / 0.12) 0%, transparent 60%),
-    var(--bg);
-}
+/* 亮色 html 背景沿用 base 的纯 var(--bg) 平铺（ambient 晕染已全主题移除）。 */
 :root[data-theme="light"] body::before {
   background-image:
     linear-gradient(rgba(40, 60, 100, 0.04) 1px, transparent 1px),
