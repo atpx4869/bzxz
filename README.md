@@ -390,6 +390,32 @@ cp .env.example .env.local
 - Release 上传 `release/*.exe`，桌面端在线更新会优先选择名称包含 `Setup` 的 NSIS 安装包
 - Portable 便携版仍提供手动下载，不参与自动安装更新
 
+## AI 协作工具记录
+
+本项目大量使用 Claude Code(Anthropic 官方 CLI)+ Claude Opus 4.7 模型协同开发。下面记录实际用到的 **Claude Code Skills**(系统级 skill,非项目自带),给同样想引入 AI 主导开发的开发者参考。
+
+### 已用到的 skill
+
+| Skill | 用途 | 调用场景示例 |
+|---|---|---|
+| **frontend-design** | 设计前端界面方案,产出 production-grade、有美学差异化的方案而非"AI slop" | 调用 2 次:① 设计 Arctic Blue 蓝调亮色主题(替换旧"白底蓝字"的 Bootstrap 模板感)② 设计 Paper · Claude Linen 主题(模仿 Claude.ai 同色调:米白 + 赤陶 + 1px 米褐边)。两次都产出完整色板 + token 表 + 设计哲学 + 视觉草图 + 风险评估,让 review 阶段就能决定方向 |
+
+### 没用到但被列入 system available 的 skill
+
+仅作记录,**实际开发中没主动触发**:`best-minds` / `browser` / `find-skills` / `notebooklm` / `skill-creator` / `ui-ux-pro-max` / `verify` / `code-review` / `simplify` / `loop` / `run` / `init` / `review` / `security-review` / `update-config` / `keybindings-help` / `claude-api` / `fewer-permission-prompts` / `ccg:*` 系列 / `omc-reference` / `planning-with-files` 等。
+
+### 主题设计经验沉淀
+
+主题改造跑了 4 个周期(单蓝色 → Arctic Blue → 加 Paper → 50+ 灰灰补丁),每个周期都用「先方案后实施」流程,详见 [`docs/THEME_DESIGN.md`](./docs/THEME_DESIGN.md) 完整设计文档(三主题色板 + 80+ 组件覆盖清单 + 改一处 workflow + 续作 AI 起手指南)。**换电脑或换 AI 续作时让它先读这份文档**,可无缝接手。
+
+### AI 协作准则(本项目实践)
+
+- **写代码前先给方案** — 多文件改动 / 跨模块改前必须列方案 + why + 风险,确认后才动手(Claude 持久 auto-memory 约束,跨会话生效)
+- **代码与文档同步** — 任何代码改动必须同步对应 README / CHANGELOG / 模块文档(详见 [CLAUDE.md 文档与代码同步](./CLAUDE.md#文档与代码同步强制))
+- **OKLCh 双声明 fallback** — 所有 `oklch(...)` 必须有 sRGB rgba/hex 双声明,Win7 Chrome ≤109 兼容
+- **CSS 迁移期两份同步** — `web/src/styles/*` 和 `public/styles.css` 必须严格镜像
+- **凭据走 .env.local** — 永不写进 .ts / .md / commit message / auto-memory
+
 ## 开发指南
 
 ### 新增数据源
