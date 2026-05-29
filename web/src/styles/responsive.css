@@ -151,41 +151,107 @@
   body:not(.force-desktop) .filter-bar.open .filter-bar-body { display: flex; }
   body:not(.force-desktop) .filter-bar-body .filter-sep { display: none; }
 
-  /* result-card.css —— 标准搜索结果卡片手机紧凑版（5 行结构）：
-     标准号 / 标准名 / 标识合并行（state + text + 源 + 资质徽章） / 时间 / 4 按钮等宽
-     - 复选框、推荐性副标题、标题行内徽章、独立 state/source-line 全隐藏
-     - JS 渲染时新加的 .card-meta-line 把 state + text + 源 + 资质徽章 flex-wrap 同一行
-     - 资质徽章在桌面端原位（标题行内）渲一次，手机端 meta-line 又渲一次；
-       靠 display:none 切换，避免维护双套 template */
+  /* result-card.css —— 标准搜索结果卡片手机版 v2(卡片化重设计):
+     ┌─────────────────────────────────┐
+     │ 标准号 [CNAS] [CMA]              │ ← .card-id .card-number-row(16px+徽章紧贴)
+     │ 标准名称                          │ ← .card-title(14px,可 wrap 2 行)
+     │ 现行 · 有文本 · GBW             │ ← .card-meta-line(12px 灰,· 分隔)
+     │ 发布 2022-03-15 · 实施 2022-10-01│ ← .card-date(11px)
+     │ [详情]      [预览]               │ ← .card-actions(2 按钮,44px 高)
+     └─────────────────────────────────┘
+     变更点:
+     - 资质徽章已搬到 .card-number-row 跟标准号紧贴(JS app-search.js 改过 DOM)
+     - .card-meta-line 内的徽章扁平化成纯文本 + ::before · 分隔符(不再彩色 badge 砌墙)
+     - 卡片本体加 padding/border-radius/12px 卡片化
+     - .card-actions 默认 4 按钮,但 download/save 在 220 行被 display:none,
+       实际渲染就是【详情 + 预览】2 个,符合"手机端查阅而非管理"契约 */
+  body:not(.force-desktop) .result-card {
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 14px; border-radius: 12px;
+    background: rgba(18, 22, 28, 0.66);
+    background: oklch(20% 0.014 255 / 0.66);
+    border: 1px solid rgba(40, 46, 56, 0.4);
+    border: 1px solid oklch(28% 0.014 255 / 0.4);
+    margin-bottom: 10px;
+  }
   body:not(.force-desktop) .result-card .check-col,
   body:not(.force-desktop) .batch-result-card .check-col { display: none; }
   body:not(.force-desktop) .result-card .card-subtitle,
   body:not(.force-desktop) .batch-result-card .card-subtitle { display: none; }
-  body:not(.force-desktop) .result-card .card-title-row .qual-badges,
-  body:not(.force-desktop) .batch-result-card .card-title-row .qual-badges { display: none; }
+  /* 桌面端独立的 state / source-line 在手机端藏掉,信息合并到 .card-meta-line */
   body:not(.force-desktop) .result-card .card-state,
   body:not(.force-desktop) .batch-result-card .card-state,
   body:not(.force-desktop) .result-card .card-source-line,
   body:not(.force-desktop) .batch-result-card .card-source-line { display: none; }
+  /* 核心标识行:标准号 16px,徽章紧贴 */
+  body:not(.force-desktop) .result-card .card-number-row {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  }
+  body:not(.force-desktop) .result-card .card-number { font-size: 16px; }
+  /* 标题:允许 wrap 2 行,不再单行 ellipsis */
   body:not(.force-desktop) .result-card .card-title-row,
   body:not(.force-desktop) .batch-result-card .card-title-row {
     flex-direction: row; align-items: center; gap: 0;
   }
+  body:not(.force-desktop) .result-card .card-title {
+    font-size: 14px; line-height: 1.4;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
   body:not(.force-desktop) .result-card .card-body { display: block; -webkit-line-clamp: unset; }
+  /* 元数据行:状态/文本/源扁平化成纯文本 + ::before · 分隔 */
   body:not(.force-desktop) .result-card .card-meta-line,
   body:not(.force-desktop) .batch-result-card .card-meta-line {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 2px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0;
+    font-size: 12px; color: var(--text-3);
   }
-  body:not(.force-desktop) .card-meta-line .qual-badges { margin-left: 0; }
+  body:not(.force-desktop) .result-card .card-meta-line > *,
+  body:not(.force-desktop) .batch-result-card .card-meta-line > * {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    font-size: 12px !important;
+    color: inherit !important;
+    line-height: 1.4;
+    /* 抹掉 .status-indicator .dot / .text-badge-dot 等小圆点,只留文字 */
+  }
+  body:not(.force-desktop) .result-card .card-meta-line > * + *::before,
+  body:not(.force-desktop) .batch-result-card .card-meta-line > * + *::before {
+    content: ' · '; color: var(--text-3); margin: 0 6px;
+  }
+  /* source-badge 是多个 span 并排,把它们都看作 meta 的子元素已经被 ::before 处理。
+     但 srcBadges 是一个父元素里的多个 .source-badge,需要让源 chip 之间也用 · 分隔 */
+  body:not(.force-desktop) .result-card .card-meta-line .source-badge + .source-badge::before,
+  body:not(.force-desktop) .batch-result-card .card-meta-line .source-badge + .source-badge::before {
+    content: ' · '; color: var(--text-3); margin: 0 6px;
+  }
+  /* 隐去 status-indicator 圆点,只留文字 */
+  body:not(.force-desktop) .result-card .card-meta-line .dot,
+  body:not(.force-desktop) .result-card .card-meta-line .text-badge-dot,
+  body:not(.force-desktop) .batch-result-card .card-meta-line .dot,
+  body:not(.force-desktop) .batch-result-card .card-meta-line .text-badge-dot { display: none; }
+  /* 日期行收紧字号 */
+  body:not(.force-desktop) .result-card .card-date {
+    font-size: 11px; color: var(--text-3);
+  }
+  body:not(.force-desktop) .result-card .card-date b {
+    font-size: 10px; color: var(--text-3);
+  }
+  /* 按钮:flex 等宽,44px 高,详情+预览 2 个 */
   body:not(.force-desktop) .result-card .card-actions,
   body:not(.force-desktop) .batch-result-card .card-actions {
-    display: flex; gap: 6px; flex-wrap: nowrap; justify-content: stretch;
+    display: flex; gap: 8px; flex-wrap: nowrap; justify-content: stretch;
+    margin-top: 2px;
   }
   body:not(.force-desktop) .result-card .card-actions .btn,
   body:not(.force-desktop) .result-card .card-actions button,
   body:not(.force-desktop) .batch-result-card .card-actions .btn,
   body:not(.force-desktop) .batch-result-card .card-actions button {
-    flex: 1 1 0; min-width: 0; min-height: 44px; padding: 8px 4px; font-size: 13px;
+    flex: 1 1 0; min-width: 0; min-height: 44px; padding: 8px 4px; font-size: 14px;
+    border-radius: 8px;
   }
 
   /* 手机端隐藏下载 / 收藏入口 ——

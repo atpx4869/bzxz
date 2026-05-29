@@ -35,7 +35,12 @@
 .result-card .card-id { min-width: 0; }
 .result-card .card-body { flex: 1; min-width: 0; }
 .result-card .card-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.result-card .card-number { font: 600 14px 'DM Mono', monospace; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* .card-number-row:标准号 + 资质徽章紧贴的核心标识行。桌面端 inline-flex 把
+   .qual-badges 跟在 .card-number 后面;.card-number 仍负责文本 ellipsis 截断,
+   徽章 flex-shrink:0 保证不会被压扁 */
+.result-card .card-number-row { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.result-card .card-number-row .qual-badges { margin-left: 0; flex-shrink: 0; }
+.result-card .card-number { font: 600 14px 'DM Mono', monospace; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .result-card .card-source-line { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; min-width: 0; }
 .result-card .card-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; color: var(--text); line-height: 1.35; }
 .result-card .card-subtitle { margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: 12px; }

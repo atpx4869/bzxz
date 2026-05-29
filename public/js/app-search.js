@@ -541,12 +541,16 @@ function buildResultCardHtml(r, i) {
     <div class="result-card card-enter${hasText ? '' : (isChecking ? ' checking-text' : ' no-text')}${saved ? ' saved' : ''}" data-sid="${escapeHtml(r.id)}">
       <div class="check-col"><input type="checkbox" data-idx="${i}" ${selectedIds.has(r.id) ? 'checked' : ''}></div>
       <div class="card-id">
-        <div class="card-number">${escapeHtml(r.standardNumber)}</div>
+        <!-- .card-number-row:标准号 + 资质徽章紧贴 (核心标识行)。
+             桌面端 inline-flex 一行;手机端 wrap 时徽章跟在标准号后,不与标题挤. -->
+        <div class="card-number-row">
+          <span class="card-number">${escapeHtml(r.standardNumber)}</span>
+          ${qualBadgeHtml(r.standardNumber)}
+        </div>
       </div>
       <div class="card-body">
         <div class="card-title-row">
           <span class="card-title">${escapeHtml(r.title || '—')}</span>
-          ${qualBadgeHtml(r.standardNumber)}
         </div>
         ${r.standardType ? `<div class="card-subtitle">${escapeHtml(r.standardType)}</div>` : ''}
       </div>
@@ -555,13 +559,12 @@ function buildResultCardHtml(r, i) {
         ${textBadge}
       </div>
       <div class="card-source-line">${srcBadges}</div>
-      <!-- 手机端合并行：桌面 display:none，手机显示，把 state / source / 资质徽章揉成一行 flex-wrap。
-           资质徽章在标题行里已经有一份（桌面用），手机端这里再渲一份；标题行那份在手机端 hide -->
+      <!-- 手机端合并行:桌面 display:none,手机显示,把 state / source 用 · 分隔显示。
+           资质徽章已搬到 .card-number-row,这里不再渲. -->
       <div class="card-meta-line">
         ${statusBadge || ''}
         ${textBadge}
         ${srcBadges}
-        ${qualBadgeHtml(r.standardNumber)}
       </div>
       <div class="card-date">
         <span><b>发布</b>${r.publishDate || '—'}</span>

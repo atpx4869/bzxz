@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat: 手机端搜索 / 资质 / Labr 结果卡片化 v2 + 资质徽章迁移到标准号后** — 用户反馈手机端三个 tab 的结果显示"很丑",同时希望 CNAS / CMA 徽章紧贴标准号(标识紧跟标识)。整体重设计:
+  - **资质徽章位置(全局,桌面+手机都改)**:`buildResultCardHtml` 把 `qualBadgeHtml` 从 `.card-title-row` 和 `.card-meta-line` 一起搬到 `.card-id` 内新加的 `.card-number-row` 容器中,紧贴 `.card-number` 后面。桌面端 inline-flex 一行;手机端 wrap 时徽章跟在标准号后,不再与标题/状态/源混在一起
+  - **手机端搜索结果卡(.result-card)卡片化**:`display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 12px; background + border 卡片边界`。信息层级三段清晰:①.card-number-row 标识行(标准号 16px + 徽章) ②.card-title 标题行(14px,允许 wrap 2 行) ③.card-meta-line 元数据行(状态/文本/源扁平化成纯文本 + ::before · 分隔符,不再彩色徽章砌墙) ④.card-date 日期行(11px 极灰) ⑤.card-actions 操作行(2 按钮等宽 44px 高,详情 + 预览,download/save 沿用既有"手机端隐藏管理入口"契约)
+  - **手机端资质查询组(.qual-result-group)卡片化**:每组明确卡片边界(padding 12px 14px + border-radius 12px + border + 背景),标准名 13px 缩进 22px 独占第二行对齐 ▶ + 标准号;qual-badge 字号 10px → 11px 易看清,padding 抬升方便点中 tooltip
+  - **手机端 Labr 检索行(.labr-row)卡片化**:与上面统一视觉,padding 12px 14px + border-radius 12px + 同款边界色
+  - **元数据行 ::before · 分隔符**用法:`> * + *::before { content: ' · ' }` 制造逗点分隔,把彩色 status-indicator / has-text-badge / source-badge 在手机端扁平化成纯文本灰字,既保留信息又不抢戏。同时显式隐 `.dot` / `.text-badge-dot` 等小圆点
+  - **桌面端零影响**:所有手机化规则嵌在 `@media (max-width: 640px) body:not(.force-desktop)`,桌面 + force-desktop 完全走老规则
+  - 改动文件:`public/js/app-search.js`(JS DOM)、`web/src/styles/components/result-card.css`(桌面 .card-number-row)、`web/src/styles/responsive.css`(手机 .result-card 卡片化)、`web/src/styles/pages/qualifications.css`(手机 .qual-result-group 卡片化 + badge 字号)、`web/src/styles/pages/labr.css`(手机 .labr-row 卡片化)、`public/styles.css`(legacy 镜像)。所有 oklch 都带 sRGB fallback
 - **feat: 手机端搜索类 tab landing/active 两态布局** — 用户反馈"搜索框默认应该上下居中偏上、左右居中,聚焦感强;输入关键词搜索后再滑动到顶端置顶,方便连续使用"。三个搜索类 tab(标准检索 / 资质查询 / Labr 库检索)统一改造:
   - **landing 态**(`.page.search-stage-idle`):搜索框 `margin-top: 25vh`,左右默认满宽 + 弱化下方所有 UI(results 容器 / 模板 chip / source-tags / 筛选条 / 进度条 / summary / qual filters / labr pager / h2 标题 / labr 说明文案)全藏。手机首次进入 / 切到 tab 时若无结果即为此态
   - **active 态**(`.page.search-stage-active`):搜索框 `position: sticky; top: var(--topbar-h)`,frosted glass + blur(14px) backdrop,跨出 .content 内边距吸全宽,结果区滚动时它常驻顶部。资质 filters 二级 sticky 错位放在搜索框下面 44px(`top: calc(var(--topbar-h) + 44px)`)。标题 h2 / 资质 tab 栏 / labr 说明在 active 态都隐掉(topbar 已有 tab 名做上下文,腾出视口给结果)

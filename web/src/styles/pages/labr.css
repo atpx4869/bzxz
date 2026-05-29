@@ -139,10 +139,19 @@
 /* 翻页器：上一页 / 第 N 页 / 下一页 —— 横向 flex 居中 */
 #labrPager { font-size: 12px; color: var(--text-3); }
 
-/* 手机端：行内距收紧，actions 换到主区下面 */
+/* 手机端：卡片化 v2 — padding/border-radius/12px,字号统一抬升 */
 @media (max-width: 640px) {
-  .labr-row { padding: 8px 10px; gap: 8px; }
-  .labr-row-title { font-size: 12px; }
-  .labr-row-meta { font-size: 10px; gap: 4px; }
-  .labr-pubdt { margin-left: 0; }
+  body:not(.force-desktop) .labr-row {
+    padding: 12px 14px;
+    gap: 10px;
+    border-radius: 12px;
+    background: rgba(18, 22, 28, 0.66);
+    background: oklch(20% 0.014 255 / 0.66);
+    border: 1px solid rgba(40, 46, 56, 0.4);
+    border: 1px solid oklch(28% 0.014 255 / 0.4);
+    margin-bottom: 8px;
+  }
+  body:not(.force-desktop) .labr-row-title { font-size: 13px; line-height: 1.45; }
+  body:not(.force-desktop) .labr-row-meta { font-size: 11px; gap: 6px; }
+  body:not(.force-desktop) .labr-pubdt { margin-left: 0; }
 }

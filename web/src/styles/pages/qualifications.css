@@ -214,3 +214,47 @@
 .qual-visual-query-head .qv-section-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .qual-visual-query-head .qv-section-title strong { color: var(--accent-h); font: 700 14px 'DM Mono', monospace; }
 .qual-visual-query-head .qv-section-title span { color: var(--text-3); font-size: 11px; }
+
+/* ===== 手机端资质组卡片化 v2 =====
+ * 桌面端 .qual-result-group 是无边框 18px margin 隔开的扁平列表;
+ * 手机端"看一条决定一条",每组要明确卡片边界(padding/border-radius/border) */
+@media (max-width: 640px) {
+  body:not(.force-desktop) .qual-result-group {
+    background: rgba(18, 22, 28, 0.66);
+    background: oklch(20% 0.014 255 / 0.66);
+    border: 1px solid rgba(40, 46, 56, 0.4);
+    border: 1px solid oklch(28% 0.014 255 / 0.4);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  /* 卡头标准名缩进 22px 对齐 ▶ + 标准号(原 styles.css 已写,这里加大字号让手机看清) */
+  body:not(.force-desktop) .qual-result-std .qual-std-name {
+    font-size: 13px;
+    line-height: 1.4;
+    margin-top: 4px;
+  }
+  /* "N 项"在窄屏 wrap 后自动跟去下一行,不强占 right corner */
+  body:not(.force-desktop) .qual-result-std > span[style*="margin-left:auto"] {
+    margin-left: 0 !important;
+    order: 99;
+    flex: 0 0 auto;
+  }
+  /* 单条 item padding 收紧 */
+  body:not(.force-desktop) .qual-result-item {
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    border-radius: 8px;
+  }
+  /* source-divider 在卡片化容器内不需要 hr 视觉(每个组自己已有边界) */
+  body:not(.force-desktop) .qual-source-divider {
+    margin: 4px 0 10px;
+    opacity: 0.5;
+  }
+  /* 资质徽章字号微调:手机端 10px 太细,11px 更易看清,padding 加宽方便点中 tooltip */
+  body:not(.force-desktop) .qual-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    min-height: 18px;
+  }
+}

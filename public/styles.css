@@ -217,7 +217,10 @@ body.sidebar-collapsed .env-warning { left: var(--sidebar-collapsed-w); }
 .result-card .card-id { min-width: 0; }
 .result-card .card-body { flex: 1; min-width: 0; }
 .result-card .card-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.result-card .card-number { font: 600 14px 'DM Mono', monospace; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* .card-number-row: 标准号 + 资质徽章紧贴。镜像 web/src/styles/components/result-card.css */
+.result-card .card-number-row { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.result-card .card-number-row .qual-badges { margin-left: 0; flex-shrink: 0; }
+.result-card .card-number { font: 600 14px 'DM Mono', monospace; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .result-card .card-source-line { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; min-width: 0; }
 .result-card .card-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; color: var(--text); line-height: 1.35; }
 .result-card .card-subtitle { margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: 12px; }
@@ -1228,63 +1231,130 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
   /* more 按钮加大 */
   body:not(.force-desktop) .qual-visual-more-btn { padding: 10px; font-size: 12px; min-height: 44px; }
 
-  /* 11) 标准搜索结果卡片手机紧凑版（5 行结构）：
-     - 标准号一行 / 标准名一行 / 标识合并行 / 时间一行 / 按钮一行
-     - 复选框、推荐性、标题行内徽章、独立的 state/source-line 全隐藏
-     - 用 JS 渲染时新加的 .card-meta-line 把 state + text + 源 + 资质徽章一行 flex-wrap
-     - 资质徽章在桌面端原位（标题行内）渲一次，手机端 meta-line 又渲一次；
-       靠 display:none 切换，避免维护双套 template */
-
-  /* 隐藏：复选框、推荐性副标题、标题行内的资质徽章、独立 state 行、独立 source 行 */
+  /* 11) 标准搜索结果卡片手机版 v2(卡片化重设计) — 镜像 web/src/styles/responsive.css。
+     ┌─────────────────────────────────┐
+     │ 标准号 [CNAS] [CMA]              │ ← .card-number-row(16px+徽章紧贴)
+     │ 标准名称                          │ ← .card-title(14px,可 wrap 2 行)
+     │ 现行 · 有文本 · GBW             │ ← .card-meta-line(12px 灰,· 分隔)
+     │ 发布 ... · 实施 ...              │ ← .card-date(11px)
+     │ [详情]      [预览]               │ ← .card-actions(2 按钮,44px 高)
+     └─────────────────────────────────┘
+     - 资质徽章已搬到 .card-number-row(JS app-search.js 改过 DOM)
+     - meta-line 内徽章扁平化为纯文本 + ::before · 分隔符
+     - download/save 按钮仍由本文件 16) 段 display:none(手机查阅而非管理契约) */
+  body:not(.force-desktop) .result-card {
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 14px; border-radius: 12px;
+    background: rgba(18, 22, 28, 0.66);
+    background: oklch(20% 0.014 255 / 0.66);
+    border: 1px solid rgba(40, 46, 56, 0.4);
+    border: 1px solid oklch(28% 0.014 255 / 0.4);
+    margin-bottom: 10px;
+  }
   body:not(.force-desktop) .result-card .check-col,
   body:not(.force-desktop) .batch-result-card .check-col { display: none; }
   body:not(.force-desktop) .result-card .card-subtitle,
   body:not(.force-desktop) .batch-result-card .card-subtitle { display: none; }
-  body:not(.force-desktop) .result-card .card-title-row .qual-badges,
-  body:not(.force-desktop) .batch-result-card .card-title-row .qual-badges { display: none; }
   body:not(.force-desktop) .result-card .card-state,
   body:not(.force-desktop) .batch-result-card .card-state,
   body:not(.force-desktop) .result-card .card-source-line,
   body:not(.force-desktop) .batch-result-card .card-source-line { display: none; }
-
-  /* 标题行手机端回到默认 row（之前为了腾出徽章行加过 column，现在徽章去了别处不需要了） */
+  body:not(.force-desktop) .result-card .card-number-row {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  }
+  body:not(.force-desktop) .result-card .card-number { font-size: 16px; }
   body:not(.force-desktop) .result-card .card-title-row,
   body:not(.force-desktop) .batch-result-card .card-title-row {
     flex-direction: row; align-items: center; gap: 0;
   }
-  /* card-body 默认两行 line-clamp 在手机端松开，让长标题完整显示一行 */
+  body:not(.force-desktop) .result-card .card-title {
+    font-size: 14px; line-height: 1.4;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
   body:not(.force-desktop) .result-card .card-body { display: block; -webkit-line-clamp: unset; }
-
-  /* 合并行：state 徽章 + text 徽章 + 源 pill + 资质徽章 同一行 flex-wrap，窄屏自然折行 */
   body:not(.force-desktop) .result-card .card-meta-line,
   body:not(.force-desktop) .batch-result-card .card-meta-line {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
-    margin-top: 2px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0;
+    font-size: 12px; color: var(--text-3);
   }
-  /* meta-line 内徽章去掉外边距，靠容器 gap 统一间距 */
-  body:not(.force-desktop) .card-meta-line .qual-badges { margin-left: 0; }
-
-  /* 按钮行 4 个平铺等宽，触控热区 44px */
+  body:not(.force-desktop) .result-card .card-meta-line > *,
+  body:not(.force-desktop) .batch-result-card .card-meta-line > * {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    font-size: 12px !important;
+    color: inherit !important;
+    line-height: 1.4;
+  }
+  body:not(.force-desktop) .result-card .card-meta-line > * + *::before,
+  body:not(.force-desktop) .batch-result-card .card-meta-line > * + *::before {
+    content: ' · '; color: var(--text-3); margin: 0 6px;
+  }
+  body:not(.force-desktop) .result-card .card-meta-line .source-badge + .source-badge::before,
+  body:not(.force-desktop) .batch-result-card .card-meta-line .source-badge + .source-badge::before {
+    content: ' · '; color: var(--text-3); margin: 0 6px;
+  }
+  body:not(.force-desktop) .result-card .card-meta-line .dot,
+  body:not(.force-desktop) .result-card .card-meta-line .text-badge-dot,
+  body:not(.force-desktop) .batch-result-card .card-meta-line .dot,
+  body:not(.force-desktop) .batch-result-card .card-meta-line .text-badge-dot { display: none; }
+  body:not(.force-desktop) .result-card .card-date {
+    font-size: 11px; color: var(--text-3);
+  }
+  body:not(.force-desktop) .result-card .card-date b {
+    font-size: 10px; color: var(--text-3);
+  }
   body:not(.force-desktop) .result-card .card-actions,
   body:not(.force-desktop) .batch-result-card .card-actions {
-    display: flex; gap: 6px; flex-wrap: nowrap; justify-content: stretch;
+    display: flex; gap: 8px; flex-wrap: nowrap; justify-content: stretch;
+    margin-top: 2px;
   }
   body:not(.force-desktop) .result-card .card-actions .btn,
   body:not(.force-desktop) .result-card .card-actions button,
   body:not(.force-desktop) .batch-result-card .card-actions .btn,
   body:not(.force-desktop) .batch-result-card .card-actions button {
-    flex: 1 1 0; min-width: 0; min-height: 44px; padding: 8px 4px; font-size: 13px;
+    flex: 1 1 0; min-width: 0; min-height: 44px; padding: 8px 4px; font-size: 14px;
+    border-radius: 8px;
   }
 
-  /* 12) 资质查询结果：CMA / CNAS 左右两栏保留，但单条结果内"标准号 / 标准名 / 项数"纵向堆叠 */
-  /* .qual-result-std 桌面端是单行 flex；手机端 wrap，让 .qual-std-name 自占第二行 */
+  /* 12) 资质查询结果卡片化 v2 — 镜像 web/src/styles/pages/qualifications.css 手机段。
+     每组明确卡片边界,标准名独占第二行缩进对齐 */
+  body:not(.force-desktop) .qual-result-group {
+    background: rgba(18, 22, 28, 0.66);
+    background: oklch(20% 0.014 255 / 0.66);
+    border: 1px solid rgba(40, 46, 56, 0.4);
+    border: 1px solid oklch(28% 0.014 255 / 0.4);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
   body:not(.force-desktop) .qual-result-std { flex-wrap: wrap; row-gap: 2px; }
   body:not(.force-desktop) .qual-result-std .qual-std-name {
     flex: 1 1 100%;
-    padding-left: 22px;        /* 与 ▶ + 标准号对齐 */
-    font-size: 12px;
+    padding-left: 22px;
+    font-size: 13px;
     line-height: 1.4;
-    margin-top: 2px;
+    margin-top: 4px;
+  }
+  body:not(.force-desktop) .qual-result-std > span[style*="margin-left:auto"] {
+    margin-left: 0 !important;
+    order: 99;
+    flex: 0 0 auto;
+  }
+  body:not(.force-desktop) .qual-result-item {
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    border-radius: 8px;
+  }
+  body:not(.force-desktop) .qual-source-divider { margin: 4px 0 10px; opacity: 0.5; }
+  body:not(.force-desktop) .qual-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    min-height: 18px;
   }
   /* 两栏 grid 在窄屏继续左右分列（CMA / CNAS 不并屏即破坏可读性），但收紧 gap */
   body:not(.force-desktop) .qual-results-grid { gap: 8px; }
@@ -1905,10 +1975,20 @@ body:not(.force-desktop) .preview-title { font-size: 13px; }
 #labrPager { font-size: 12px; color: var(--text-3); }
 
 @media (max-width: 640px) {
-  .labr-row { padding: 8px 10px; gap: 8px; }
-  .labr-row-title { font-size: 12px; }
-  .labr-row-meta { font-size: 10px; gap: 4px; }
-  .labr-pubdt { margin-left: 0; }
+  /* 手机端卡片化 v2 — 镜像 web/src/styles/pages/labr.css */
+  body:not(.force-desktop) .labr-row {
+    padding: 12px 14px;
+    gap: 10px;
+    border-radius: 12px;
+    background: rgba(18, 22, 28, 0.66);
+    background: oklch(20% 0.014 255 / 0.66);
+    border: 1px solid rgba(40, 46, 56, 0.4);
+    border: 1px solid oklch(28% 0.014 255 / 0.4);
+    margin-bottom: 8px;
+  }
+  body:not(.force-desktop) .labr-row-title { font-size: 13px; line-height: 1.45; }
+  body:not(.force-desktop) .labr-row-meta { font-size: 11px; gap: 6px; }
+  body:not(.force-desktop) .labr-pubdt { margin-left: 0; }
 }
 
 /* #73 统一命名 modal —— scope chip + from→to + 分组折叠（镜像 pages/local-library.css） */
