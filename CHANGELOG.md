@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix(theme/light): 主背景 ambient gradient 调淡 + Labr 库检索 light/paper 覆盖** — 用户反馈 light 主题主界面"非常难看",太花。诊断:`:root[data-theme="light"] html` 的三层 radial-gradient 用了 0.40/0.30/0.25 透明度,薰衣草+天蓝+青蓝叠在一起像彩色糊布。同时 labr-row 用了 hardcoded `rgba(255,255,255,0.02)`,亮主题下隐身。
+  - **light ambient 调淡**:三层 radial 从 40%/30%/25% → 18%/14%/12%,保留蓝调氛围、去掉"花花绿绿"
+  - **labr light 覆盖 16 条**:.labr-row(白底 + border 取 var(--border)) / :hover(蓝调 highlight) / .labr-results-header / 三类 meta 文字色 / .labr-std-code 蓝徽章 / kind-0/1 / 5 类 ext 徽章(pdf/doc/xls/ppt/txt) / paid 徽章 / .preview-source-picker / .preview-source-btn(各 hover/active)
+  - **labr paper 覆盖 同 16 条**:cream + burnt sienna 调色板,暖墨字徽章
+  - 文件:`web/src/styles/theme/glass.css` + `public/styles.css` 镜像,所有新 oklch 配 rgba/hex fallback
 - **fix(theme): light/paper 50+ "灰灰"残留补丁 + 设计文档** — 用户反馈切到 light/paper 后仍大量元素显示深灰色调:日志面板 / 通用按钮 / 结果卡内部按钮 / 工具栏 / batch+complete 卡片 / ctx-menu 右键 / modal 遮罩 / source-badge BZ/BW/BY / 状态徽章 / 进度条等。诊断:项目历史上大量 CSS hardcode `oklch(20% ...)` 暗色,没走 `var(--surface)`,light/paper 切换无效。新增 Phase 2 补丁段:
   - **light 覆盖 50+ 处**:.log-panel/.log-summary span / .progress-track / .source-health-mini / .btn-ghost:hover / .btn:disabled / .search-templates button / .toolbar .btn.active / .badge-count / .filter-sep / .filter-sort select / .status-group-header / .ctx-menu / .result-card.row-active / .saved / .card-actions button(各 disabled/save.saved/download)/ .src-prog-chip(各 loading/ok/fail)/ .source-bz/.source-gbw/.source-by / .batch-card / .batch-mode-pill / .batch-results-empty / .batch-stat / .batch-result-card / .batch-textarea / .complete-card/.step(各 active/done/error)/ .complete-dropzone/.complete-status/.complete-options / .modal/.confirm-card/.modal-overlay/.confirm-overlay / .detail-chip
   - **paper 同款选择器 50+ 处**:配色换米白 + 米褐 + 暖色阴影 + 赤陶 accent
