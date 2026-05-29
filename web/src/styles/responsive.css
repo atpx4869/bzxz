@@ -235,6 +235,8 @@
        实际渲染就是【详情 + 预览】2 个,符合"手机端查阅而非管理"契约 */
   body:not(.force-desktop) .result-card {
     display: flex; flex-direction: column; gap: 8px;
+    align-items: stretch;     /* 覆盖 900px 段 .result-card 的 align-items:start,
+                                  否则 .card-actions 收缩到内容宽度 → 按钮无法靠右对齐 */
     padding: 14px; border-radius: 12px;
     background: rgba(18, 22, 28, 0.66);
     background: oklch(20% 0.014 255 / 0.66);

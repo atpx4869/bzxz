@@ -1326,6 +1326,8 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
      - download/save 按钮仍由本文件 16) 段 display:none(手机查阅而非管理契约) */
   body:not(.force-desktop) .result-card {
     display: flex; flex-direction: column; gap: 8px;
+    align-items: stretch;     /* 覆盖 900px 段 .result-card 的 align-items:start,
+                                  否则 .card-actions 收缩到内容宽度 → 按钮无法靠右对齐 */
     padding: 14px; border-radius: 12px;
     background: rgba(18, 22, 28, 0.66);
     background: oklch(20% 0.014 255 / 0.66);
