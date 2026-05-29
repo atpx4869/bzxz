@@ -119,7 +119,7 @@ async function doSearch() {
   if (!q) return;
   // 手机端 landing → active：搜索框 sticky 吸顶，结果区出现
   if (typeof setSearchStage === 'function') setSearchStage('search', 'active');
-  document.getElementById('searchBtn').innerHTML = '<span class="spinner"></span>取消';
+  document.getElementById('searchBtn').innerHTML = '<span class="spinner"></span><span class="search-btn-label">取消</span>';
   document.getElementById('searchBtn').disabled = false;
   results = []; selectedIds.clear(); updateToolbar(); searchAborted = false; qualData = {};
   _libraryFileIds.clear();
@@ -198,7 +198,7 @@ async function doSearch() {
     document.getElementById('summary').innerHTML = `<span class="count-anim">已取消 (${results.length} 条结果)</span>`;
     hideSearchStatus();
   }
-  document.getElementById('searchBtn').innerHTML = '搜索'; document.getElementById('searchBtn').disabled = false;
+  document.getElementById('searchBtn').innerHTML = '<span class="search-btn-icon" aria-hidden="true">🔍</span><span class="search-btn-label">搜索</span>'; document.getElementById('searchBtn').disabled = false;
   if (results.length > 0 && !searchAborted) {
     // 文本检测进度由每张卡片右侧的「检测中」徽章承担，底部 toast 不再常驻
     showSearchStatus(`搜索完成 (${results.length}条)`, false);

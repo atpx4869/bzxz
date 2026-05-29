@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **polish(mobile): 搜索框两行布局 + 结果卡按钮统一 accent 蓝** — 用户反馈手机端"输入字脏 + 光标在外"和"按钮变丑(从原来的差异化变成 2 个灰块)"。
+  - **搜索框两行布局**:第一行 `[input    ][🔍 搜索]`,input flex 1 1 0,padding 横向 14px(左)/4px(右)让字 + 光标离边明显;searchBtn 强制 order:2 紧贴 input 右,accent 蓝 40px 高,内置 `🔍` 图标 + `搜索` 文字。第二行 `source-tags` order:3 wrap 占满,保留 BZ/BW/BY 勾选能力
+  - **search-templates(GB/T / GB / YY/T chip)手机端全藏** — 用户全靠手输,模板 chip 窄屏意义不大
+  - **结果卡按钮统一 accent 蓝主色** — 详情 / 预览两个按钮都用 `var(--accent)` + `#fff` 文字 + `box-shadow oklch(66% 0.20 250 / 0.18)`,跟桌面端 download 按钮视觉同款。disabled 态切静默灰(`opacity 0.45 + oklch(18% 0.012 255 / 0.4)`)与可用按钮明显分离。`:active` 态 transform translateY(1px) + accent-h 加深做按压反馈
+  - 改动:`web/index.html` + `public/index.html` searchBtn 内置 `<span class="search-btn-icon">🔍</span><span class="search-btn-label">搜索</span>`;`public/js/app-search.js` doSearch loading/复位两处同步保持新结构;`web/src/styles/responsive.css` + `public/styles.css` 镜像段都改
 - **fix: 标准搜索"预览"按钮 disabled 判定** — 用户反馈预览按钮缺少 disabled 判定:实际上无本地缓存 + 无可下载源时点了也没意义。新增 `isPreviewable(r, checkLocal=true)`:
   - 本地有缓存(`_libraryFileIds` 命中)→ 必可点(秒开)
   - 否则按 `isDownloadable(r)` 判定 — 能下就能拉文本预览;不能下也没本地 → disabled

@@ -1091,10 +1091,46 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
   body:not(.force-desktop) .log-item { grid-template-columns: 46px minmax(0, 1fr); }
   body:not(.force-desktop) .log-status { grid-column: 2; text-align: left; }
 
-  /* 4) 表单/搜索/工具栏 通用折行 */
-  body:not(.force-desktop) .search-row { flex-wrap: wrap; padding: 8px; }
-  body:not(.force-desktop) .search-row input { flex: 1 1 100%; padding: 10px 12px; }
-  body:not(.force-desktop) .source-tags { flex: 1 1 auto; flex-wrap: wrap; margin-right: 0; }
+  /* 4) 表单/搜索/工具栏 通用折行
+     手机端 search-row 两行布局:
+       第一行: [        input        ][🔍 搜索]
+       第二行: [BZ] [BW] [BY] source-tags wrap
+     - input 横向 padding 加大让字 / 光标离边距明显
+     - searchBtn 图标 + 文字,accent 蓝,固定 40px 高对齐 input
+     - source-tags order:3 强制下移到第二行
+     - search-templates 全藏 */
+  body:not(.force-desktop) .search-row {
+    flex-wrap: wrap;
+    padding: 6px 6px 6px 14px;
+    gap: 8px;
+  }
+  body:not(.force-desktop) .search-row input {
+    flex: 1 1 0;
+    padding: 11px 4px;
+    font-size: 15px;
+    min-width: 0;
+  }
+  body:not(.force-desktop) .search-row #searchBtn {
+    flex: 0 0 auto;
+    order: 2;
+    height: 40px;
+    padding: 0 14px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  body:not(.force-desktop) .search-row #searchBtn .search-btn-icon { font-size: 14px; line-height: 1; }
+  body:not(.force-desktop) .source-tags {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    margin-right: 0;
+    order: 3;
+    padding: 2px 0 4px;
+  }
+  body:not(.force-desktop) .search-templates { display: none; }
   body:not(.force-desktop) .toolbar,
   body:not(.force-desktop) .toolbar-left,
   body:not(.force-desktop) .toolbar-right { flex-wrap: wrap; }
@@ -1313,12 +1349,39 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
     display: flex; gap: 8px; flex-wrap: nowrap; justify-content: stretch;
     margin-top: 2px;
   }
+  /* 手机端剩详情 + 预览 2 个按钮,都用 accent 蓝主色(跟桌面 download 视觉同款) */
   body:not(.force-desktop) .result-card .card-actions .btn,
   body:not(.force-desktop) .result-card .card-actions button,
   body:not(.force-desktop) .batch-result-card .card-actions .btn,
   body:not(.force-desktop) .batch-result-card .card-actions button {
-    flex: 1 1 0; min-width: 0; min-height: 44px; padding: 8px 4px; font-size: 14px;
-    border-radius: 8px;
+    flex: 1 1 0; min-width: 0; min-height: 44px; padding: 8px 6px; font-size: 14px;
+    border-radius: 10px;
+    background: #0095fe;
+    background: var(--accent);
+    color: #fff !important;
+    border: none;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    box-shadow: 0 2px 8px rgba(0, 149, 254, 0.18);
+    box-shadow: 0 2px 8px oklch(66% 0.20 250 / 0.18);
+  }
+  body:not(.force-desktop) .result-card .card-actions button:active,
+  body:not(.force-desktop) .result-card .card-actions .btn:active,
+  body:not(.force-desktop) .batch-result-card .card-actions button:active,
+  body:not(.force-desktop) .batch-result-card .card-actions .btn:active {
+    background: #007ee0;
+    background: var(--accent-h);
+    transform: translateY(1px);
+  }
+  body:not(.force-desktop) .result-card .card-actions button:disabled,
+  body:not(.force-desktop) .result-card .card-actions button[disabled],
+  body:not(.force-desktop) .batch-result-card .card-actions button:disabled,
+  body:not(.force-desktop) .batch-result-card .card-actions button[disabled] {
+    opacity: 0.45;
+    background: rgba(20, 24, 30, 0.4);
+    background: oklch(18% 0.012 255 / 0.4);
+    color: var(--text-3) !important;
+    box-shadow: none;
   }
 
   /* 12) 资质查询结果卡片化 v2 — 镜像 web/src/styles/pages/qualifications.css 手机段。

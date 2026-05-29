@@ -427,6 +427,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **polish(mobile): 搜索框两行布局 + 结果卡按钮统一 accent 蓝** — 手机端搜索行重写:第一行 `[input    ][🔍 搜索]`(input padding 横向加大让字 / 光标离边明显,searchBtn order:2 紧贴右),第二行 source-tags wrap 保留勾选能力;search-templates(GB/T 等 chip)手机端全藏。结果卡 2 按钮(详情 + 预览)都改 accent 蓝主色 + 圆角 10px + box-shadow + active 按压反馈,跟桌面 download 视觉同款
 - **fix: 标准搜索"预览"按钮 disabled 判定** — 新增 `isPreviewable(r)`:本地有缓存 → 必可点;否则按 `isDownloadable` 判定。"applyLibraryDots" 在 library-check 异步到达后会刷新 disabled 让"刚发现本地命中"的卡按钮翻成可点
 - **fix: 标准搜索"下载"按钮 disabled 判定放宽** — 新增 `isDownloadable(r)` 与 `resolveTextState` 解耦:textBadge UI 信号(有/无/检测中)不变,下载按钮判定改放宽到「非废止 + 有源 + (任一源 previewAvailable 或 gbw 还在轮询)」就允许点击。级联模式天然逐源尝试,一源失败跳下一个。"只看可下载"筛选条保持严格口径(用户主动筛选不希望被 optimistic 污染)
 - **perf: Labr 搜索首屏一次拉 100 条 + searchCache 接入** — page=1 改并行 `searchInline + recList(pageNo=2, pageSize=100)` merge by did,首屏结果集从 ≤4 条 → 最多 104 条,耗时不变(并行)。`searchInline`/`recList` 加 5min TTL searchCache,重复搜索 / 翻页 = 0 延迟。labr 上游 pageNo 偏移由后端透明处理,前端零改动
