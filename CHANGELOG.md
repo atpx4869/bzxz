@@ -3,6 +3,15 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix(theme): light/paper Phase 3 补丁 — 详情卡 / 设置卡 / 标准库设置 / preview / normalize 容器** — 全量审计 hardcode 暗色未被 light/paper override 的选择器,补 24 个新规则 × 2 主题(共 48 条):
+  - **预览容器**:`.preview-body` / `.preview-iframe` 原 `#1a1a1a` 在亮主题下是醒目黑框,light 改极淡蓝灰 `oklch(94% 0.008 245)`,paper 改米色 `oklch(91% 0.018 75)`
+  - **标准库设置**:`.library-row` 边线、`.library-row code.library-row-value`、`.library-input` 暗背景
+  - **多源 picker**:`.preview-source-year` / `.preview-source-ext` 内嵌小标签,含 `.active` 状态下 accent 色嵌入
+  - **详情/Modal 内部**:`.detail-info-card` / `.modal-source-panel` / `.modal-source-default` / `.modal-source-stats span` / `.modal-source-row`
+  - **设置页**:`.settings-card` / `.setting-choice`(含 `.active`)/ `.source-priority-list` / `.source-priority-row:hover` / `.source-status-list` / `.web-access-url-row` / `.web-access-phone-tip` / `.version-row span` / `.update-asset` / `.download-center-empty`
+  - **批量补全归一化预览**:`.normalize-group` / `.normalize-row` / `.normalize-row-mini` / `.normalize-group.neutral`
+  - **杂项**:`.batch-result-card .card-src` / `.complete-step > span`(步骤数字圆圈) / `.rename-preview-skip`
+  - 文件:`web/src/styles/theme/glass.css` + `public/styles.css` Phase 3 段镜像,所有 oklch 配 rgba/hex fallback
 - **fix(theme/light): 主背景 ambient gradient 调淡 + Labr 库检索 light/paper 覆盖** — 用户反馈 light 主题主界面"非常难看",太花。诊断:`:root[data-theme="light"] html` 的三层 radial-gradient 用了 0.40/0.30/0.25 透明度,薰衣草+天蓝+青蓝叠在一起像彩色糊布。同时 labr-row 用了 hardcoded `rgba(255,255,255,0.02)`,亮主题下隐身。
   - **light ambient 调淡**:三层 radial 从 40%/30%/25% → 18%/14%/12%,保留蓝调氛围、去掉"花花绿绿"
   - **labr light 覆盖 16 条**:.labr-row(白底 + border 取 var(--border)) / :hover(蓝调 highlight) / .labr-results-header / 三类 meta 文字色 / .labr-std-code 蓝徽章 / kind-0/1 / 5 类 ext 徽章(pdf/doc/xls/ppt/txt) / paid 徽章 / .preview-source-picker / .preview-source-btn(各 hover/active)

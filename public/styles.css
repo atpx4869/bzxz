@@ -3633,4 +3633,210 @@ body:not(.force-desktop) .preview-title { font-size: 13px; }
   border-color: var(--accent);
   color: var(--accent-h);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Phase 3 补丁 — 镜像 web/src/styles/theme/glass.css Phase 3 段。
+   覆盖详情卡 / 设置卡 / 标准库设置 / preview 容器 / normalize / 步骤圆圈。
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ─── Light · Arctic Blue Phase 3 ────────────────────────── */
+:root[data-theme="light"] .preview-body,
+:root[data-theme="light"] .preview-iframe {
+  background: #ececf2; background: oklch(94% 0.008 245);
+}
+:root[data-theme="light"] .library-row {
+  border-bottom-color: rgba(216, 224, 234, 0.5); border-bottom-color: oklch(88% 0.018 245 / 0.5);
+}
+:root[data-theme="light"] .library-row code.library-row-value,
+:root[data-theme="light"] .library-input {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  color: var(--text);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .preview-source-picker {
+  border-bottom-color: var(--border);
+}
+:root[data-theme="light"] .preview-source-year,
+:root[data-theme="light"] .preview-source-ext {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  color: var(--text-3);
+}
+:root[data-theme="light"] .preview-source-btn.active .preview-source-year,
+:root[data-theme="light"] .preview-source-btn.active .preview-source-ext {
+  background: rgba(40, 85, 212, 0.18); background: oklch(52% 0.20 250 / 0.18);
+  color: var(--accent-h);
+}
+:root[data-theme="light"] .detail-info-card,
+:root[data-theme="light"] .modal-source-panel {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .modal-source-default {
+  background: rgba(255, 255, 255, 0.75); background: oklch(100% 0 0 / 0.75);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .modal-source-stats span {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .modal-source-row {
+  background: rgba(255, 255, 255, 0.7); background: oklch(100% 0 0 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .settings-card {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .setting-choice {
+  background: rgba(255, 255, 255, 0.7); background: oklch(100% 0 0 / 0.7);
+  color: var(--text-2);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .setting-choice.active {
+  background: rgba(40, 85, 212, 0.10); background: oklch(52% 0.20 250 / 0.10);
+  border-color: var(--accent);
+  color: var(--text);
+}
+:root[data-theme="light"] .source-priority-list,
+:root[data-theme="light"] .source-status-list {
+  background: rgba(255, 255, 255, 0.7); background: oklch(100% 0 0 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .source-priority-row:hover {
+  background: rgba(230, 237, 246, 0.85); background: oklch(95% 0.025 245 / 0.85);
+}
+:root[data-theme="light"] .web-access-url-row,
+:root[data-theme="light"] .web-access-phone-tip,
+:root[data-theme="light"] .version-row span,
+:root[data-theme="light"] .update-asset {
+  background: rgba(255, 255, 255, 0.7); background: oklch(100% 0 0 / 0.7);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .download-center-empty {
+  background: rgba(238, 242, 247, 0.6); background: oklch(96% 0.012 245 / 0.6);
+  border-color: var(--border);
+  color: var(--text-3);
+}
+:root[data-theme="light"] .normalize-group {
+  background: rgba(238, 242, 247, 0.6); background: oklch(96% 0.012 245 / 0.6);
+  border-color: var(--border);
+}
+:root[data-theme="light"] .normalize-row,
+:root[data-theme="light"] .normalize-row-mini {
+  border-bottom-color: rgba(216, 224, 234, 0.5); border-bottom-color: oklch(88% 0.018 245 / 0.5);
+}
+:root[data-theme="light"] .normalize-group.neutral {
+  border-left-color: var(--border-strong, var(--border));
+}
+:root[data-theme="light"] .batch-result-card .card-src,
+:root[data-theme="light"] .complete-step > span {
+  background: rgba(238, 242, 247, 0.85); background: oklch(96% 0.012 245);
+  color: var(--text-2);
+}
+:root[data-theme="light"] .rename-preview-skip {
+  background: rgba(238, 242, 247, 0.6); background: oklch(96% 0.012 245 / 0.6);
+  color: var(--text-3);
+}
+
+/* ─── Paper · Claude Linen Phase 3 ───────────────────────── */
+:root[data-theme="paper"] .preview-body,
+:root[data-theme="paper"] .preview-iframe {
+  background: #ece6d8; background: oklch(91% 0.018 75);
+}
+:root[data-theme="paper"] .library-row {
+  border-bottom-color: rgba(223, 216, 198, 0.55); border-bottom-color: oklch(86% 0.025 75 / 0.55);
+}
+:root[data-theme="paper"] .library-row code.library-row-value,
+:root[data-theme="paper"] .library-input {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  color: var(--text);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .preview-source-picker {
+  border-bottom-color: var(--border);
+}
+:root[data-theme="paper"] .preview-source-year,
+:root[data-theme="paper"] .preview-source-ext {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  color: var(--text-3);
+}
+:root[data-theme="paper"] .preview-source-btn.active .preview-source-year,
+:root[data-theme="paper"] .preview-source-btn.active .preview-source-ext {
+  background: rgba(201, 99, 66, 0.18); background: oklch(58% 0.13 35 / 0.18);
+  color: var(--accent-h);
+}
+:root[data-theme="paper"] .detail-info-card,
+:root[data-theme="paper"] .modal-source-panel {
+  background: rgba(251, 250, 245, 0.85); background: oklch(98% 0.010 80 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .modal-source-default {
+  background: rgba(251, 250, 245, 0.75); background: oklch(98% 0.010 80 / 0.75);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .modal-source-stats span {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .modal-source-row {
+  background: rgba(251, 250, 245, 0.7); background: oklch(98% 0.010 80 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .settings-card {
+  background: rgba(251, 250, 245, 0.85); background: oklch(98% 0.010 80 / 0.85);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .setting-choice {
+  background: rgba(251, 250, 245, 0.7); background: oklch(98% 0.010 80 / 0.7);
+  color: var(--text-2);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .setting-choice.active {
+  background: rgba(201, 99, 66, 0.10); background: oklch(58% 0.13 35 / 0.10);
+  border-color: var(--accent);
+  color: var(--text);
+}
+:root[data-theme="paper"] .source-priority-list,
+:root[data-theme="paper"] .source-status-list {
+  background: rgba(251, 250, 245, 0.7); background: oklch(98% 0.010 80 / 0.7);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .source-priority-row:hover {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75 / 0.85);
+}
+:root[data-theme="paper"] .web-access-url-row,
+:root[data-theme="paper"] .web-access-phone-tip,
+:root[data-theme="paper"] .version-row span,
+:root[data-theme="paper"] .update-asset {
+  background: rgba(251, 250, 245, 0.7); background: oklch(98% 0.010 80 / 0.7);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .download-center-empty {
+  background: rgba(239, 234, 223, 0.6); background: oklch(93% 0.020 75 / 0.6);
+  border-color: var(--border);
+  color: var(--text-3);
+}
+:root[data-theme="paper"] .normalize-group {
+  background: rgba(239, 234, 223, 0.6); background: oklch(93% 0.020 75 / 0.6);
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .normalize-row,
+:root[data-theme="paper"] .normalize-row-mini {
+  border-bottom-color: rgba(223, 216, 198, 0.55); border-bottom-color: oklch(86% 0.025 75 / 0.55);
+}
+:root[data-theme="paper"] .normalize-group.neutral {
+  border-left-color: var(--border-strong, var(--border));
+}
+:root[data-theme="paper"] .batch-result-card .card-src,
+:root[data-theme="paper"] .complete-step > span {
+  background: rgba(239, 234, 223, 0.85); background: oklch(93% 0.020 75);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] .rename-preview-skip {
+  background: rgba(239, 234, 223, 0.6); background: oklch(93% 0.020 75 / 0.6);
+  color: var(--text-3);
+}
+
 .rename-preview-skip { margin-top: 10px; padding: 6px 10px; border-radius: var(--radius-sm); background: rgba(255, 255, 255, 0.03); font-size: 11.5px; color: var(--text-3); }
