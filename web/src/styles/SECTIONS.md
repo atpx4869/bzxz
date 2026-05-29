@@ -45,7 +45,8 @@ web/src/styles/
 │   ├── qualifications.css
 │   ├── completion.css
 │   ├── announcement.css
-│   └── admin.css
+│   ├── admin.css
+│   └── settings.css      # ⬅ 新增（设置面板重设计，非拆分自 styles.css）
 └── index.css           # 汇总 @import
 ```
 
@@ -114,6 +115,20 @@ web/src/styles/
   1. 删除 `public/styles.css` 中已抽出的所有段落
   2. 删除 `index.css` 里的 `@import '../../../public/styles.css'`
 - 把 `pages/*.css` 拆到对应 page 的 entry chunk（Vite code split）—— 见执行顺序第 5 条。
+
+## 设置面板重设计（2026-05-29，与 P1 拆分方向相反）
+
+`pages/settings.css` 是**新增文件**，不是从 `public/styles.css` 抽出的段落 ——
+方向相反：先在 `web/` 写好，再**镜像追加**到 `public/styles.css` 末尾（维持两份并存
+契约）。它定义一套 `.set-*` 统一元件（layout / nav / section / card / row / seg /
+toggle 复用 / status / field / tabs / chip / progress / inline-add），取代旧设置页的
+`.settings-card` / `.desktop-setting-card` / `.web-access-card` / `.setting-choice` /
+`.qual-settings-tabs` 等多种方言。
+
+**主题纪律（与其它文件不同）**：本文件只用 `var(--*)` token，无裸 oklch、无 `color-mix`，
+故**无需** `theme/glass.css` 的 light/paper override，也无需 oklch fallback。新增 `.set-*`
+样式务必延续此纪律。详见 `docs/SETTINGS-REDESIGN.md` 的分期路径（Phase A 已落地：纯样式，
+暂无 HTML 引用；B/C/D 逐步接上并最终把 legacy `app-settings.js` 重构为 TS 组件）。
 
 ## 拆分执行顺序（P1）
 

@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>系统设置 · 重设计原型</title>
+<style>
+  :root { color-scheme: light dark; }
+
+  /* ── 真实 token（取自 web/src/styles/base.css，三主题一致）────────────── */
+  :root, :root[data-theme="dark"] {
+    --bg: #0e1118; --surface: #161a22; --surface-h: #1d212c;
+    --border: #252934; --border-strong: #3a3f4b;
+    --text: #e4e6ea; --text-2: #a5a9b3; --text-3: #696d77;
+    --accent: #4f6df0; --accent-h: #6a85ff;
+    --success: #36b988; --danger: #d75541;
+    --radius-sm: 8px; --radius: 12px;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ambient: radial-gradient(80% 60% at 12% -8%, rgba(13,20,44,.55) 0%, transparent 60%),
+               radial-gradient(70% 55% at 105% 110%, rgba(30,16,33,.45) 0%, transparent 60%),
+               radial-gradient(60% 55% at 50% 110%, rgba(0,21,23,.35) 0%, transparent 60%);
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f7fb; --surface: #fbfcfe; --surface-h: #eef2f7;
+    --border: #dbe2eb; --border-strong: #bcc6d3;
+    --text: #1a2030; --text-2: #5a6678; --text-3: #8b95a7;
+    --accent: #2855d4; --accent-h: #1f4ac9;
+    --success: #0f7d54; --danger: #c83838;
+    --ambient: radial-gradient(80% 60% at 12% -8%, rgba(40,85,212,.06) 0%, transparent 60%),
+               radial-gradient(70% 55% at 105% 110%, rgba(40,85,212,.05) 0%, transparent 60%);
+  }
+  :root[data-theme="paper"] {
+    --bg: #f5f1e8; --surface: #fbfaf5; --surface-h: #efeadf;
+    --border: #dfd8c6; --border-strong: #c5b8a0;
+    --text: #2b2820; --text-2: #6b6452; --text-3: #9a917c;
+    --accent: #c96342; --accent-h: #b5512f;
+    --success: #5a8c5a; --danger: #c0492e;
+    --ambient: radial-gradient(80% 60% at 12% -8%, rgba(201,99,66,.07) 0%, transparent 60%),
+               radial-gradient(60% 55% at 50% 110%, rgba(201,99,66,.05) 0%, transparent 60%);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'DM Sans', -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    background: var(--ambient), var(--bg);
+    background-attachment: fixed;
+    color: var(--text); min-height: 100vh; padding: 32px 24px 64px;
+    transition: background .3s var(--ease-out), color .3s var(--ease-out);
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  /* 顶部主题切换条（原型专用，非产品 UI）*/
+  .proto-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; margin-bottom: 22px; flex-wrap: wrap;
+  }
+  .proto-bar .note { font-size: 12px; color: var(--text-3); }
+  .theme-switch { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; background: var(--surface); }
+  .theme-switch button {
+    border: 0; background: transparent; color: var(--text-2);
+    font: 600 12px/1 'DM Sans', sans-serif; padding: 8px 14px; cursor: pointer;
+    transition: background .16s, color .16s;
+  }
+  .theme-switch button.active { background: var(--accent); color: #fff; }
+
+  h1.page-title { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .page-sub { font-size: 13px; color: var(--text-3); margin-bottom: 24px; }
+
+  /* ── set-layout：左导航 + 右内容 ──────────────────────────────────────── */
+  .set-layout { display: grid; grid-template-columns: 196px minmax(0, 1fr); gap: 28px; align-items: start; }
+
+  .set-nav { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 2px; }
+  .set-nav-item {
+    display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+    border-radius: var(--radius-sm); color: var(--text-2); font-size: 13.5px; font-weight: 500;
+    cursor: pointer; border: 1px solid transparent; transition: background .15s, color .15s;
+  }
+  .set-nav-item:hover { background: var(--surface-h); color: var(--text); }
+  .set-nav-item.active { background: var(--surface); border-color: var(--border); color: var(--text); font-weight: 600; }
+  .set-nav-item .ico { width: 16px; text-align: center; opacity: .85; }
+
+  .set-content { display: flex; flex-direction: column; gap: 30px; }
+
+  /* ── set-section ──────────────────────────────────────────────────────── */
+  .set-section-head { margin-bottom: 12px; }
+  .set-section-head h2 { font-size: 15px; font-weight: 700; letter-spacing: .01em; }
+  .set-section-head p { font-size: 12px; color: var(--text-3); margin-top: 3px; }
+
+  /* ── set-card（唯一卡片方言）─────────────────────────────────────────── */
+  .set-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+
+  /* ── set-row（设置原子）──────────────────────────────────────────────── */
+  .set-row {
+    display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center;
+    gap: 16px; padding: 14px 16px;
+  }
+  .set-row + .set-row { border-top: 1px solid var(--border); }
+  .set-row-title { font-size: 14px; font-weight: 600; }
+  .set-row-note { font-size: 12px; color: var(--text-3); margin-top: 3px; line-height: 1.5; }
+  .set-row-control { display: flex; align-items: center; gap: 10px; justify-self: end; }
+
+  /* drag-handle 行（数据源优先级）*/
+  .set-row.draggable { grid-template-columns: 22px auto minmax(0,1fr) auto auto; gap: 12px; }
+  .set-drag-handle { color: var(--text-3); cursor: grab; user-select: none; font-size: 15px; }
+  .src-order { font: 700 12px 'DM Mono', monospace; color: var(--text-3); width: 18px; text-align: center; }
+
+  /* ── set-seg：分段选择器（替代大卡选择 + 胶囊按钮）──────────────────── */
+  .set-seg { display: inline-flex; background: var(--surface-h); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 3px; gap: 2px; }
+  .set-seg-item {
+    border: 0; background: transparent; color: var(--text-2);
+    font: 600 13px 'DM Sans', sans-serif; padding: 6px 14px; border-radius: 6px; cursor: pointer;
+    transition: background .16s, color .16s;
+  }
+  .set-seg-item:hover { color: var(--text); }
+  .set-seg-item.active { background: var(--accent); color: #fff; }
+
+  /* ── set-toggle：开关 ───────────────────────────────────────────────── */
+  .set-toggle { position: relative; width: 40px; height: 22px; border-radius: 999px; background: var(--border-strong); border: 0; cursor: pointer; transition: background .18s var(--ease-out); flex: none; }
+  .set-toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .18s var(--ease-out); box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+  .set-toggle.on { background: var(--accent); }
+  .set-toggle.on::after { transform: translateX(18px); }
+
+  /* ── set-status：状态徽章 ───────────────────────────────────────────── */
+  .set-status { display: inline-flex; align-items: center; gap: 6px; font: 700 12px 'DM Mono', monospace; color: var(--text-3); }
+  .set-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .set-status.is-ok { color: var(--success); }
+  .set-status.is-down { color: var(--danger); }
+
+  /* ── set-field：只读地址 / 输入 ─────────────────────────────────────── */
+  .set-field { display: inline-flex; align-items: center; gap: 8px; background: var(--surface-h); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 7px 10px; }
+  .set-field code { font: 600 12px 'DM Mono', monospace; color: var(--accent-h); white-space: nowrap; }
+
+  /* ── 按钮 ───────────────────────────────────────────────────────────── */
+  .btn { border: 1px solid var(--border); background: var(--surface-h); color: var(--text); font: 600 12.5px 'DM Sans', sans-serif; padding: 7px 13px; border-radius: var(--radius-sm); cursor: pointer; transition: border-color .15s, background .15s; }
+  .btn:hover { border-color: var(--border-strong); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent-h); border-color: var(--accent-h); }
+  .btn.ghost { background: transparent; }
+  .btn.sm { padding: 5px 10px; font-size: 12px; }
+
+  .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: var(--surface-h); border: 1px solid var(--border); color: var(--text-2); }
+  .chip.accent { color: var(--accent-h); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+
+  /* ── set-tabs：统一子 Tab ───────────────────────────────────────────── */
+  .set-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); padding: 0 16px; margin-top: 2px; }
+  .set-tab { border: 0; background: transparent; color: var(--text-3); font: 600 13px 'DM Sans', sans-serif; padding: 11px 6px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s; }
+  .set-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .set-tab:hover { color: var(--text); }
+
+  .qual-lab-row { display: grid; grid-template-columns: auto minmax(0,1fr) auto auto; align-items: center; gap: 12px; padding: 11px 16px; }
+  .qual-lab-row + .qual-lab-row { border-top: 1px solid var(--border); }
+  .qual-lab-name { font-size: 13.5px; font-weight: 600; }
+  .qual-lab-meta { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
+  .pad { padding: 14px 16px; }
+  .row-wrap-add { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+  .row-wrap-add input { flex: 1; background: var(--surface-h); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 11px; color: var(--text); font-size: 13px; outline: none; }
+  .row-wrap-add input:focus { border-color: var(--accent); }
+
+  /* 更新进度条 */
+  .upd-progress { height: 5px; border-radius: 999px; background: var(--surface-h); overflow: hidden; width: 160px; }
+  .upd-progress span { display: block; height: 100%; width: 62%; background: var(--success); border-radius: inherit; }
+
+  /* before/after 折叠对比 */
+  .compare { margin-top: 40px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 18px 20px; }
+  .compare h3 { font-size: 14px; margin-bottom: 10px; }
+  .compare .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .compare h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); margin-bottom: 8px; }
+  .compare ul { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+  .compare li { font-size: 12.5px; color: var(--text-2); padding-left: 18px; position: relative; line-height: 1.45; }
+  .compare li::before { position: absolute; left: 0; top: 0; }
+  .compare .before li::before { content: "✗"; color: var(--danger); }
+  .compare .after li::before { content: "✓"; color: var(--success); }
+
+  @media (max-width: 760px) {
+    .set-layout { grid-template-columns: 1fr; gap: 16px; }
+    .set-nav { position: static; flex-direction: row; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
+    .set-nav-item { white-space: nowrap; }
+    .compare .cols { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="proto-bar">
+    <span class="note">原型 · 设置面板重设计（右侧主题切换为演示用，非产品控件）</span>
+    <div class="theme-switch" id="themeSwitch">
+      <button data-t="dark" class="active">暗色</button>
+      <button data-t="light">Arctic Blue</button>
+      <button data-t="paper">Claude Linen</button>
+    </div>
+  </div>
+
+  <h1 class="page-title">系统设置</h1>
+  <p class="page-sub">统一的卡片 / 行 / 分段控件 + 左侧分区导航 —— 一套元件，三种主题。</p>
+
+  <div class="set-layout">
+    <!-- 左导航 -->
+    <nav class="set-nav" id="setNav">
+      <div class="set-nav-item active" data-s="appearance"><span class="ico">◐</span>外观</div>
+      <div class="set-nav-item" data-s="sources"><span class="ico">⇅</span>数据源</div>
+      <div class="set-nav-item" data-s="access"><span class="ico">⚲</span>访问方式</div>
+      <div class="set-nav-item" data-s="qual"><span class="ico">▤</span>资质数据</div>
+      <div class="set-nav-item" data-s="update"><span class="ico">↑</span>更新</div>
+      <div class="set-nav-item" data-s="about"><span class="ico">ⓘ</span>关于 / 高级</div>
+    </nav>
+
+    <!-- 右内容 -->
+    <div class="set-content">
+
+      <!-- 外观 -->
+      <section class="set-section" id="appearance">
+        <div class="set-section-head"><h2>外观</h2><p>主题与结果列表的显示密度</p></div>
+        <div class="set-card">
+          <div class="set-row">
+            <div class="set-row-main">
+              <div class="set-row-title">主题</div>
+              <div class="set-row-note">暗色玻璃 / Arctic Blue 亮色 / Claude Linen 纸张</div>
+            </div>
+            <div class="set-row-control">
+              <div class="set-seg">
+                <button class="set-seg-item active">暗色</button>
+                <button class="set-seg-item">亮色</button>
+                <button class="set-seg-item">纸张</button>
+              </div>
+            </div>
+          </div>
+          <div class="set-row">
+            <div class="set-row-main">
+              <div class="set-row-title">结果密度</div>
+              <div class="set-row-note">检索结果卡片的行高与间距</div>
+            </div>
+            <div class="set-row-control">
+              <div class="set-seg">
+                <button class="set-seg-item">紧凑</button>
+                <button class="set-seg-item active">标准</button>
+                <button class="set-seg-item">舒适</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 数据源 -->
+      <section class="set-section" id="sources">
+        <div class="set-section-head"><h2>数据源</h2><p>拖拽调整检索优先级，开关启停单个源</p></div>
+        <div class="set-card">
+          <div class="set-row draggable">
+            <span class="set-drag-handle">⠿</span><span class="src-order">1</span>
+            <div class="set-row-main"><div class="set-row-title">国标全文 (gbw)</div><div class="set-row-note">国家标准全文公开系统</div></div>
+            <span class="set-status is-ok">在线</span>
+            <button class="set-toggle on"></button>
+          </div>
+          <div class="set-row draggable">
+            <span class="set-drag-handle">⠿</span><span class="src-order">2</span>
+            <div class="set-row-main"><div class="set-row-title">行业标准信息 (hbba)</div><div class="set-row-note">行业 + 地方标准</div></div>
+            <span class="set-status is-ok">在线</span>
+            <button class="set-toggle on"></button>
+          </div>
+          <div class="set-row draggable">
+            <span class="set-drag-handle">⠿</span><span class="src-order">3</span>
+            <div class="set-row-main"><div class="set-row-title">实验室检索 (labr)</div><div class="set-row-note">需配置账号凭据</div></div>
+            <span class="set-status is-down">离线</span>
+            <button class="set-toggle"></button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 访问方式 -->
+      <section class="set-section" id="access">
+        <div class="set-section-head"><h2>访问方式</h2><p>在其它设备的浏览器打开以下地址即可使用</p></div>
+        <div class="set-card">
+          <div class="set-row">
+            <div class="set-row-main"><div class="set-row-title">本机</div></div>
+            <div class="set-row-control"><div class="set-field"><code>http://localhost:7325</code></div><button class="btn sm">复制</button></div>
+          </div>
+          <div class="set-row">
+            <div class="set-row-main"><div class="set-row-title">内网 <span class="chip accent">📱 手机版</span></div><div class="set-row-note">同一 Wi-Fi 下的手机/平板可访问</div></div>
+            <div class="set-row-control"><div class="set-field"><code>http://192.168.1.20:7325</code></div><button class="btn sm">复制</button></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 资质数据 -->
+      <section class="set-section" id="qual">
+        <div class="set-section-head"><h2>资质数据</h2><p>CNAS / CMA 机构能力数据，订阅后定时同步至本地</p></div>
+        <div class="set-card">
+          <div class="set-tabs">
+            <button class="set-tab active">订阅管理</button>
+            <button class="set-tab">同步日志</button>
+          </div>
+          <div class="pad" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <div><div class="set-row-title">推荐订阅</div><div class="set-row-note">内置 CNAS 机构，一键订阅 + 同步</div></div>
+            <button class="btn primary sm">一键订阅</button>
+          </div>
+          <div class="qual-lab-row">
+            <span class="chip">CNAS</span>
+            <div><div class="qual-lab-name">国家纳米科学中心检测实验室</div><div class="qual-lab-meta">已同步 · 1,284 条能力 · 2026-05-28</div></div>
+            <span class="set-status is-ok">最新</span>
+            <button class="btn ghost sm">移除</button>
+          </div>
+          <div class="qual-lab-row">
+            <span class="chip">CMA</span>
+            <div><div class="qual-lab-name">某省计量科学研究院</div><div class="qual-lab-meta">同步中 · 已 720 / 约 2,000</div></div>
+            <span class="set-status">同步中</span>
+            <button class="btn ghost sm">移除</button>
+          </div>
+          <div class="row-wrap-add">
+            <input placeholder="CNAS URL 或 baseInfoId">
+            <button class="btn primary sm">添加</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 更新 -->
+      <section class="set-section" id="update">
+        <div class="set-section-head"><h2>更新</h2><p>当前版本与可用更新</p></div>
+        <div class="set-card">
+          <div class="set-row">
+            <div class="set-row-main"><div class="set-row-title">当前版本</div><div class="set-row-note">标准盒子 StandardsBox</div></div>
+            <div class="set-row-control"><span class="chip">v2.4.1</span><button class="btn sm">检查更新</button></div>
+          </div>
+          <div class="set-row">
+            <div class="set-row-main"><div class="set-row-title">正在下载 v2.5.0</div><div class="set-row-note">StandardsBox-Setup-2.5.0.exe</div></div>
+            <div class="set-row-control"><div class="upd-progress"><span></span></div><span class="set-status">62%</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 关于 / 高级 -->
+      <section class="set-section" id="about">
+        <div class="set-section-head"><h2>关于 / 高级</h2><p>桌面端专属设置</p></div>
+        <div class="set-card">
+          <div class="set-row">
+            <div class="set-row-main"><div class="set-row-title">标准库目录</div><div class="set-row-note">本地标准 PDF 的存放位置</div></div>
+            <div class="set-row-control"><div class="set-field"><code>D:\StandardsBox\standards</code></div><button class="btn sm">更改</button></div>
+          </div>
+          <div class="set-row">
+            <div class="set-row-main"><div class="set-row-title">开机自启</div><div class="set-row-note">登录系统时自动在后台启动</div></div>
+            <div class="set-row-control"><button class="set-toggle on"></button></div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- 重设计前后对照 -->
+  <div class="compare">
+    <h3>重设计前后对照</h3>
+    <div class="cols">
+      <div class="before">
+        <h4>现状（拼凑）</h4>
+        <ul>
+          <li>一页两套渲染：innerHTML 整块重刷 + 手写静态 HTML</li>
+          <li>资质区块满屏内联 style，不走 token、不能主题化</li>
+          <li>6 种卡片方言，背景透明度 0.58/0.38/0.35/0.32 各异</li>
+          <li>两套 Tab（下划线 vs 胶囊）+ 三种标题写法</li>
+          <li>所有设置平铺一大片，无分区导航</li>
+        </ul>
+      </div>
+      <div class="after">
+        <h4>重设计后（成体系）</h4>
+        <ul>
+          <li>声明式配置 → TS 组件渲染，按行局部更新</li>
+          <li>全部 .set-* class + var(--*) token，零内联颜色</li>
+          <li>唯一 .set-card；两级高度（surface / surface-h）</li>
+          <li>统一 .set-tabs + .set-seg + 统一 section 标题</li>
+          <li>左侧 6 分区导航，窄屏退化为横向 chip</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // 主题切换（原型演示用）
+  const ts = document.getElementById('themeSwitch');
+  ts.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    document.documentElement.setAttribute('data-theme', b.dataset.t);
+    ts.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
+  });
+
+  // 左导航高亮 + 平滑滚动
+  const nav = document.getElementById('setNav');
+  nav.addEventListener('click', e => {
+    const it = e.target.closest('.set-nav-item'); if (!it) return;
+    nav.querySelectorAll('.set-nav-item').forEach(x => x.classList.toggle('active', x === it));
+    document.getElementById(it.dataset.s)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  // 分段控件 / Tab / 开关 演示交互
+  document.querySelectorAll('.set-seg').forEach(seg => {
+    seg.addEventListener('click', e => {
+      const b = e.target.closest('.set-seg-item'); if (!b) return;
+      seg.querySelectorAll('.set-seg-item').forEach(x => x.classList.toggle('active', x === b));
+    });
+  });
+  document.querySelectorAll('.set-tabs').forEach(tabs => {
+    tabs.addEventListener('click', e => {
+      const b = e.target.closest('.set-tab'); if (!b) return;
+      tabs.querySelectorAll('.set-tab').forEach(x => x.classList.toggle('active', x === b));
+    });
+  });
+  document.querySelectorAll('.set-toggle').forEach(t => t.addEventListener('click', () => t.classList.toggle('on')));
+</script>
+</body>
+</html>

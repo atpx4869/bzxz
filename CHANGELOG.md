@@ -3,6 +3,17 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat(settings): 设置面板重设计 Phase B — 资质订阅区块接入 `.set-*`(去内联 style)** — 把"系统设置"页里静态手写的资质订阅区块从满屏内联 `style` 切到 Phase A 元件,这是消除拼凑感最扎眼、风险最低的一刀:
+  - 区块标题 `.field-label`(内联 flex + 副标题 span)→ `.set-section-head`(`h2` + `p`)
+  - 子 Tab `.qual-settings-tabs` / `.qual-settings-tab`(每个按钮一长串内联 padding/color/border-bottom)→ 叠加 `.set-tabs` / `.set-tab`,外观全交给 CSS,保留 `qual-settings-tab` / `data-qual-settings-tab` / `onclick` 钩子不动
+  - `public/js/app-qual.js` `switchQualSettingsTab` 删掉 `t.style.color` / `t.style.borderBottomColor` 两行内联赋值,只切 `.active` class —— 选中态由 `.set-tab.active` 接管(原内联值本就等于该设计:`var(--text)` / `var(--accent)`)
+  - 同步改 legacy `public/index.html` 同段(共用同一份 app-qual.js,不改它选中态会失效)
+  - 未引入任何新 CSS(复用 Phase A 已镜像的 `.set-section-head` / `.set-tabs` / `.set-tab`),故 `public/styles.css` 无需追加;`.qual-settings-tab(s)` 旧 class 现仅作 JS 钩子、无对应 CSS 规则
+- **feat(settings): 设置面板重设计 Phase A — 统一组件系统 `.set-*`（纯样式）** — 设置页原先"拼凑感"根因是结构而非配色:一页两套渲染(innerHTML 整刷 + 手写静态 HTML)、满屏内联 style、6 种卡片方言、两套 Tab、三种标题写法。本期落地统一元件系统打底,暂无 HTML 引用(CI 必绿):
+  - 新增 `web/src/styles/pages/settings.css`:`.set-layout`(左导航+右内容两栏)/ `.set-nav`/ `.set-section`/ `.set-card`(唯一卡片)/ `.set-row`(设置原子,含 `.draggable` 拖拽变体)/ `.set-seg`(分段选择器,取代大卡选择+胶囊按钮)/ `.set-status`/ `.set-field`/ `.set-tabs`(统一子 Tab)/ `.set-chip`/ `.set-progress`/ `.set-inline-add`;开关复用 `.toggle-switch`、按钮复用 `.btn`
+  - **主题纪律**:全文件只用 `var(--*)` token,无裸 oklch、无 color-mix,三主题自动适配 —— 故**无需** glass.css 的 light/paper override,也无需 oklch fallback
+  - 接入 `index.css`(pages 段)+ 镜像追加到 `public/styles.css` 末尾(迁移期两份并存契约)+ 登记 `SECTIONS.md`
+  - 设计方案与可点击原型:`docs/SETTINGS-REDESIGN.md` / `docs/settings-redesign-prototype.html`
 - **fix(theme): light/paper Phase 5 补丁 — 残余组件级深色面板** — 收尾排查后补齐 Phase 4 未覆盖的散落硬编码暗 surface,light + paper 各 9 条:
   - **骨架屏**:`.skeleton-card` 背景 + 边框、`.skeleton-line` shimmer 中段高光色(原 `oklch(28% ...)` 在亮底上是深灰扫光)
   - **预览头**:`.preview-head`(`oklch(17% ...)` 深条)

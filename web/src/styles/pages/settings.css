@@ -1,0 +1,109 @@
+/* 设置面板重设计 —— 统一组件系统（Phase A）
+ *
+ * 设计方案见 docs/SETTINGS-REDESIGN.md。这套 .set-* 元件取代旧的
+ * .settings-card / .desktop-setting-card / .web-access-card / .setting-choice /
+ * .qual-settings-tabs 等多种"方言"，目标是一套元件、三种主题。
+ *
+ * 主题约定（**重要，与项目其它文件不同**）：
+ *   本文件**只用 var(--*) token，不写任何裸 oklch / 字面色**（仅 accent 背景上的
+ *   文字用 #fff，三主题通用）。因为 base.css 已为 dark/light/paper 重定义全部
+ *   token，纯 token 写法会自动适配三主题 —— 所以本文件**无需** theme/glass.css
+ *   override，也**无需** oklch fallback（没有裸 oklch 可言）。新增样式务必延续此纪律，
+ *   否则就要回到"每个深色面板手写 light/paper 覆盖"的老路。
+ *
+ * 复用既有组件：开关用 components/toggle-switch.css 的 .toggle-switch；
+ *   按钮用 components/buttons.css 的 .btn / .btn-sm / .btn-primary / .btn-ghost。
+ *
+ * Phase A 只落样式，暂无 HTML 引用这些 class（CI 必绿）；Phase B/C/D 逐步接上。
+ */
+
+/* ── 两栏布局：左分区导航 + 右内容 ─────────────────────────────────────── */
+.set-layout { display: grid; grid-template-columns: 196px minmax(0, 1fr); gap: 28px; align-items: start; }
+
+.set-nav { position: sticky; top: calc(var(--topbar-h, 56px) + 16px); display: flex; flex-direction: column; gap: 2px; }
+.set-nav-item {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  border-radius: var(--radius-sm); border: 1px solid transparent;
+  color: var(--text-2); font-size: 13.5px; font-weight: 500; cursor: pointer;
+  transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out);
+}
+.set-nav-item:hover { background: var(--surface-h); color: var(--text); }
+.set-nav-item.active { background: var(--surface); border-color: var(--border); color: var(--text); font-weight: 600; }
+.set-nav-item .set-nav-ico { width: 16px; text-align: center; opacity: 0.85; }
+
+.set-content { display: flex; flex-direction: column; gap: 30px; min-width: 0; }
+
+/* ── 分区（锚点目标）─────────────────────────────────────────────────── */
+.set-section { scroll-margin-top: calc(var(--topbar-h, 56px) + 16px); }
+.set-section-head { margin-bottom: 12px; }
+.set-section-head h2 { font-size: 15px; font-weight: 700; letter-spacing: 0.01em; color: var(--text); }
+.set-section-head p { margin-top: 3px; font-size: 12px; color: var(--text-3); }
+
+/* ── 唯一卡片方言 ───────────────────────────────────────────────────── */
+.set-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+
+/* ── 设置原子：一条行 = 左 主体 + 右 控件 ───────────────────────────── */
+.set-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+  gap: 16px; padding: 14px 16px;
+}
+.set-row + .set-row { border-top: 1px solid var(--border); }
+.set-row-main { min-width: 0; }
+.set-row-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.set-row-note { margin-top: 3px; font-size: 12px; line-height: 1.5; color: var(--text-3); }
+.set-row-control { display: flex; align-items: center; gap: 10px; justify-self: end; }
+
+/* 可拖拽行（数据源优先级）：把手 + 序号 两列在前 */
+.set-row.draggable { grid-template-columns: 22px 18px minmax(0, 1fr) auto auto; gap: 12px; }
+.set-drag-handle { color: var(--text-3); cursor: grab; user-select: none; font-size: 15px; line-height: 1; }
+.set-drag-handle:active { cursor: grabbing; }
+.set-order { font: 700 12px 'DM Mono', monospace; color: var(--text-3); text-align: center; }
+
+/* ── 分段选择器（取代大卡 .setting-choice + 胶囊 .qual-filter-btn）──── */
+.set-seg { display: inline-flex; gap: 2px; padding: 3px; background: var(--surface-h); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.set-seg-item {
+  border: 0; background: transparent; color: var(--text-2);
+  font: 600 13px 'DM Sans', sans-serif; padding: 6px 14px; border-radius: 6px; cursor: pointer;
+  transition: background 0.16s var(--ease-out), color 0.16s var(--ease-out);
+}
+.set-seg-item:hover { color: var(--text); }
+.set-seg-item.active { background: var(--accent); color: #fff; }
+
+/* ── 状态徽章 ───────────────────────────────────────────────────────── */
+.set-status { display: inline-flex; align-items: center; gap: 6px; font: 700 12px 'DM Mono', monospace; color: var(--text-3); white-space: nowrap; }
+.set-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.set-status.is-ok { color: var(--success); }
+.set-status.is-down { color: var(--danger); }
+.set-status.is-idle { color: var(--text-3); }
+
+/* ── 只读地址 / 行内输入容器 ────────────────────────────────────────── */
+.set-field { display: inline-flex; align-items: center; gap: 8px; min-width: 0; padding: 7px 10px; background: var(--surface-h); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.set-field code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 12px 'DM Mono', monospace; color: var(--accent-h); }
+.set-field input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); font: 600 12px 'DM Mono', monospace; outline: none; }
+
+/* ── 统一子 Tab（资质订阅：订阅管理 / 同步日志）────────────────────── */
+.set-tabs { display: flex; gap: 4px; padding: 0 16px; margin-bottom: -1px; border-bottom: 1px solid var(--border); }
+.set-tab { border: 0; background: transparent; color: var(--text-3); font: 600 13px 'DM Sans', sans-serif; padding: 11px 6px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 0.15s var(--ease-out); }
+.set-tab:hover { color: var(--text); }
+.set-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+/* ── 小徽章（源标签 CNAS/CMA、版本号等）────────────────────────────── */
+.set-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: var(--surface-h); border: 1px solid var(--border); color: var(--text-2); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.set-chip.accent { color: var(--accent-h); border-color: var(--border-strong); }
+
+/* ── 进度条（软件更新下载）─────────────────────────────────────────── */
+.set-progress { width: 160px; height: 5px; overflow: hidden; border-radius: 999px; background: var(--surface-h); }
+.set-progress span { display: block; height: 100%; border-radius: inherit; background: var(--success); transition: width 0.2s var(--ease-out); }
+
+/* ── 列表行内嵌的"添加"输入条（资质实验室增删）────────────────────── */
+.set-inline-add { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+.set-inline-add input { flex: 1; min-width: 0; padding: 8px 11px; background: var(--surface-h); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-size: 13px; outline: none; }
+.set-inline-add input:focus { border-color: var(--accent); }
+
+/* ── 窄屏：左导航退化为顶部横向 chip 条 ───────────────────────────── */
+@media (max-width: 760px) {
+  .set-layout { grid-template-columns: 1fr; gap: 16px; }
+  .set-nav { position: static; flex-direction: row; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+  .set-nav-item { white-space: nowrap; }
+  .set-field { width: 100%; }
+}
