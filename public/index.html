@@ -428,13 +428,13 @@
     </div>
     <!-- 资质订阅（CNAS / CMA） -->
     <div class="setting-section qual-settings-section" style="margin-top:24px">
-      <div class="field-label" style="display:flex;align-items:center;justify-content:space-between">
-        <span>资质订阅</span>
-        <span style="font-size:11px;color:var(--text-3);font-weight:400">CNAS / CMA 机构能力数据，订阅后定时同步至本地</span>
+      <div class="set-section-head">
+        <h2>资质订阅</h2>
+        <p>CNAS / CMA 机构能力数据，订阅后定时同步至本地</p>
       </div>
-      <div class="qual-settings-tabs" style="display:flex;gap:0;margin:12px 0 14px;border-bottom:1px solid var(--border)">
-        <button class="qual-settings-tab active" data-qual-settings-tab="labs" onclick="switchQualSettingsTab('labs')" style="padding:8px 16px;font-size:13px;border:none;background:none;color:var(--text);cursor:pointer;border-bottom:2px solid var(--accent);font-weight:500">订阅管理</button>
-        <button class="qual-settings-tab" data-qual-settings-tab="logs" onclick="switchQualSettingsTab('logs')" style="padding:8px 16px;font-size:13px;border:none;background:none;color:var(--text-3);cursor:pointer;border-bottom:2px solid transparent;font-weight:500">同步日志</button>
+      <div class="qual-settings-tabs set-tabs" style="margin:12px 0 14px">
+        <button class="qual-settings-tab set-tab active" data-qual-settings-tab="labs" onclick="switchQualSettingsTab('labs')">订阅管理</button>
+        <button class="qual-settings-tab set-tab" data-qual-settings-tab="logs" onclick="switchQualSettingsTab('logs')">同步日志</button>
       </div>
       <div id="qualLabsTab">
         <div class="qual-section-title">推荐订阅 <span style="color:var(--text-3);font-size:11px;margin-left:6px;text-transform:none;letter-spacing:0">内置 CNAS 机构，一键订阅 + 同步</span></div>

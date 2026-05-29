@@ -30,11 +30,9 @@ function switchQualTab(tab) {
 // Sub-tab switcher for the qual-subscription section that lives inside
 // the 系统设置 page. Tabs: 'labs' (订阅管理) or 'logs' (同步日志).
 function switchQualSettingsTab(tab) {
+  // 外观（文字色 / 下边框）由 .set-tab[.active] CSS 接管，这里只切 class。
   document.querySelectorAll('.qual-settings-tab').forEach(t => {
-    const active = t.dataset.qualSettingsTab === tab;
-    t.classList.toggle('active', active);
-    t.style.color = active ? 'var(--text)' : 'var(--text-3)';
-    t.style.borderBottomColor = active ? 'var(--accent)' : 'transparent';
+    t.classList.toggle('active', t.dataset.qualSettingsTab === tab);
   });
   const labsEl = document.getElementById('qualLabsTab');
   const logsEl = document.getElementById('qualLogsTab');
