@@ -3,6 +3,23 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **redesign(theme/light): Arctic Blue 蓝调亮色重设计** — 用户反馈旧 light 主题"太丑"(只是简单白底+蓝字+灰阴影,Bootstrap 模板感)。整套重设计,参考 Linear / Apple HIG / 蓝图纸美学,工程师工作台感。
+  - **设计哲学 5 条**:
+    1. 永不纯白:`--bg` 极淡蓝白 oklch(98% 0.006 245) / `--surface` oklch(99.5% 0.003 245) 带一丁点蓝调 / `--surface-elevated` 纯白只留 dropdown 顶层
+    2. Cold Shadow(蓝调冷色阴影):所有 shadow 用 hue=245 蓝调 oklch 代替纯黑 — 高级感的灵魂
+    3. frosted glass 必加 saturate(180%) — 亮底单纯 blur 是灰白糊,要饱和度回拉
+    4. accent L=52(`oklch(52% 0.20 250)` ≈ #2855d4) — 保 a11y 对比度,不刺眼
+    5. 同色系明暗渐变 — btn-primary 走 56%→48% 同蓝不同明度,不用廉价双色
+  - **token 全套替换**:base.css + public/styles.css 镜像段加 5 个新 token(`--surface-elevated` / `--border-strong` / `--accent-soft` / `--glass-bg-strong` + `--shadow-sm/md/lg/glow-accent` 系列冷蓝阴影变量)
+  - **ambient gradient 三层**:左上极淡天蓝 / 右下淡薰衣草 / 中下淡青蓝,oklch 85% 0.08 / 85% 0.06 / 88% 0.05,屏幕"色彩呼吸感"
+  - **body::before 网格**:从黑 0.025 改成 oklch(35% 0.10 245 / 0.04) 深蓝调暗线,蓝图纸感
+  - **所有 frosted 组件**:topbar / sidebar / search-row / toolbar / mobile-tabbar / dropdown 全套 `blur + saturate(180%)` + inset 顶部 1px 高光 + 冷蓝外阴影
+  - **btn-primary 同色蓝渐变**:`linear-gradient(135deg, oklch(56% 0.22 250), oklch(48% 0.22 255))` + inset 高光 + 蓝色光晕 shadow,代替旧"蓝→紫"双色
+  - **资质徽章 light 配方**:CNAS 浅蓝填(95% 0.04 245)+ 深蓝字(40% 0.22 250)+ 细蓝边(82% 0.10 245),CMA 浅绿填(95% 0.04 158)+ 深绿字 + 细绿边,雅致有层次
+  - **手机端结果卡片 chip 按钮**:同款同色蓝渐变 + inset 高光,disabled 静默蓝灰
+  - **覆盖所有 UI**:html bg / body::before / topbar / sidebar / sidebar-item.active(含 ::before 左侧 3px 蓝指示条) / sidebar-user-avatar / btn-primary / confirm-card / download-center / user-dropdown / shortcuts-panel / search-row / search-row:focus-within / result-card / result-card:hover / toolbar / source-tag.active / filter-chip.active / mobile-tabbar / mobile-tab.active / 手机端 .result-card / .qual-result-group / .labr-row / 手机端 search-stage sticky 吸顶 / 手机端 card-actions 按钮 / qual-badge-cnas / qual-badge-cma / qual-source-chip-cnas/cma / source-badge / status-indicator(current/expired/upcoming) / has-text-badge / no-text-badge / qual-scope-badge(all/partial) / modal-overlay / preview-overlay / confirm-overlay / search-history / me-theme-btn.active
+  - 不动:announcement.css / admin.css(已用亮色调色板,CLAUDE.md 强制保留),chart.js 颜色(暂不做)
+  - 所有新写 oklch 都带 sRGB rgba/hex fallback,Win7 Chrome ≤109 兼容
 - **fix: 用户管理"功能权限"勾选 labr / local 保存后不生效** — 用户反馈勾选权限保存后再打开还是未勾选状态。诊断:后端 `admin-routes.ts` zod `allowedTabs` enum 只列 7 个 tab (`search/batch/complete/history/qual/stats/settings`),漏了 `labr` 和 `local`。前端 `TAB_ITEMS` 已经列了 9 个(含 labr/local)。链:
   - 用户勾选 labr → 前端发 PUT `/api/admin/users/:id` body 含 'labr'
   - 后端 zod 校验失败抛 400

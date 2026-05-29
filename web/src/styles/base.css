@@ -52,53 +52,77 @@
   --topbar-h: 52px;
 }
 
-/* ─── Light theme 覆写 ──────────────────────────────────────────────
+/* ─── Light theme · Arctic Blue 蓝调亮色 ──────────────────────────────
    通过 <html data-theme="light"> 触发(由 app-theme.js 维护,FOUC 由 index.html
    <head> 内联 script 提前应用)。
-   保持 oklch + sRGB 双声明,Win7 Chrome ≤109 也兼容。
-   除变量外还需在 theme/glass.css 覆写 html 渐变 / body::before 网格 / topbar /
-   sidebar / 玻璃面板等 hardcode 深色。 */
+   设计哲学:不用纯白卡 + 纯黑字,而是「蓝白纸 + 深蓝灰字 + 冷色阴影 + frosted
+   saturate 玻璃」,参考 Linear / Apple HIG / 蓝图纸,工程师工作台美学。
+   除变量外 theme/glass.css light 段也整套重写:html 三层渐变 / body::before 网格 /
+   topbar / sidebar / 玻璃面板等 hardcode 色值全部走冷蓝阴影 + saturate(180%) frost。 */
 :root[data-theme="light"] {
-  --bg:        #f5f7fa;
-  --bg:        oklch(98% 0.005 255);
-  --surface:   #ffffff;
-  --surface:   oklch(100% 0 0);
-  --surface-h: #f0f3f7;
-  --surface-h: oklch(96% 0.008 255);
-  --border:    #dde2ea;
-  --border:    oklch(88% 0.008 255);
-  --text:      #1a1d24;
-  --text:      oklch(18% 0.01 255);
-  --text-2:    #585c66;
-  --text-2:    oklch(40% 0.012 255);
-  --text-3:    #8a8e98;
-  --text-3:    oklch(60% 0.012 255);
-  --accent:    #2563eb;
-  --accent:    oklch(56% 0.22 250);
-  --accent-h:  #1d4ed8;
-  --accent-h:  oklch(52% 0.22 250);
-  --accent-g:  #6b8cb5;
-  --accent-g:  oklch(60% 0.10 250);
-  --success:   #0e8a5f;
-  --success:   oklch(58% 0.16 158);
-  --danger:    #c33b2c;
+  /* Surface 4 层(从底到顶) */
+  --bg:        #f4f7fb;
+  --bg:        oklch(98% 0.006 245);
+  --surface:   #fbfcfe;
+  --surface:   oklch(99.5% 0.003 245);
+  --surface-h: #eef2f7;
+  --surface-h: oklch(96% 0.012 245);
+  --surface-elevated: #ffffff;
+  --surface-elevated: oklch(100% 0 0);
+  /* Border */
+  --border:    #dbe2eb;
+  --border:    oklch(90% 0.015 245);
+  --border-strong: #bcc6d3;
+  --border-strong: oklch(82% 0.020 245);
+  /* Text(深蓝灰,不纯黑) */
+  --text:      #1a2030;
+  --text:      oklch(20% 0.02 245);
+  --text-2:    #5a6678;
+  --text-2:    oklch(45% 0.018 245);
+  --text-3:    #8b95a7;
+  --text-3:    oklch(62% 0.015 245);
+  /* Accent(L=52 保 a11y 对比度) */
+  --accent:    #2855d4;
+  --accent:    oklch(52% 0.20 250);
+  --accent-h:  #1f4ac9;
+  --accent-h:  oklch(48% 0.22 250);
+  --accent-g:  #7d96c4;
+  --accent-g:  oklch(72% 0.10 245);
+  --accent-soft: #e6edf6;
+  --accent-soft: oklch(95% 0.025 245);
+  /* Status */
+  --success:   #0f7d54;
+  --success:   oklch(48% 0.16 158);
+  --danger:    #c83838;
   --danger:    oklch(54% 0.20 25);
-  --warning:   #b07d12;
-  --warning:   oklch(58% 0.14 85);
+  --warning:   #a3771a;
+  --warning:   oklch(58% 0.14 80);
+  /* Glass */
   --glass-bg:     rgba(255, 255, 255, 0.78);
   --glass-bg:     oklch(100% 0 0 / 0.78);
+  --glass-bg-strong: rgba(255, 255, 255, 0.92);
+  --glass-bg-strong: oklch(100% 0 0 / 0.92);
   --glass-border: rgba(220, 226, 234, 0.6);
-  --glass-border: oklch(88% 0.008 255 / 0.6);
+  --glass-border: oklch(85% 0.020 245 / 0.6);
+  /* Shadow(关键!hue=245 蓝调冷色阴影,而非纯黑 — 高级感的灵魂) */
+  --shadow-sm:    0 1px 2px rgba(40, 60, 100, 0.08);
+  --shadow-sm:    0 1px 2px oklch(50% 0.05 245 / 0.08);
+  --shadow-md:    0 4px 12px -2px rgba(40, 60, 100, 0.10), 0 2px 6px rgba(40, 60, 100, 0.06);
+  --shadow-md:    0 4px 12px -2px oklch(50% 0.10 245 / 0.10), 0 2px 6px oklch(50% 0.05 245 / 0.06);
+  --shadow-lg:    0 12px 32px -8px rgba(40, 60, 100, 0.16), 0 4px 12px rgba(40, 60, 100, 0.08);
+  --shadow-lg:    0 12px 32px -8px oklch(50% 0.12 245 / 0.16), 0 4px 12px oklch(50% 0.08 245 / 0.08);
+  --shadow-glow-accent: 0 0 0 4px rgba(40, 85, 212, 0.10), 0 8px 24px -6px rgba(40, 85, 212, 0.25);
+  --shadow-glow-accent: 0 0 0 4px oklch(52% 0.20 250 / 0.10), 0 8px 24px -6px oklch(52% 0.20 250 / 0.25);
 }
 
-/* Light theme 滚动条:从深色 thumb 换成浅色 */
+/* Light theme 滚动条:细 thumb,蓝调灰 */
 :root[data-theme="light"] ::-webkit-scrollbar-thumb {
-  background: #c2c8d2;
-  background: oklch(82% 0.012 255);
+  background: #c8d0db;
+  background: oklch(82% 0.015 245);
 }
 :root[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
-  background: #a8aeb8;
-  background: oklch(74% 0.012 255);
+  background: #adb6c3;
+  background: oklch(72% 0.018 245);
 }
 
 html {
