@@ -498,6 +498,10 @@ async function fetchLibraryAvailability(rs) {
  * 把缓存的命中状态涂到当前 DOM 上。
  * 每次 renderResults / appendNextResultsBatch 调一次，便于刷新过滤后新出现的行。
  * 命中：按钮加 .dot-local + data-file-id；未命中：移除（防 stale）。
+ *
+ * 同时复审"预览"按钮的 disabled 态:本地有缓存 → 必可点;否则按 isPreviewable
+ * 严格判定(无可下载源 + 无本地 → 真没可看的)。library-check 增量到达后会再调一次,
+ * 让"刚发现本地命中"的卡按钮从 disabled 翻成可点。
  */
 function applyLibraryDots() {
   document.querySelectorAll('#results [data-action="preview"][data-id]').forEach(btn => {
@@ -507,10 +511,16 @@ function applyLibraryDots() {
       btn.classList.add('dot-local');
       btn.setAttribute('data-file-id', String(fid));
       btn.setAttribute('title', '本地已有，秒开');
+      btn.disabled = false;
     } else {
       btn.classList.remove('dot-local');
       btn.removeAttribute('data-file-id');
       btn.setAttribute('title', '本地预览（已下载的标准）');
+      // 没本地命中 → 按"能不能下"判定。findResultByAnyId 拿不到时保守不动 disabled。
+      try {
+        const r = typeof findResultByAnyId === 'function' ? findResultByAnyId(id) : null;
+        if (r) btn.disabled = !isPreviewable(r, false);
+      } catch { /* ignore */ }
     }
   });
 }
@@ -548,6 +558,21 @@ function isDownloadable(r) {
   if (r.previewAvailable) return true;
   if (sources.includes('gbw') && !r._gbwTextChecked) return true;
   return false;
+}
+
+/**
+ * 预览按钮是否允许点击:
+ *   - 本地有缓存(_libraryFileIds 命中)→ 必可点(秒开)
+ *   - 否则按"能不能下"判定 — 能下就能拉文本预览;不能下也没本地 → disabled
+ *
+ * checkLocal 参数:为了让"首次渲染时按已知 _libraryFileIds 状态判定"和"DOM 已存在
+ * 后 applyLibraryDots 再调一次"两条路径都能复用本函数。默认 true,buildResultCardHtml
+ * 渲染时传 true 让首屏即时反映已知本地命中;applyLibraryDots 内部已经先按 fid 单独处理过了
+ * 本地命中分支,这里传 false 让函数只判"非本地命中下能不能预览"。
+ */
+function isPreviewable(r, checkLocal = true) {
+  if (checkLocal && _libraryFileIds && _libraryFileIds.get && _libraryFileIds.get(r.id)) return true;
+  return isDownloadable(r);
 }
 
 function buildResultCardHtml(r, i) {
@@ -597,7 +622,7 @@ function buildResultCardHtml(r, i) {
       <div class="card-actions">
         <button data-action="save" data-id="${escapeHtml(r.id)}" class="${saved ? 'saved' : ''}" title="${saved ? '取消收藏' : '收藏'}">${saved ? '已存' : '收藏'}</button>
         <button data-action="detail" data-id="${escapeHtml(r.id)}">详情</button>
-        <button data-action="preview" data-id="${escapeHtml(r.id)}" title="本地预览（已下载的标准）">预览</button>
+        <button data-action="preview" data-id="${escapeHtml(r.id)}" title="本地预览（已下载的标准）" ${isPreviewable(r) ? '' : 'disabled'}>预览</button>
         <button data-action="download" data-id="${escapeHtml(r.id)}" ${isDownloadable(r) ? '' : 'disabled'}>下载</button>
       </div>
     </div>`;
@@ -1367,7 +1392,7 @@ document.getElementById('results').addEventListener('contextmenu', e => {
     { label: '复制标准号 + 名称', icon: '≣', action: () => copyToClipboard(`${r.standardNumber || ''}  ${r.title || ''}`.trim()) },
     { divider: true },
     { label: '查看详情', icon: '👁', action: () => showDetail(id) },
-    { label: '预览（本地）', icon: '🗎', action: () => previewStandard(id) },
+    { label: isPreviewable(r) ? '预览（本地）' : '预览（本地）（不可用）', icon: '🗎', action: () => { if (isPreviewable(r)) previewStandard(id); else showToast('该标准无本地缓存且无可下载源', 'fail'); } },
     ...(onMobile ? [] : [
       { label: isDownloadable(r) ? '下载该标准' : '下载该标准（无文本）', icon: '↓', action: () => { const btn = card.querySelector('[data-action="download"]'); if (btn && !btn.disabled) downloadOne(id, btn); else showToast('该标准无可用文本', 'fail'); } },
       { label: isStandardSaved(r) ? '取消收藏' : '加入收藏', icon: '★', action: () => toggleSavedStandard(id) },

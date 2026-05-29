@@ -427,6 +427,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **fix: 标准搜索"预览"按钮 disabled 判定** — 新增 `isPreviewable(r)`:本地有缓存 → 必可点;否则按 `isDownloadable` 判定。"applyLibraryDots" 在 library-check 异步到达后会刷新 disabled 让"刚发现本地命中"的卡按钮翻成可点
 - **fix: 标准搜索"下载"按钮 disabled 判定放宽** — 新增 `isDownloadable(r)` 与 `resolveTextState` 解耦:textBadge UI 信号(有/无/检测中)不变,下载按钮判定改放宽到「非废止 + 有源 + (任一源 previewAvailable 或 gbw 还在轮询)」就允许点击。级联模式天然逐源尝试,一源失败跳下一个。"只看可下载"筛选条保持严格口径(用户主动筛选不希望被 optimistic 污染)
 - **perf: Labr 搜索首屏一次拉 100 条 + searchCache 接入** — page=1 改并行 `searchInline + recList(pageNo=2, pageSize=100)` merge by did,首屏结果集从 ≤4 条 → 最多 104 条,耗时不变(并行)。`searchInline`/`recList` 加 5min TTL searchCache,重复搜索 / 翻页 = 0 延迟。labr 上游 pageNo 偏移由后端透明处理,前端零改动
 - **feat: 手机端搜索 / 资质 / Labr 结果卡片化 v2 + 资质徽章迁移到标准号后** — CNAS/CMA 徽章从标题行 / meta-line 搬到标准号紧后面(`.card-number-row` 新容器),标识紧跟标识。手机端 .result-card / .qual-result-group / .labr-row 统一卡片化(padding 12-14px / border-radius 12px / 明确边界色),信息层级三段清晰:标识行 → 标题 → 元数据(状态/文本/源扁平化成 · 分隔纯文本,不再彩色徽章砌墙)→ 日期 → 操作。手机端结果卡按钮收敛为「详情+预览」2 个(沿用「查阅而非管理」契约)。桌面端零影响

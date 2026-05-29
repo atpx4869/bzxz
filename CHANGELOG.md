@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix: 标准搜索"预览"按钮 disabled 判定** — 用户反馈预览按钮缺少 disabled 判定:实际上无本地缓存 + 无可下载源时点了也没意义。新增 `isPreviewable(r, checkLocal=true)`:
+  - 本地有缓存(`_libraryFileIds` 命中)→ 必可点(秒开)
+  - 否则按 `isDownloadable(r)` 判定 — 能下就能拉文本预览;不能下也没本地 → disabled
+  - `applyLibraryDots` 同步刷新 preview 按钮的 disabled 态(library-check 异步到达后让"刚发现本地命中"的卡按钮翻成可点)
+  - 上下文菜单"预览(本地)"项也按 isPreviewable 判定,不可用时显示"预览(本地)(不可用)"+ toast 提示
+  - 改动:`public/js/app-search.js` 加 isPreviewable 函数 + buildResultCardHtml 预览按钮 disabled 表达式 + applyLibraryDots 刷新 disabled + 上下文菜单标签
 - **fix: 标准搜索"下载"按钮 disabled 判定放宽** — 用户反馈按钮 disabled 判定过严:多源标准里第一优先级源可能 previewAvailable=false,但其他源能下,按钮却 disabled 让人误以为下不了。诊断:`resolveTextState` 设计上既要给「文本徽章」做信号区分(有文本/无文本/检测中三态),又被复用到「下载按钮」disabled 判定,两者口径混淆。
   - 新增 `isDownloadable(r)` 函数,与 `resolveTextState` 解耦:textBadge UI 信号不变(信息);下载按钮判定改用 isDownloadable —— 放宽到「非废止 + 有源 + (任一源 previewAvailable=true 或 gbw 还在轮询)」就允许点击
   - 级联下载本身按 downloadPriority 顺序逐源尝试,一源失败自动跳下一个,全部失败才报 toast。所以「让用户能试一下」不会真坑用户
