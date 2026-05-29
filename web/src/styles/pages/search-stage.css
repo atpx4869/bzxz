@@ -53,9 +53,9 @@
      - 资质查询：#qualSearchTab 内的 input + filters（一并吸顶，方便切换 CNAS/CMA）
      - Labr：搜索行 div + input + 按钮 */
   body:not(.force-desktop) #page-search.search-stage-active .search-area,
-  body:not(.force-desktop) #page-qual.search-stage-active #qualSearchInput,
+  body:not(.force-desktop) #page-qual.search-stage-active .qual-search-row,
   body:not(.force-desktop) #page-qual.search-stage-active .qual-filters,
-  body:not(.force-desktop) #page-labr.search-stage-active > div:not(.qual-tab-bar) > div:first-child {
+  body:not(.force-desktop) #page-labr.search-stage-active .labr-search-row {
     position: sticky;
     top: var(--topbar-h);
     z-index: 50;

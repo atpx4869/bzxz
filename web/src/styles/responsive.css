@@ -88,7 +88,9 @@
     font-size: 15px;
     min-width: 0;
   }
-  body:not(.force-desktop) .search-row #searchBtn {
+  body:not(.force-desktop) .search-row #searchBtn,
+  body:not(.force-desktop) .search-row #qualSearchBtn,
+  body:not(.force-desktop) .search-row #labrSearchBtn {
     flex: 0 0 auto;
     order: 2;                /* 强制紧贴 input 右侧 */
     height: 40px;
@@ -100,7 +102,35 @@
     align-items: center;
     gap: 6px;
   }
-  body:not(.force-desktop) .search-row #searchBtn .search-btn-icon { font-size: 14px; line-height: 1; }
+  body:not(.force-desktop) .search-row #searchBtn .search-btn-icon,
+  body:not(.force-desktop) .search-row #qualSearchBtn .search-btn-icon,
+  body:not(.force-desktop) .search-row #labrSearchBtn .search-btn-icon { font-size: 14px; line-height: 1; }
+  /* 资质 / Labr 用 .qual-search-row 包装:input 自身边框 / 背景 / 圆角清掉,
+     融入 .search-row 玻璃容器壳;focus 光晕走 .search-row:focus-within */
+  body:not(.force-desktop) .qual-search-row .qual-search-input {
+    flex: 1 1 0;
+    width: auto;
+    padding: 11px 4px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    font-size: 15px;
+    min-width: 0;
+    color: var(--text);
+  }
+  body:not(.force-desktop) .qual-search-row .qual-search-input:focus {
+    border: none;
+    box-shadow: none;
+  }
+  /* Labr 批量下载按钮:wrap 到第二行,与 source-tags 占第二行同款节奏 */
+  body:not(.force-desktop) .labr-search-row #labrBatchBtn {
+    flex: 1 1 100%;
+    order: 3;
+    height: 38px;
+    font-size: 13px;
+    border-radius: 8px;
+  }
   body:not(.force-desktop) .source-tags {
     flex: 1 1 100%;          /* 占满第二行 */
     flex-wrap: wrap;

@@ -373,7 +373,7 @@ cp .env.example .env.local
 
 - **入口**：桌面端「设置 → 网页版启动器」卡片，内网行带「📱 手机版」徽章；点复制按钮把地址发到手机即可
 - **URL 路由**：`?tab=search|qual|me` 等参数会被 `initRouter()` 还原，刷新/分享深链不丢 tab 状态
-- **响应式断点**：`≤640px` 进手机模式 —— 隐藏 sidebar、底部出现 mobile-tabbar（标准 / 资质 / 我），结果卡片单列、批量勾选/快捷键禁用、触控热区 ≥44×44px
+- **响应式断点**：`≤640px` 进手机模式 —— 隐藏 sidebar、底部出现 mobile-tabbar（普通用户 / 游客 3 tab `标准 / 资质 / 我`，管理员 4 tab `标准 / 资质 / Labr / 我`），结果卡片单列、批量勾选/快捷键禁用、触控热区 ≥44×44px
 - **逃生口**：手机上访问 `?desktop=1` 或在「我」页点「切换到完整版」回到桌面布局（写 `localStorage['bzxz.layout']` 持久化）
 - **PWA**：支持 iOS Safari / Android Chrome「添加到主屏」生成独立窗口图标；HTTP 内网部署无 Service Worker，因此**无离线缓存 / 无 Web Push**（详见 [`docs/MOBILE_ADAPTATION.md §6`](./docs/MOBILE_ADAPTATION.md)）
 - **不可用功能**：批量下载、用户管理、订阅同步管理在手机端隐藏，需要时用「切换到完整版」逃生口
@@ -427,6 +427,8 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **polish(mobile): 三个搜索框 (标准/资质/Labr) 视觉统一** — 资质 / Labr 外套 `.search-row` 玻璃容器壳 + `.qual-search-row` / `.labr-search-row` 局部覆写,与标准检索完全统一。资质页新加 `🔍 搜索` 按钮(之前只能 Enter)。三 tab 切换体感一致
+- **feat(mobile): 管理员底部 tabbar 加 Labr + 「设置」收紧为 admin-only** — 手机端 admin 看到 4 tab (`标准 / 资质 / Labr / 我`),非 admin 仍是 3 tab;「我」页「设置」对游客 + 普通用户隐,只对 admin 可见。`onAuthReady` 按 `currentUser.role === 'admin'` toggle 显示
 - **fix(mobile): 移除"切换到完整版"按钮** — 旧版"我"页有切换桌面/手机布局按钮,但切到 desktop 后桌面布局没有等价"回手机"入口,用户被卡住切不回。整功能下线,只保留 `?desktop=1` URL 逃生口。启动时主动清 localStorage 残留让升级用户自动回手机
 - **polish(mobile): 搜索框两行布局 + 结果卡按钮统一 accent 蓝** — 手机端搜索行重写:第一行 `[input    ][🔍 搜索]`(input padding 横向加大让字 / 光标离边明显,searchBtn order:2 紧贴右),第二行 source-tags wrap 保留勾选能力;search-templates(GB/T 等 chip)手机端全藏。结果卡 2 按钮(详情 + 预览)都改 accent 蓝主色 + 圆角 10px + box-shadow + active 按压反馈,跟桌面 download 视觉同款
 - **fix: 标准搜索"预览"按钮 disabled 判定** — 新增 `isPreviewable(r)`:本地有缓存 → 必可点;否则按 `isDownloadable` 判定。"applyLibraryDots" 在 library-check 异步到达后会刷新 disabled 让"刚发现本地命中"的卡按钮翻成可点

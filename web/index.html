@@ -301,7 +301,10 @@
       <button class="qual-tab" data-qual-tab="visual" onclick="switchQualTab('visual')" style="padding:8px 16px;font-size:13px;border:none;background:none;color:var(--text-3);cursor:pointer;border-bottom:2px solid transparent;font-weight:500">可视化</button>
     </div>
     <div id="qualSearchTab" style="display:flex;flex-direction:column;height:calc(100vh - var(--topbar-h) - 140px)">
-      <input class="qual-search-input" id="qualSearchInput" type="text" placeholder="输入标准号、实验室名称或关键词…" onkeydown="if(event.key==='Enter')doQualSearch()">
+      <div class="search-row qual-search-row">
+        <input class="qual-search-input" id="qualSearchInput" type="text" placeholder="输入标准号、实验室名称或关键词…" onkeydown="if(event.key==='Enter')doQualSearch()">
+        <button class="btn btn-primary" id="qualSearchBtn" onclick="doQualSearch()"><span class="search-btn-icon" aria-hidden="true">🔍</span><span class="search-btn-label">搜索</span></button>
+      </div>
       <div class="qual-filters">
         <button class="qual-filter-btn active" data-qual-source="" onclick="setQualFilter(this,'')">全部</button>
         <button class="qual-filter-btn" data-qual-source="CNAS" onclick="setQualFilter(this,'CNAS')">CNAS</button>
@@ -334,9 +337,9 @@
     <h2 style="font-size:20px;font-weight:600;margin-bottom:18px">Labr库检索</h2>
     <p style="font-size:12px;color:var(--text-3);margin-bottom:14px">labr.cc 第四源 — 用于补充本地标准库。下载后落地到当前 standards_library_dir。</p>
     <div style="display:flex;flex-direction:column;height:calc(100vh - var(--topbar-h) - 140px)">
-      <div style="display:flex;gap:8px;margin-bottom:12px">
-        <input class="qual-search-input" id="labrSearchInput" type="text" placeholder="输入标准号 / 关键词 搜索 labr.cc…" style="flex:1" onkeydown="if(event.key==='Enter')doLabrSearch()">
-        <button class="btn btn-primary" onclick="doLabrSearch()">搜索</button>
+      <div class="search-row qual-search-row labr-search-row" style="margin-bottom:12px">
+        <input class="qual-search-input" id="labrSearchInput" type="text" placeholder="输入标准号 / 关键词 搜索 labr.cc…" onkeydown="if(event.key==='Enter')doLabrSearch()">
+        <button class="btn btn-primary" id="labrSearchBtn" onclick="doLabrSearch()"><span class="search-btn-icon" aria-hidden="true">🔍</span><span class="search-btn-label">搜索</span></button>
         <button class="btn btn-ghost" id="labrBatchBtn" onclick="doLabrBatchDownload()" disabled>批量下载选中</button>
       </div>
       <div id="labrResults" style="flex:1;overflow-y:auto"><div class="qual-empty">输入关键词检索 labr.cc 标准</div></div>

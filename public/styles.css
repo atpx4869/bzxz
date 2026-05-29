@@ -830,6 +830,22 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
 
 .qual-search-input { width: 100%; padding: 11px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text); font: 400 14px 'DM Sans', sans-serif; outline: none; transition: border-color 0.25s, box-shadow 0.25s; }
 .qual-search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0, 149, 254, 0.1); box-shadow: 0 0 0 3px oklch(66% 0.20 250 / 0.10); }
+
+/* .qual-search-row .qual-search-input:在 .search-row 玻璃容器内时,清掉自身样式 */
+.qual-search-row .qual-search-input {
+  width: auto;
+  flex: 1 1 0;
+  padding: 11px 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  min-width: 0;
+}
+.qual-search-row .qual-search-input:focus {
+  border: none;
+  box-shadow: none;
+}
 .qual-filters { display: flex; gap: 8px; margin: 14px 0; flex-wrap: wrap; }
 .qual-filter-btn { padding: 5px 14px; border-radius: 100px; font-size: 11px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); color: var(--text-2); background: transparent; transition: all 0.15s var(--ease-out); }
 .qual-filter-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -1110,7 +1126,9 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
     font-size: 15px;
     min-width: 0;
   }
-  body:not(.force-desktop) .search-row #searchBtn {
+  body:not(.force-desktop) .search-row #searchBtn,
+  body:not(.force-desktop) .search-row #qualSearchBtn,
+  body:not(.force-desktop) .search-row #labrSearchBtn {
     flex: 0 0 auto;
     order: 2;
     height: 40px;
@@ -1122,7 +1140,34 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
     align-items: center;
     gap: 6px;
   }
-  body:not(.force-desktop) .search-row #searchBtn .search-btn-icon { font-size: 14px; line-height: 1; }
+  body:not(.force-desktop) .search-row #searchBtn .search-btn-icon,
+  body:not(.force-desktop) .search-row #qualSearchBtn .search-btn-icon,
+  body:not(.force-desktop) .search-row #labrSearchBtn .search-btn-icon { font-size: 14px; line-height: 1; }
+  /* 资质 / Labr input 在 .search-row 容器内,自身样式清掉融入玻璃壳 */
+  body:not(.force-desktop) .qual-search-row .qual-search-input {
+    flex: 1 1 0;
+    width: auto;
+    padding: 11px 4px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    font-size: 15px;
+    min-width: 0;
+    color: var(--text);
+  }
+  body:not(.force-desktop) .qual-search-row .qual-search-input:focus {
+    border: none;
+    box-shadow: none;
+  }
+  /* Labr 批量下载:wrap 到第二行,full-width */
+  body:not(.force-desktop) .labr-search-row #labrBatchBtn {
+    flex: 1 1 100%;
+    order: 3;
+    height: 38px;
+    font-size: 13px;
+    border-radius: 8px;
+  }
   body:not(.force-desktop) .source-tags {
     flex: 1 1 100%;
     flex-wrap: wrap;
@@ -1466,9 +1511,9 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
   body:not(.force-desktop) #page-labr.search-stage-idle > p { display: none; }
 
   body:not(.force-desktop) #page-search.search-stage-active .search-area,
-  body:not(.force-desktop) #page-qual.search-stage-active #qualSearchInput,
+  body:not(.force-desktop) #page-qual.search-stage-active .qual-search-row,
   body:not(.force-desktop) #page-qual.search-stage-active .qual-filters,
-  body:not(.force-desktop) #page-labr.search-stage-active > div:not(.qual-tab-bar) > div:first-child {
+  body:not(.force-desktop) #page-labr.search-stage-active .labr-search-row {
     position: sticky;
     top: var(--topbar-h);
     z-index: 50;

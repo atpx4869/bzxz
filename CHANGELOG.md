@@ -3,6 +3,18 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **polish(mobile): 三个搜索框 (标准/资质/Labr) 视觉统一** — 之前三个 tab 各自一套搜索框样式 — 标准检索是玻璃 frosted 容器、资质是裸 input 实色背景、Labr 又是另一种 flex 行。手机端三 tab 切换体感像三个产品。改造:
+  - **DOM 统一**:资质 / Labr 的搜索行外套 `.search-row` 玻璃容器壳 + 局部 class `.qual-search-row` / `.labr-search-row`。资质页 input 后新加 `<button id="qualSearchBtn" onclick="doQualSearch()">🔍 搜索</button>`(之前只能 Enter,手机端用户找不到)
+  - **CSS 视觉统一**:`.qual-search-row .qual-search-input` 在玻璃容器内清掉自身 background/border/radius/focus shadow,融入父容器;focus 光晕走 `.search-row:focus-within` 与标准检索同款
+  - **手机端按钮统一规则**:`#searchBtn` / `#qualSearchBtn` / `#labrSearchBtn` 共享同一组样式(40px 高、accent 蓝、🔍 + 文字、order:2 紧贴 input);Labr 的「批量下载选中」`flex 1 1 100%; order:3` wrap 到第二行
+  - **search-stage.css sticky 吸顶选择器同步**:`#page-qual.search-stage-active #qualSearchInput` → `.qual-search-row`(吸顶整个玻璃容器而非裸 input);Labr 同理
+  - 改动:`public/index.html` + `web/index.html` 资质 + Labr DOM wrapper;`web/src/styles/responsive.css` + `public/styles.css` + `web/src/styles/pages/qualifications.css` + `web/src/styles/pages/search-stage.css` CSS 镜像
+- **feat(mobile): 管理员底部 tabbar 加 Labr 入口 + 「设置」收紧为 admin-only** — 用户反馈手机端管理员需要直接进 Labr 库检索;同时游客 / 普通用户都不该看到「设置」(本来基本上是 admin 全局配置项)。
+  - `public/index.html` 底部 mobile-tabbar 新加 `<button data-tab="labr" id="mobileTabLabr">📚 Labr</button>`,`style="display:none"` 默认隐
+  - `public/index.html` 「我」页「设置」行加 `id="meRowSettings"` + `style="display:none"` 默认隐
+  - `public/js/app-auth-admin.js:onAuthReady` 按 `currentUser.role === 'admin'` toggle mobileTabLabr / meRowSettings 显示。其它用户(普通注册 + guest)都看不到
+  - 4 tab 在 375px 屏宽仍能装下(每 tab flex 1 1 0 ≈ 93px),文字 11px 不挤
+  - admin 角色 `allowedTabs=null` 全 tab 放行,labr tab 进入无权限阻塞;app-core.js switchTab 的 `tab !== 'me'` 例外不影响 labr
 - **fix(mobile): 移除"切换到完整版"按钮** — 用户反馈"切换完整界面后切不回去,纯纯多余"。诊断:`public/index.html:474` "我"页有 `toggleDesktopLayout` 按钮在 mobile/desktop 之间切,选择存 localStorage `bzxz.layout`。问题:切到 desktop 后,桌面布局没有等价的"回到手机版"入口("我"页本身只在手机布局存在),用户被卡在桌面端再也切不回。整功能下线:
   - `public/index.html:473-475` 删整段 me-section(只放着这一个按钮)
   - `public/js/app-mobile.js` 删 `toggleDesktopLayout` / `updateMeToggleLabel`,简化 `readForcedMode` 不再读 localStorage

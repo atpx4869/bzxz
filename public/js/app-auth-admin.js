@@ -137,8 +137,14 @@ function onAuthReady() {
   if (meLogout) meLogout.style.display = currentUser.username === '_guest' ? 'none' : '';
   var meStats = document.getElementById('meRowStats');
   var meUsers = document.getElementById('meRowUsers');
+  var meSettings = document.getElementById('meRowSettings');
   if (meStats) meStats.style.display = currentUser.role === 'admin' ? '' : 'none';
   if (meUsers) meUsers.style.display = currentUser.role === 'admin' ? '' : 'none';
+  // 设置:admin-only(用户原话:隐"访客 + 普通用户",仅管理员可见)
+  if (meSettings) meSettings.style.display = currentUser.role === 'admin' ? '' : 'none';
+  // 底部 tabbar Labr 项:admin-only(管理员手机端补第 4 tab)
+  var mobileTabLabr = document.getElementById('mobileTabLabr');
+  if (mobileTabLabr) mobileTabLabr.style.display = currentUser.role === 'admin' ? '' : 'none';
   // Apply per-user tab permissions
   applyTabPermissions();
   // Show announcements & release notes after auth
