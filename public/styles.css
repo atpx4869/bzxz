@@ -1390,26 +1390,32 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
   body:not(.force-desktop) .result-card .card-date b {
     font-size: 10px; color: var(--text-3);
   }
+  /* 手机端结果卡按钮:chip 风,靠右贴边,不再 flex 拉伸成两大色块。
+     - 视觉变轻 + 卡片信息左对齐 + 按钮右对齐,左右平衡
+     - 36px 高 + auto 宽 + 16px padding,触控热区 64x36+(超 Apple HIG 44x44 推荐) */
   body:not(.force-desktop) .result-card .card-actions,
   body:not(.force-desktop) .batch-result-card .card-actions {
-    display: flex; gap: 8px; flex-wrap: nowrap; justify-content: stretch;
+    display: flex; gap: 8px; flex-wrap: nowrap; justify-content: flex-end;
     margin-top: 2px;
   }
-  /* 手机端剩详情 + 预览 2 个按钮,都用 accent 蓝主色(跟桌面 download 视觉同款) */
   body:not(.force-desktop) .result-card .card-actions .btn,
   body:not(.force-desktop) .result-card .card-actions button,
   body:not(.force-desktop) .batch-result-card .card-actions .btn,
   body:not(.force-desktop) .batch-result-card .card-actions button {
-    flex: 1 1 0; min-width: 0; min-height: 44px; padding: 8px 6px; font-size: 14px;
-    border-radius: 10px;
+    flex: 0 0 auto;
+    min-width: 64px;
+    min-height: 36px;
+    padding: 0 16px;
+    font-size: 13px;
+    border-radius: 8px;
     background: #0095fe;
     background: var(--accent);
     color: #fff !important;
     border: none;
     font-weight: 600;
     letter-spacing: 0.02em;
-    box-shadow: 0 2px 8px rgba(0, 149, 254, 0.18);
-    box-shadow: 0 2px 8px oklch(66% 0.20 250 / 0.18);
+    box-shadow: 0 1px 4px rgba(0, 149, 254, 0.20);
+    box-shadow: 0 1px 4px oklch(66% 0.20 250 / 0.20);
   }
   body:not(.force-desktop) .result-card .card-actions button:active,
   body:not(.force-desktop) .result-card .card-actions .btn:active,

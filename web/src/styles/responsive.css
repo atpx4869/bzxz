@@ -308,28 +308,33 @@
   body:not(.force-desktop) .result-card .card-date b {
     font-size: 10px; color: var(--text-3);
   }
-  /* 按钮:手机端隐了 save/download 后剩详情 + 预览。两个都用 accent 蓝主色,
-     操作意图明确,跟桌面端 download 按钮视觉同款。flex 等宽 / 44px 高 / 圆角 10px */
+  /* 按钮:方案 A — chip 风,靠右贴边,不再 flex 拉伸两大色块。
+     视觉变轻 + 卡片信息左对齐 + 按钮右对齐,左右平衡。
+     - 36px 高 + auto 宽 + 文字 padding,触控热区仍达 36×60+px(Apple HIG 推荐范围)
+     - accent 蓝主色保持,但宽度收敛后视觉不再压迫 */
   body:not(.force-desktop) .result-card .card-actions,
   body:not(.force-desktop) .batch-result-card .card-actions {
-    display: flex; gap: 8px; flex-wrap: nowrap; justify-content: stretch;
+    display: flex; gap: 8px; flex-wrap: nowrap; justify-content: flex-end;
     margin-top: 2px;
   }
   body:not(.force-desktop) .result-card .card-actions .btn,
   body:not(.force-desktop) .result-card .card-actions button,
   body:not(.force-desktop) .batch-result-card .card-actions .btn,
   body:not(.force-desktop) .batch-result-card .card-actions button {
-    flex: 1 1 0; min-width: 0; min-height: 44px; padding: 8px 6px; font-size: 14px;
-    border-radius: 10px;
-    /* accent 蓝主色,跟桌面 download 按钮视觉同款 */
+    flex: 0 0 auto;                     /* chip 风:跟文字宽度走,不再 flex 拉伸 */
+    min-width: 64px;                    /* 保证触控热区(64x36 比 Apple HIG 44x44 还宽) */
+    min-height: 36px;
+    padding: 0 16px;
+    font-size: 13px;
+    border-radius: 8px;
     background: #0095fe;
     background: var(--accent);
-    color: #fff !important;       /* 覆盖 result-card.css base button 的 text-2 */
+    color: #fff !important;
     border: none;
     font-weight: 600;
     letter-spacing: 0.02em;
-    box-shadow: 0 2px 8px rgba(0, 149, 254, 0.18);
-    box-shadow: 0 2px 8px oklch(66% 0.20 250 / 0.18);
+    box-shadow: 0 1px 4px rgba(0, 149, 254, 0.20);
+    box-shadow: 0 1px 4px oklch(66% 0.20 250 / 0.20);
   }
   body:not(.force-desktop) .result-card .card-actions button:active,
   body:not(.force-desktop) .result-card .card-actions .btn:active,
@@ -339,7 +344,6 @@
     background: var(--accent-h);
     transform: translateY(1px);
   }
-  /* disabled 态:opacity + 静默灰,跟可用按钮视觉分离 */
   body:not(.force-desktop) .result-card .card-actions button:disabled,
   body:not(.force-desktop) .result-card .card-actions button[disabled],
   body:not(.force-desktop) .batch-result-card .card-actions button:disabled,

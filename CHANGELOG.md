@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **polish(mobile): 结果卡按钮改 chip 风(靠右贴边)** — 用户反馈手机端结果卡两个按钮(详情+预览)"框体太高了,宽度又太窄了,所有信息全挤左边"。诊断:flex 1 1 0 拉伸 + 44px 高 + accent 蓝大色块,视觉压迫感强,左侧文字信息 vs 右下两大色块对比悬殊。改 chip 风:
+  - `display: flex; justify-content: flex-end` 靠右
+  - `flex: 0 0 auto; min-width: 64px; min-height: 36px; padding: 0 16px`(从拉伸改 auto 宽 + 文字 padding)
+  - `border-radius: 8px`,`font-size: 13px`,shadow 减半(0 2px 8px → 0 1px 4px)
+  - 触控热区 64x36+ 仍超 Apple HIG 44x44 推荐
+  - 用户视觉感受:卡片信息左对齐 + 按钮右对齐 chip,左右平衡;按钮不再喧宾夺主
 - **polish(mobile): 三个搜索框 (标准/资质/Labr) 视觉统一** — 之前三个 tab 各自一套搜索框样式 — 标准检索是玻璃 frosted 容器、资质是裸 input 实色背景、Labr 又是另一种 flex 行。手机端三 tab 切换体感像三个产品。改造:
   - **DOM 统一**:资质 / Labr 的搜索行外套 `.search-row` 玻璃容器壳 + 局部 class `.qual-search-row` / `.labr-search-row`。资质页 input 后新加 `<button id="qualSearchBtn" onclick="doQualSearch()">🔍 搜索</button>`(之前只能 Enter,手机端用户找不到)
   - **CSS 视觉统一**:`.qual-search-row .qual-search-input` 在玻璃容器内清掉自身 background/border/radius/focus shadow,融入父容器;focus 光晕走 `.search-row:focus-within` 与标准检索同款
