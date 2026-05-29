@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix: 标准搜索"下载"按钮 disabled 判定放宽** — 用户反馈按钮 disabled 判定过严:多源标准里第一优先级源可能 previewAvailable=false,但其他源能下,按钮却 disabled 让人误以为下不了。诊断:`resolveTextState` 设计上既要给「文本徽章」做信号区分(有文本/无文本/检测中三态),又被复用到「下载按钮」disabled 判定,两者口径混淆。
+  - 新增 `isDownloadable(r)` 函数,与 `resolveTextState` 解耦:textBadge UI 信号不变(信息);下载按钮判定改用 isDownloadable —— 放宽到「非废止 + 有源 + (任一源 previewAvailable=true 或 gbw 还在轮询)」就允许点击
+  - 级联下载本身按 downloadPriority 顺序逐源尝试,一源失败自动跳下一个,全部失败才报 toast。所以「让用户能试一下」不会真坑用户
+  - `filterState.onlyDownloadable` 筛选条保持原口径(严格 previewAvailable=true),与文本徽章一致 — 用户主动筛选时不希望被 optimistic 行污染
+  - 改动:`public/js/app-search.js` 加 isDownloadable 函数 + 下载按钮 disabled 表达式 + 上下文菜单"下载该标准"标签判断同步
 - **perf: Labr 搜索首屏一次拉 100 条 + searchCache 接入** — 用户反馈 Labr 库检索慢。诊断:① 旧 page=1 走 SSR `state.dataList` scrape 只返 ≤4 条,用户首屏看不到全量,体感"搜了没拉全"; ② labr-service 完全没接 searchCache(其它三个 adapter 都接了),重复搜索 / 翻页 100% 走上游。
   - **page=1 并行路径**:新增 `searchPage1(keyword, opts)`,并行调 `searchInline` + `recList(pageNo=2, pageSize=100)`,merge 按 did 去重。总耗时 ≈ max(inline, rec-list) ≈ 800ms(并行不串行),结果集从 ≤4 条 → 最多 104 条,首屏一次到位
   - **page≥2 偏移**:前端 page=2 → 上游 pageNo=3 (page=1 已吃掉 SSR + pageNo=2,page=N 对应 pageNo=N+1)。前端零改动,偏移逻辑只在 service / routes 层

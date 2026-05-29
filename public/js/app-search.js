@@ -526,6 +526,30 @@ function resolveTextState(r) {
   return 'no_text';
 }
 
+/**
+ * 下载按钮是否允许点击。与 resolveTextState 解耦:
+ *   - textBadge 显示「有文本/无文本/检测中」是 UI 信号(信息),用 resolveTextState
+ *   - 下载按钮是行动入口,应该「能试就让试」 — 用本函数
+ *
+ * 放宽逻辑(对比旧 `hasText`):
+ *   - 废止 → 不能下(终态)
+ *   - 无任何源 → 不能下
+ *   - 任一源 previewAvailable=true → 能下(原 hasText 同款)
+ *   - gbw 在 sources 且还没轮询完 → 能下(optimistic,让用户试,级联会逐源尝试)
+ *   - 其它(所有源已确认无文本) → 不能下
+ *
+ * 级联下载本身按 downloadPriority 顺序逐源尝试,一源失败自动跳下一个,
+ * 全部失败才报 toast。所以"无文本但用户想试"的场景不会真坑用户。
+ */
+function isDownloadable(r) {
+  if (r.status && r.status.includes('废止')) return false;
+  const sources = r.sources || (r._source ? [r._source] : []);
+  if (!sources.length) return false;
+  if (r.previewAvailable) return true;
+  if (sources.includes('gbw') && !r._gbwTextChecked) return true;
+  return false;
+}
+
 function buildResultCardHtml(r, i) {
   const srcBadges = (r.sources || [r._source]).map(s => `<span class="source-badge source-${escapeHtml(String(s))}">${escapeHtml(srcLabel(String(s)))}</span>`).join(' ');
   const sCls = statusClass(r.status);
@@ -574,7 +598,7 @@ function buildResultCardHtml(r, i) {
         <button data-action="save" data-id="${escapeHtml(r.id)}" class="${saved ? 'saved' : ''}" title="${saved ? '取消收藏' : '收藏'}">${saved ? '已存' : '收藏'}</button>
         <button data-action="detail" data-id="${escapeHtml(r.id)}">详情</button>
         <button data-action="preview" data-id="${escapeHtml(r.id)}" title="本地预览（已下载的标准）">预览</button>
-        <button data-action="download" data-id="${escapeHtml(r.id)}" ${hasText ? '' : 'disabled'}>下载</button>
+        <button data-action="download" data-id="${escapeHtml(r.id)}" ${isDownloadable(r) ? '' : 'disabled'}>下载</button>
       </div>
     </div>`;
 }
@@ -1345,7 +1369,7 @@ document.getElementById('results').addEventListener('contextmenu', e => {
     { label: '查看详情', icon: '👁', action: () => showDetail(id) },
     { label: '预览（本地）', icon: '🗎', action: () => previewStandard(id) },
     ...(onMobile ? [] : [
-      { label: r.previewAvailable ? '下载该标准' : '下载该标准（无文本）', icon: '↓', action: () => { const btn = card.querySelector('[data-action="download"]'); if (btn && !btn.disabled) downloadOne(id, btn); else showToast('该标准无可用文本', 'fail'); } },
+      { label: isDownloadable(r) ? '下载该标准' : '下载该标准（无文本）', icon: '↓', action: () => { const btn = card.querySelector('[data-action="download"]'); if (btn && !btn.disabled) downloadOne(id, btn); else showToast('该标准无可用文本', 'fail'); } },
       { label: isStandardSaved(r) ? '取消收藏' : '加入收藏', icon: '★', action: () => toggleSavedStandard(id) },
     ]),
     { divider: true },

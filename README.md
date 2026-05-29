@@ -427,6 +427,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **fix: 标准搜索"下载"按钮 disabled 判定放宽** — 新增 `isDownloadable(r)` 与 `resolveTextState` 解耦:textBadge UI 信号(有/无/检测中)不变,下载按钮判定改放宽到「非废止 + 有源 + (任一源 previewAvailable 或 gbw 还在轮询)」就允许点击。级联模式天然逐源尝试,一源失败跳下一个。"只看可下载"筛选条保持严格口径(用户主动筛选不希望被 optimistic 污染)
 - **perf: Labr 搜索首屏一次拉 100 条 + searchCache 接入** — page=1 改并行 `searchInline + recList(pageNo=2, pageSize=100)` merge by did,首屏结果集从 ≤4 条 → 最多 104 条,耗时不变(并行)。`searchInline`/`recList` 加 5min TTL searchCache,重复搜索 / 翻页 = 0 延迟。labr 上游 pageNo 偏移由后端透明处理,前端零改动
 - **feat: 手机端搜索 / 资质 / Labr 结果卡片化 v2 + 资质徽章迁移到标准号后** — CNAS/CMA 徽章从标题行 / meta-line 搬到标准号紧后面(`.card-number-row` 新容器),标识紧跟标识。手机端 .result-card / .qual-result-group / .labr-row 统一卡片化(padding 12-14px / border-radius 12px / 明确边界色),信息层级三段清晰:标识行 → 标题 → 元数据(状态/文本/源扁平化成 · 分隔纯文本,不再彩色徽章砌墙)→ 日期 → 操作。手机端结果卡按钮收敛为「详情+预览」2 个(沿用「查阅而非管理」契约)。桌面端零影响
 - **feat: 手机端搜索类 tab landing/active 两态布局** — 标准检索 / 资质查询 / Labr 库检索三个 tab 在手机端统一改造:未搜索时搜索框上下居中偏上(`margin-top: 25vh`)+ 隐藏下方所有 UI(模板/source-tag/筛选条/h2/进度条…),聚焦氛围强;用户点搜索后切到 active 态,搜索框 `position: sticky; top: var(--topbar-h)` 吸到 topbar 下方,frosted glass + blur,结果区滚动时常驻顶部。资质 filters 二级 sticky 错位放下面 44px。`switchTab` 切回搜索 tab 时按"DOM 是否已渲出结果"自动判定 idle 还是 active + scroll reset 到顶,方便用户连续使用。桌面端完全不变(规则全部嵌在 `@media (max-width:640px) body:not(.force-desktop)`)
