@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix(theme): light/paper Phase 5 补丁 — 残余组件级深色面板** — 收尾排查后补齐 Phase 4 未覆盖的散落硬编码暗 surface,light + paper 各 9 条:
+  - **骨架屏**:`.skeleton-card` 背景 + 边框、`.skeleton-line` shimmer 中段高光色(原 `oklch(28% ...)` 在亮底上是深灰扫光)
+  - **预览头**:`.preview-head`(`oklch(17% ...)` 深条)
+  - **下载中心**:`.download-task` 任务卡背景 + 边框、`.download-center-head` / `.download-center-summary` 边线
+  - **日志面板**:`.log-export-btn` 导出按钮背景 + 边框 + 字色
+  - **移动端**:`body:not(.force-desktop) .filter-collapse` 筛选折叠条背景
+  - **用户管理表**:`.users-table th/td` 暗边线改 `var(--border-strong)` / `var(--border)`
+  - 文件:`web/src/styles/theme/glass.css` + `public/styles.css` Phase 5 段镜像,所有 oklch 配 rgba/hex fallback
 - **fix(theme): light/paper Phase 4 补丁 — 整页级深色面板(使用统计 / 本地文件库 / 资质订阅·可视化 / 下载历史)** — 用户截图反馈 Phase 2/3 后仍有整页渲染成深灰:前几轮只审了 `glass.css` / `public/styles.css` 自身,漏掉 `pages/*.css` 里的硬编码暗 surface。补这几页 light + paper 覆盖:
   - **使用统计**:`.stat-card` / `.stat-card:hover` / `.stats-chart-box`(原 `oklch(16% ...)` 4 张卡 + 趋势/分布两图)
   - **本地文件库表格**:`.local-table-wrap` / `.local-table thead th`(吸顶表头)/ `tbody td` 边线 / `tbody tr:hover td` / `.normalize-list`

@@ -1990,3 +1990,80 @@ body::before {
   background: rgba(239, 234, 223, 0.9); background: oklch(93% 0.020 75 / 0.9);
   color: var(--text);
 }
+
+/* ============================================================
+   Phase 5 — 残余深色面板补丁（骨架屏 / 预览头 / 下载任务卡 /
+   日志导出按钮 / 移动端筛选折叠条 / 用户表边框）
+   排查 "还有哪些配色不对的" 收尾：这些组件级深色面板原先无
+   light/paper override，在亮色背景上仍显深灰块。
+   ============================================================ */
+
+/* —— Light —— */
+:root[data-theme="light"] .skeleton-card {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border: 1px solid var(--border);
+}
+:root[data-theme="light"] .skeleton-line {
+  background: linear-gradient(90deg, var(--surface-h) 25%, rgba(248, 250, 252, 1) 50%, var(--surface-h) 75%);
+  background: linear-gradient(90deg, var(--surface-h) 25%, oklch(99% 0.004 245) 50%, var(--surface-h) 75%);
+}
+:root[data-theme="light"] .preview-head {
+  background: rgba(238, 242, 247, 0.6); background: oklch(96% 0.012 245 / 0.6);
+}
+:root[data-theme="light"] .download-task {
+  background: rgba(255, 255, 255, 0.7); background: oklch(100% 0 0 / 0.7);
+  border: 1px solid var(--border);
+}
+:root[data-theme="light"] .download-center-head,
+:root[data-theme="light"] .download-center-summary {
+  border-color: var(--border);
+}
+:root[data-theme="light"] .log-export-btn {
+  background: rgba(238, 242, 247, 0.7); background: oklch(96% 0.012 245 / 0.7);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="light"] body:not(.force-desktop) .filter-collapse {
+  background: rgba(238, 242, 247, 0.7); background: oklch(96% 0.012 245 / 0.7);
+}
+:root[data-theme="light"] .users-table th {
+  border-bottom: 1px solid var(--border-strong);
+}
+:root[data-theme="light"] .users-table td {
+  border-bottom: 1px solid var(--border);
+}
+
+/* —— Paper —— */
+:root[data-theme="paper"] .skeleton-card {
+  background: rgba(251, 250, 245, 0.85); background: oklch(98% 0.010 80 / 0.85);
+  border: 1px solid var(--border);
+}
+:root[data-theme="paper"] .skeleton-line {
+  background: linear-gradient(90deg, var(--surface-h) 25%, rgba(244, 240, 231, 1) 50%, var(--surface-h) 75%);
+  background: linear-gradient(90deg, var(--surface-h) 25%, oklch(97% 0.012 75) 50%, var(--surface-h) 75%);
+}
+:root[data-theme="paper"] .preview-head {
+  background: rgba(239, 234, 223, 0.6); background: oklch(93% 0.020 75 / 0.6);
+}
+:root[data-theme="paper"] .download-task {
+  background: rgba(251, 250, 245, 0.7); background: oklch(98% 0.010 80 / 0.7);
+  border: 1px solid var(--border);
+}
+:root[data-theme="paper"] .download-center-head,
+:root[data-theme="paper"] .download-center-summary {
+  border-color: var(--border);
+}
+:root[data-theme="paper"] .log-export-btn {
+  background: rgba(239, 234, 223, 0.7); background: oklch(93% 0.020 75 / 0.7);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="paper"] body:not(.force-desktop) .filter-collapse {
+  background: rgba(239, 234, 223, 0.7); background: oklch(93% 0.020 75 / 0.7);
+}
+:root[data-theme="paper"] .users-table th {
+  border-bottom: 1px solid var(--border-strong);
+}
+:root[data-theme="paper"] .users-table td {
+  border-bottom: 1px solid var(--border);
+}
