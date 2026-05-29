@@ -2,33 +2,37 @@
 //
 // 与 app-core.js 的 switchTab() 解耦：本文件只负责
 // (1) 检测视口宽度，给 <body> 加 layout-mobile / force-desktop class
-// (2) ?desktop=1 / localStorage 强制桌面布局逃生口
+// (2) ?desktop=1 URL 逃生口(给开发者 / 远程调试用,不暴露 UI 按钮)
 // (3) 底部 mobile-tabbar 点击 -> 现有 switchTab()
 // (4) 订阅 'tabchange' 事件，同步 tabbar 的 active 高亮
-// (5) toggleDesktopLayout() 给 me 页"切换到完整版"按钮用
-// (6) window.isMobile() 暴露给 legacy 脚本（app-search.js 等）做 guard
+// (5) window.isMobile() 暴露给 legacy 脚本（app-search.js 等）做 guard
+//
+// 注:之前在 "我"页有 toggleDesktopLayout 按钮("切换到完整版"/"回到手机版"),
+// 切到桌面布局后用户在桌面 sidebar 找不到回手机版的入口 → 切不回去 → 用户
+// 反馈"纯纯多余"。已删除按钮 + 切换函数,只保留 ?desktop=1 URL 参数逃生口。
 //
 // CSS 侧：所有 ≤640px 规则用 body:not(.force-desktop) 包裹，保证桌面端
-// 强制（URL or localStorage）能完全绕过手机收敛。
+// 强制（URL）能完全绕过手机收敛。
 
 (function() {
   'use strict';
 
   var MOBILE_BP = 640;
-  var STORAGE_KEY = 'bzxz.layout';
+
+  // 清理历史残留:旧版本曾允许用户在"我"页 toggle 切换布局,把选择存在 localStorage
+  // 'bzxz.layout'。该功能已删除(切到 desktop 后切不回的设计 bug)。残留值不主动清就
+  // 会让升级用户继续被卡在桌面布局,这里启动时统一删除。
+  try { localStorage.removeItem('bzxz.layout'); } catch (e) { /* ignore */ }
 
   function readForcedMode() {
-    // URL 优先于 localStorage：?desktop=1 强制桌面，?desktop=0 强制手机
+    // 只读 URL ?desktop=1 / ?desktop=0(开发者/远程调试逃生口)。
+    // 之前还读 localStorage,配合 "我" 页按钮切换 → 已删除(切到 desktop 后切不回的设计 bug)
     try {
       var params = new URLSearchParams(window.location.search);
       var v = params.get('desktop');
       if (v === '1') return 'desktop';
       if (v === '0') return 'mobile';
     } catch (e) { /* ignore */ }
-    try {
-      var stored = localStorage.getItem(STORAGE_KEY);
-      if (stored === 'desktop' || stored === 'mobile') return stored;
-    } catch (e) { /* localStorage 可能被禁用 */ }
     return null;
   }
 
@@ -63,7 +67,6 @@
     body.classList.toggle('force-desktop', forced === 'desktop' && viewportIsMobile());
 
     updateMobileTabbarVisibility(mode);
-    updateMeToggleLabel(forced, mode);
   }
 
   // 切换 mobile-tabbar 的可见性。
@@ -77,30 +80,6 @@
     } else {
       bar.style.display = '';
     }
-  }
-
-  function updateMeToggleLabel(forced, mode) {
-    var label = document.getElementById('meToggleLayoutLabel');
-    if (!label) return;
-    // 当前若是桌面强制 -> 提示"回到手机版"；当前若是手机模式 -> 提示"切换到完整版"
-    if (forced === 'desktop' || (mode === 'desktop' && viewportIsMobile())) {
-      label.textContent = '回到手机版';
-    } else {
-      label.textContent = '切换到完整版';
-    }
-  }
-
-  // 暴露给"我"页按钮 + 桌面 sidebar 上的"完整版"开关（如有）
-  function toggleDesktopLayout() {
-    var current = readForcedMode();
-    var next;
-    if (current === 'desktop') next = null;       // 解除强制 -> 自适应
-    else next = 'desktop';                         // 强制桌面
-    try {
-      if (next === null) localStorage.removeItem(STORAGE_KEY);
-      else localStorage.setItem(STORAGE_KEY, next);
-    } catch (e) { /* ignore */ }
-    applyLayoutMode();
   }
 
   // legacy 脚本 guard 入口：if (window.isMobile()) return;
@@ -148,7 +127,6 @@
 
   // 暴露 API（legacy 全局风格，避免引入模块系统）
   window.isMobile = isMobile;
-  window.toggleDesktopLayout = toggleDesktopLayout;
   window.getLayoutMode = getLayoutMode;
   window.applyLayoutMode = applyLayoutMode;
 

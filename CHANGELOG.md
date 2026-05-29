@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix(mobile): 移除"切换到完整版"按钮** — 用户反馈"切换完整界面后切不回去,纯纯多余"。诊断:`public/index.html:474` "我"页有 `toggleDesktopLayout` 按钮在 mobile/desktop 之间切,选择存 localStorage `bzxz.layout`。问题:切到 desktop 后,桌面布局没有等价的"回到手机版"入口("我"页本身只在手机布局存在),用户被卡在桌面端再也切不回。整功能下线:
+  - `public/index.html:473-475` 删整段 me-section(只放着这一个按钮)
+  - `public/js/app-mobile.js` 删 `toggleDesktopLayout` / `updateMeToggleLabel`,简化 `readForcedMode` 不再读 localStorage
+  - 启动时主动 `localStorage.removeItem('bzxz.layout')` 清残留,让升级用户从被卡的桌面布局自动回手机
+  - 保留 `?desktop=1` URL 逃生口(给开发者/远程调试,不暴露 UI)
 - **polish(mobile): 搜索框两行布局 + 结果卡按钮统一 accent 蓝** — 用户反馈手机端"输入字脏 + 光标在外"和"按钮变丑(从原来的差异化变成 2 个灰块)"。
   - **搜索框两行布局**:第一行 `[input    ][🔍 搜索]`,input flex 1 1 0,padding 横向 14px(左)/4px(右)让字 + 光标离边明显;searchBtn 强制 order:2 紧贴 input 右,accent 蓝 40px 高,内置 `🔍` 图标 + `搜索` 文字。第二行 `source-tags` order:3 wrap 占满,保留 BZ/BW/BY 勾选能力
   - **search-templates(GB/T / GB / YY/T chip)手机端全藏** — 用户全靠手输,模板 chip 窄屏意义不大
