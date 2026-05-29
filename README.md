@@ -427,6 +427,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **fix: 用户管理"功能权限"勾选 labr / local 保存后不生效** — 后端 zod enum 只列 7 个 tab(漏 labr/local),前端 TAB_ITEMS 列 9 个;勾 labr/local 触发 zod 400,前端 `apiFetch` 不校验 res.ok → 静默吞 → UI 假装成功。修:后端三处 zod enum + ALL_TABS 常量补齐 9 个;前端 `saveUserPerms` / `saveDefaultPerms` 加 `if (!res.ok)` toast
 - **feat: 双主题(dark/light)切换** — 默认 dark,新增 light 明亮主题。`<html data-theme="dark|light">` 驱动,`localStorage 'bzxz.theme'` 持久化。入口:桌面 topbar `🌙 / ☀️` 按钮 / 手机「我」页 `🎨 主题` chip 行,所有用户可用(主题是个人偏好,与角色无关)。`<head>` 顶部内联 script 提前应用避免 FOUC。base.css + theme/glass.css 加 `:root[data-theme="light"]` 全套覆写(变量 + html 渐变 + body::before 网格 + topbar/sidebar/玻璃面板/search-row/result-card 等 hardcode 色值)
 - **polish(mobile): 三个搜索框 (标准/资质/Labr) 视觉统一** — 资质 / Labr 外套 `.search-row` 玻璃容器壳 + `.qual-search-row` / `.labr-search-row` 局部覆写,与标准检索完全统一。资质页新加 `🔍 搜索` 按钮(之前只能 Enter)。三 tab 切换体感一致
 - **feat(mobile): 管理员底部 tabbar 加 Labr + 「设置」收紧为 admin-only** — 手机端 admin 看到 4 tab (`标准 / 资质 / Labr / 我`),非 admin 仍是 3 tab;「我」页「设置」对游客 + 普通用户隐,只对 admin 可见。`onAuthReady` 按 `currentUser.role === 'admin'` toggle 显示

@@ -548,11 +548,22 @@ async function saveDefaultPerms() {
   var checks = document.querySelectorAll('#defaultPermCheckboxes [data-defperm]');
   var tabs = [];
   checks.forEach(function(cb) { if (cb.checked) tabs.push(cb.dataset.defperm); });
-  await apiFetch('/api/admin/settings', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ defaultAllowedTabs: tabs }),
-  });
+  try {
+    var res = await apiFetch('/api/admin/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ defaultAllowedTabs: tabs }),
+    });
+    if (!res.ok) {
+      var errBody = await res.json().catch(function() { return null; });
+      var msg = (errBody && (errBody.message || errBody.error)) || ('HTTP ' + res.status);
+      showToast('保存失败: ' + msg, 'fail', 5000);
+      return;
+    }
+  } catch (e) {
+    showToast('保存失败: ' + ((e && e.message) || '网络错误'), 'fail', 5000);
+    return;
+  }
   document.getElementById('modalOverlay').classList.remove('open');
   showToast('默认权限已保存');
 }
@@ -695,11 +706,26 @@ async function saveUserPerms(userId) {
   var checks = document.querySelectorAll('#permCheckboxes [data-perm-tab]');
   var tabs = [];
   checks.forEach(function(cb) { if (cb.checked) tabs.push(cb.dataset.permTab); });
-  await apiFetch('/api/admin/users/' + userId, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ allowedTabs: tabs }),
-  });
+  try {
+    var res = await apiFetch('/api/admin/users/' + userId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ allowedTabs: tabs }),
+    });
+    // 之前没校验 res.ok,后端 zod 校验失败(400)会被静默吞,用户报"保存了没生效"
+    if (!res.ok) {
+      var errBody = await res.json().catch(function() { return null; });
+      var msg = (errBody && (errBody.message || errBody.error)) || ('HTTP ' + res.status);
+      if (typeof showToast === 'function') showToast('保存失败: ' + msg, 'fail', 5000);
+      else alert('保存失败: ' + msg);
+      return;
+    }
+  } catch (e) {
+    var msg2 = (e && e.message) || '网络错误';
+    if (typeof showToast === 'function') showToast('保存失败: ' + msg2, 'fail', 5000);
+    else alert('保存失败: ' + msg2);
+    return;
+  }
   document.getElementById('modalOverlay').classList.remove('open');
   loadUsers();
 }

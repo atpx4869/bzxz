@@ -3,6 +3,15 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix: 用户管理"功能权限"勾选 labr / local 保存后不生效** — 用户反馈勾选权限保存后再打开还是未勾选状态。诊断:后端 `admin-routes.ts` zod `allowedTabs` enum 只列 7 个 tab (`search/batch/complete/history/qual/stats/settings`),漏了 `labr` 和 `local`。前端 `TAB_ITEMS` 已经列了 9 个(含 labr/local)。链:
+  - 用户勾选 labr → 前端发 PUT `/api/admin/users/:id` body 含 'labr'
+  - 后端 zod 校验失败抛 400
+  - 前端 `saveUserPerms` 用 `await apiFetch(...)` 不检查 res.ok → 400 被静默吞
+  - UI 看起来"保存成功"(modal 关掉 + loadUsers),实际 DB 没更新
+  - 再打开权限对话框,从 DB 读还是旧值 → 全恢复"未勾选"假象
+  - 修法:
+    - **后端**(根本修):`admin-routes.ts` 三处 zod enum (PUT settings.defaultAllowedTabs / POST users.allowedTabs / PUT users.allowedTabs) + 常量 `ALL_TABS` 都补齐 9 个 tab,跟前端 TAB_ITEMS 对齐
+    - **前端**(防御):`saveUserPerms` + `saveDefaultPerms` 都加 `if (!res.ok)` 校验,失败时弹 toast 显示后端错误信息,不再静默"假成功"
 - **feat: 双主题(dark/light)切换 + 个人偏好持久化** — 用户原需求"再新增一套明亮色主题,用户可以在设置里面切换"。设计:
   - 双主题:**dark(默认)** / **light**;由 `<html data-theme="dark|light">` 驱动,CSS 用 `:root[data-theme="light"]` 覆写变量 + hardcode 色值
   - 持久化:`localStorage 'bzxz.theme'`,跨会话保留
