@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat: 手机端搜索类 tab landing/active 两态布局** — 用户反馈"搜索框默认应该上下居中偏上、左右居中,聚焦感强;输入关键词搜索后再滑动到顶端置顶,方便连续使用"。三个搜索类 tab(标准检索 / 资质查询 / Labr 库检索)统一改造:
+  - **landing 态**(`.page.search-stage-idle`):搜索框 `margin-top: 25vh`,左右默认满宽 + 弱化下方所有 UI(results 容器 / 模板 chip / source-tags / 筛选条 / 进度条 / summary / qual filters / labr pager / h2 标题 / labr 说明文案)全藏。手机首次进入 / 切到 tab 时若无结果即为此态
+  - **active 态**(`.page.search-stage-active`):搜索框 `position: sticky; top: var(--topbar-h)`,frosted glass + blur(14px) backdrop,跨出 .content 内边距吸全宽,结果区滚动时它常驻顶部。资质 filters 二级 sticky 错位放在搜索框下面 44px(`top: calc(var(--topbar-h) + 44px)`)。标题 h2 / 资质 tab 栏 / labr 说明在 active 态都隐掉(topbar 已有 tab 名做上下文,腾出视口给结果)
+  - **触发时机严谨**:不是 input 事件触发,而是用户点搜索 / Enter 触发 `setSearchStage('search'|'qual'|'labr', 'active')`。删字符 / 焦点变化不会抽动布局
+  - **tab 切换时智能初始化**:`switchTab` 末尾对 search/qual/labr 调 `initSearchStageForTab`,按 DOM 里是否已渲出 .result-card / .qual-result-group / .labr-row 自动判定 idle vs active。从其它 tab 切回有结果的搜索 tab 直接保留 active 状态
+  - **scroll reset**:切到搜索 tab 时 `window.scrollTo(0)`,符合"用户使用时各端页面置顶,方便连续使用"诉求
+  - **桌面端不参与**:全部 CSS 嵌在 `@media (max-width:640px) body:not(.force-desktop)`,桌面 layout 完全不变
+  - 实现:新增 `web/src/styles/pages/search-stage.css` + 镜像段加在 `public/styles.css:1303` 后,所有 oklch 都带 sRGB fallback;`public/js/app-core.js` 加 `setSearchStage` / `initSearchStageForTab` helpers + switchTab 末尾接入;`app-search.js` `doSearch` / `app-qual.js` `doQualSearch` / `app-labr.js` `doLabrSearch` 入口处各加一行 stage 切换调用;`web/src/styles/index.css` `@import` 新 CSS
 - **fix: 防 0KB / 损坏 PDF 入库（三层下载完整性校验）** — 用户报告 gbw 偶发下到 0 字节 PDF,排查发现上游验证码通过后 `viewGb` 偶有 race(cookie 时序 / CDN 304 转 200 空 body),adapter 拿到 HTTP 200 + content-type=pdf 但 body 为空时直接 `writeFile` 入库 → 库里多出无法打开的 0KB 文件。三层防御:
   - **Layer 1（各 adapter `writeFile` 前 buffer 校验，最早最便宜）**:新增 `src/shared/download-integrity.ts` 暴露 `MIN_PDF_BYTES=1024` + `assertDownloadedPdf(bytes, label)`（size + `%PDF-` magic 双检）+ `assertNonEmptyDownload(bytes, label)`（仅 size，labr 可能是 doc/docx）。接入点:`gbw-adapter.ts:tryDownloadFinalFile`(原地抛 UpstreamError 被本函数 try/catch 降级 status=failed,让 `autoDownloadInner` 的 3 次 OCR 循环天然走下一轮重试 → 用户感知 = 成功率提升)、`by-adapter.ts:downloadPdf`(被本函数 catch → return false → 现有"下载失败"路径)、`labr-service.ts:downloadInner`(抛错让 batch flow 标该 did 失败、其他继续)、`bz-zhenggui-adapter.ts:exportStandardInner`(合成后 fs.stat size 兜底,pdf-lib magic 必然正确不查 magic)
   - **Layer 2（`addFileToLibrary` 入库前 `fs.stat` srcPath 兜底，漏改 adapter 也拦得住）**:`library-index.ts:570` 入函数早期 stat + unlink 残文 + 抛 `[download-integrity]` 前缀错;错误被 `moveDownloadToLibrary` 现有 try/catch 吃掉 → API 响应 `library_failed` + `libraryError` 冒到前端

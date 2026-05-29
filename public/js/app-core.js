@@ -196,6 +196,19 @@ function switchTab(tab) {
   if (tab === 'batch') updateBatchSourceHint();
   // page-qual now only hosts 搜索 + 可视化, no eager load needed.
 
+  // ── 搜索类 tab 初始化 stage（手机端 landing/active 两态切换）──
+  // 切到 search/qual/labr 时根据当前结果集决定 stage：
+  //   有结果 → active（保留之前 sticky 吸顶布局）
+  //   无结果 → idle（搜索框居中聚焦）
+  // 切到其它 tab 时不动 stage class（用户回来时仍是离开时的态）。
+  if (tab === 'search' || tab === 'qual' || tab === 'labr') {
+    try { initSearchStageForTab(tab); } catch (e) { /* helper not yet defined → 忽略 */ }
+    // scroll 重置：让"连续使用"时每次切回 tab 都从顶端开始
+    if (window.scrollTo) {
+      try { window.scrollTo({ top: 0, behavior: 'auto' }); } catch (e) { /* ignore */ }
+    }
+  }
+
   // ── URL 路由：写回 ?tab=… 同时保留 ?desktop=1 等其他参数 ──
   try {
     var params = new URLSearchParams(window.location.search);
@@ -251,3 +264,48 @@ function activatePanel(name) {
 }
 
 function updatePanelZIndices() { /* no-op in tab layout */ }
+
+// ── Search stage helpers ──
+// 手机端三个搜索类 tab（search/qual/labr）的"居中聚焦 ↔ sticky 置顶"两态切换。
+// CSS 在 web/src/styles/pages/search-stage.css + public/styles.css 镜像段。
+//
+// 设计:
+//  - 触发时机不是输入框 input 事件,而是"用户主动调用搜索 / 搜索结果有内容"
+//    这样删字符 / 焦点变化不会抽动布局
+//  - 桌面端 / force-desktop 不参与（CSS @media + body:not(.force-desktop) 守住）
+//
+// 用法：
+//   setSearchStage('search', 'active')   主动切 active
+//   initSearchStageForTab('search')      切 tab 时按当前数据自动判定
+//
+// 全局暴露,供 app-search/app-qual/app-labr 调用
+function setSearchStage(tab, stage) {
+  var page = document.getElementById('page-' + tab);
+  if (!page) return;
+  page.classList.remove('search-stage-idle', 'search-stage-active');
+  page.classList.add('search-stage-' + stage);
+}
+
+function initSearchStageForTab(tab) {
+  // 按"DOM 里是否已渲出结果"判定初始 stage,不读 JS 全局变量(let 作用域共享,但 window
+  // 上不一定挂得到。DOM 是最稳的信号源,且渲染已经完成时 DOM 也一定 ready)。
+  //
+  //   search:  #results 容器有 .result-card 子节点
+  //   qual:    #qualResults 有 .qual-result-group / .qual-unified-list 子节点
+  //   labr:    #labrResults 有 .labr-result-item 子节点（labr 结果卡的 class）
+  var hasResults = false;
+  if (tab === 'search') {
+    var rs = document.getElementById('results');
+    hasResults = !!(rs && rs.querySelector('.result-card'));
+  } else if (tab === 'qual') {
+    var qr = document.getElementById('qualResults');
+    hasResults = !!(qr && qr.querySelector('.qual-result-group, .qual-unified-list'));
+  } else if (tab === 'labr') {
+    var lr = document.getElementById('labrResults');
+    hasResults = !!(lr && lr.querySelector('.labr-row'));
+  }
+  setSearchStage(tab, hasResults ? 'active' : 'idle');
+}
+
+window.setSearchStage = setSearchStage;
+window.initSearchStageForTab = initSearchStageForTab;

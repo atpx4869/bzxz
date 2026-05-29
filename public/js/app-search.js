@@ -117,6 +117,8 @@ async function doSearch() {
   if (_gbwTextPollTimer) { clearTimeout(_gbwTextPollTimer); _gbwTextPollTimer = null; _gbwTextPollAbort = true; }
   const q = document.getElementById('searchInput').value.trim();
   if (!q) return;
+  // 手机端 landing → active：搜索框 sticky 吸顶，结果区出现
+  if (typeof setSearchStage === 'function') setSearchStage('search', 'active');
   document.getElementById('searchBtn').innerHTML = '<span class="spinner"></span>取消';
   document.getElementById('searchBtn').disabled = false;
   results = []; selectedIds.clear(); updateToolbar(); searchAborted = false; qualData = {};

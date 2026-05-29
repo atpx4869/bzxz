@@ -1,0 +1,97 @@
+/* Search stage (mobile only) —— landing 居中 / active 置顶
+ *
+ * 目标：
+ *   - 未搜索时（landing），搜索框上下居中偏上(距视口顶部 25vh)、左右居中，氛围聚焦
+ *   - 用户搜索后（active），搜索框 sticky 吸顶（距 topbar 下方），结果区滚动；
+ *     连续操作时搜索框始终可见
+ *
+ * 受控 class（由 app-core.js setSearchStage 设置）：
+ *   .page.search-stage-idle    landing 态
+ *   .page.search-stage-active  results 态（默认）
+ *
+ * 不受影响：桌面端 + force-desktop。规则全部嵌在 @media (max-width:640px)
+ * body:not(.force-desktop) 下。
+ *
+ * 与 responsive.css 的关系：本文件只管"页面级布局节奏"（居中 vs 置顶）；
+ * responsive.css 的 .search-row / .qual-filters 等组件级微调照旧生效。
+ *
+ * sticky 实现说明：
+ *   .content 没有 overflow:auto/scroll，window 是滚动容器，sticky 参考 viewport
+ *   顶部。topbar 是 fixed h=52px，所以 sticky top 用 var(--topbar-h) 防贴到 topbar 下面。
+ */
+
+@media (max-width: 640px) {
+  /* ============= LANDING 态 ============= */
+  body:not(.force-desktop) #page-search.search-stage-idle .search-area,
+  body:not(.force-desktop) #page-qual.search-stage-idle #qualSearchTab,
+  body:not(.force-desktop) #page-labr.search-stage-idle > div:not(.qual-tab-bar) {
+    margin-top: 25vh;
+    transition: margin 0.28s var(--ease-out);
+  }
+
+  /* landing 隐 results / 模板 / 源 chip / 筛选条 / 资质过滤 chip / labr 分页器 */
+  body:not(.force-desktop) #page-search.search-stage-idle #results,
+  body:not(.force-desktop) #page-search.search-stage-idle .search-templates,
+  body:not(.force-desktop) #page-search.search-stage-idle .source-tags,
+  body:not(.force-desktop) #page-search.search-stage-idle .filter-bar,
+  body:not(.force-desktop) #page-search.search-stage-idle #sourceProgressStrip,
+  body:not(.force-desktop) #page-search.search-stage-idle #summary,
+  body:not(.force-desktop) #page-qual.search-stage-idle #qualResults,
+  body:not(.force-desktop) #page-qual.search-stage-idle .qual-filters,
+  body:not(.force-desktop) #page-labr.search-stage-idle #labrResults,
+  body:not(.force-desktop) #page-labr.search-stage-idle #labrPager { display: none; }
+
+  /* landing 态下 page 内 h2/p（说明文案）也藏：landing 重点是"输入框"，标题/说明
+     在 topbar 已有 tab 名做了上下文 */
+  body:not(.force-desktop) #page-qual.search-stage-idle > h2,
+  body:not(.force-desktop) #page-labr.search-stage-idle > h2,
+  body:not(.force-desktop) #page-labr.search-stage-idle > p { display: none; }
+
+  /* ============= ACTIVE 态（results） ============= */
+  /* 搜索框 sticky 吸顶。三个 tab 各自的"搜索行"作为吸顶节点：
+     - 标准检索：.search-area 整段（含 .search-row 复合组件）
+     - 资质查询：#qualSearchTab 内的 input + filters（一并吸顶，方便切换 CNAS/CMA）
+     - Labr：搜索行 div + input + 按钮 */
+  body:not(.force-desktop) #page-search.search-stage-active .search-area,
+  body:not(.force-desktop) #page-qual.search-stage-active #qualSearchInput,
+  body:not(.force-desktop) #page-qual.search-stage-active .qual-filters,
+  body:not(.force-desktop) #page-labr.search-stage-active > div:not(.qual-tab-bar) > div:first-child {
+    position: sticky;
+    top: var(--topbar-h);
+    z-index: 50;
+    /* 跨出 .content 14px 内边距，让 sticky bar 视觉撑满全宽（带 blur 后吃边） */
+    margin-left: -14px;
+    margin-right: -14px;
+    padding: 8px 14px;
+    background: rgba(13, 18, 26, 0.92);
+    background: oklch(18% 0.018 260 / 0.92);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid oklch(100% 0 0 / 0.06);
+  }
+
+  /* 资质 / labr 的二级吸顶元素（filters / pager）紧贴搜索框下方，
+     共用同样 z-index 但 top 不需要再下移（前一个 sticky 把视口往下推后，
+     第二个 sticky 自然顶到下面），简化逻辑：都用同一个 top + 同一图层 */
+  body:not(.force-desktop) #page-qual.search-stage-active .qual-filters {
+    top: calc(var(--topbar-h) + 44px); /* 输入框约 44px 高，错位避免遮挡 */
+    margin-top: 0;
+    border-top: none;
+  }
+
+  /* active 态：标题 / 说明文案全隐，topbar 已经有 tab 名做上下文 */
+  body:not(.force-desktop) #page-qual.search-stage-active > h2,
+  body:not(.force-desktop) #page-qual.search-stage-active .qual-tab-bar,
+  body:not(.force-desktop) #page-labr.search-stage-active > h2,
+  body:not(.force-desktop) #page-labr.search-stage-active > p { display: none; }
+
+  /* active 态下 #qualSearchTab 的 height: calc(100vh - var(--topbar-h) - 140px)
+     和 labr 容器的同款 inline style 会让 results 区高度过短（标题藏了之后多出来
+     的空间应该让给结果）。这里强制铺满：JS 改不了 inline style 时靠 !important */
+  body:not(.force-desktop) #page-qual.search-stage-active #qualSearchTab,
+  body:not(.force-desktop) #page-labr.search-stage-active > div:not(.qual-tab-bar) {
+    height: auto !important;
+    min-height: calc(100vh - var(--topbar-h) - 56px); /* 56px 是底部 mobile-tabbar 高度 */
+  }
+}

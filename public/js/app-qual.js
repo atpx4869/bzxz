@@ -167,6 +167,8 @@ function setQualFilter(btn, source) {
 async function doQualSearch() {
   const q = document.getElementById('qualSearchInput').value.trim();
   if (!q) { document.getElementById('qualResults').innerHTML = '<div class="qual-empty">输入关键词搜索资质信息</div>'; return; }
+  // 手机端 landing → active：搜索框 sticky 吸顶
+  if (typeof setSearchStage === 'function') setSearchStage('qual', 'active');
   document.getElementById('qualResults').innerHTML = '<span class="spinner"></span>';
   try {
     const url = `/api/qualifications/search?q=${encodeURIComponent(q)}${qualSearchSource ? '&source=' + qualSearchSource : ''}`;

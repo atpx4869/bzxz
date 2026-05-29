@@ -31,6 +31,8 @@ async function doLabrSearch(page) {
     document.getElementById('labrPager').innerHTML = '';
     return;
   }
+  // 手机端 landing → active：搜索框 sticky 吸顶
+  if (typeof setSearchStage === 'function') setSearchStage('labr', 'active');
   // 翻页时 keyword 不变；新搜索时重置 selected 集合
   if (kw !== labrState.keyword) {
     labrState.selected = new Set();

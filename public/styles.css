@@ -1300,6 +1300,62 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
   body:not(.force-desktop) [data-filter-toggle="saved"] { display: none; }
   body:not(.force-desktop) #meRowHistory,
   body:not(.force-desktop) .sidebar-item[data-tab="history"] { display: none; }
+
+  /* ─── Search stage (landing 居中 / active 置顶) ───
+     镜像 web/src/styles/pages/search-stage.css。受控 class:
+       .page.search-stage-idle   居中聚焦态
+       .page.search-stage-active 搜索结果态(sticky 吸顶) */
+  body:not(.force-desktop) #page-search.search-stage-idle .search-area,
+  body:not(.force-desktop) #page-qual.search-stage-idle #qualSearchTab,
+  body:not(.force-desktop) #page-labr.search-stage-idle > div:not(.qual-tab-bar) {
+    margin-top: 25vh;
+    transition: margin 0.28s var(--ease-out);
+  }
+  body:not(.force-desktop) #page-search.search-stage-idle #results,
+  body:not(.force-desktop) #page-search.search-stage-idle .search-templates,
+  body:not(.force-desktop) #page-search.search-stage-idle .source-tags,
+  body:not(.force-desktop) #page-search.search-stage-idle .filter-bar,
+  body:not(.force-desktop) #page-search.search-stage-idle #sourceProgressStrip,
+  body:not(.force-desktop) #page-search.search-stage-idle #summary,
+  body:not(.force-desktop) #page-qual.search-stage-idle #qualResults,
+  body:not(.force-desktop) #page-qual.search-stage-idle .qual-filters,
+  body:not(.force-desktop) #page-labr.search-stage-idle #labrResults,
+  body:not(.force-desktop) #page-labr.search-stage-idle #labrPager { display: none; }
+  body:not(.force-desktop) #page-qual.search-stage-idle > h2,
+  body:not(.force-desktop) #page-labr.search-stage-idle > h2,
+  body:not(.force-desktop) #page-labr.search-stage-idle > p { display: none; }
+
+  body:not(.force-desktop) #page-search.search-stage-active .search-area,
+  body:not(.force-desktop) #page-qual.search-stage-active #qualSearchInput,
+  body:not(.force-desktop) #page-qual.search-stage-active .qual-filters,
+  body:not(.force-desktop) #page-labr.search-stage-active > div:not(.qual-tab-bar) > div:first-child {
+    position: sticky;
+    top: var(--topbar-h);
+    z-index: 50;
+    margin-left: -14px;
+    margin-right: -14px;
+    padding: 8px 14px;
+    background: rgba(13, 18, 26, 0.92);
+    background: oklch(18% 0.018 260 / 0.92);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid oklch(100% 0 0 / 0.06);
+  }
+  body:not(.force-desktop) #page-qual.search-stage-active .qual-filters {
+    top: calc(var(--topbar-h) + 44px);
+    margin-top: 0;
+    border-top: none;
+  }
+  body:not(.force-desktop) #page-qual.search-stage-active > h2,
+  body:not(.force-desktop) #page-qual.search-stage-active .qual-tab-bar,
+  body:not(.force-desktop) #page-labr.search-stage-active > h2,
+  body:not(.force-desktop) #page-labr.search-stage-active > p { display: none; }
+  body:not(.force-desktop) #page-qual.search-stage-active #qualSearchTab,
+  body:not(.force-desktop) #page-labr.search-stage-active > div:not(.qual-tab-bar) {
+    height: auto !important;
+    min-height: calc(100vh - var(--topbar-h) - 56px);
+  }
 }
 
 /* 桌面/手机通用：mobile-tabbar 默认隐藏，只有上面的 @media 块在手机模式下打开。
