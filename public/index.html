@@ -2,6 +2,9 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<!-- 主题预设(避免 FOUC):必须放在所有 CSS 加载之前,这样浏览器一开始就按目标主题渲染。
+     app-theme.js 全套 helper 见 /js/app-theme.js。 -->
+<script>(function(){try{var t=localStorage.getItem('bzxz.theme');document.documentElement.setAttribute('data-theme',(t==='light'||t==='dark')?t:'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>标准盒子 · StandardsBox</title>
 <link rel="icon" type="image/png" sizes="256x256" href="/favicon-256.png">
@@ -30,6 +33,7 @@
   <div class="topbar-actions">
     <button class="topbar-btn download-center-toggle" id="downloadCenterToggle" onclick="toggleDownloadCenter()" title="下载中心">下载 <span id="downloadCenterBadge">0</span></button>
     <button class="topbar-btn" onclick="switchTab('stats')" title="使用统计">📊</button>
+    <button class="topbar-btn" id="topbarThemeToggle" onclick="bzxzTheme.toggle()" title="切换到浅色">☀️</button>
     <button class="topbar-btn" onclick="toggleUserDropdown()" id="sidebarUserToggle" title="用户">👤</button>
   </div>
 </header>
@@ -476,6 +480,17 @@
       <button class="me-row" type="button" id="meRowUsers" onclick="switchTab('users')" style="display:none"><span class="me-row-icon">👥</span><span class="me-row-label">用户管理</span><span class="me-row-arrow">›</span></button>
       <button class="me-row" type="button" id="meRowHistory" onclick="switchTab('history')"><span class="me-row-icon">📜</span><span class="me-row-label">下载历史</span><span class="me-row-arrow">›</span></button>
     </div>
+    <!-- 主题切换:所有用户可见(个人偏好,与角色无关) -->
+    <div class="me-section">
+      <div class="me-theme-row">
+        <span class="me-row-icon">🎨</span>
+        <span class="me-row-label">主题</span>
+        <div class="me-theme-options">
+          <button class="me-theme-btn" data-theme="dark" onclick="bzxzTheme.set('dark')">🌙 深色</button>
+          <button class="me-theme-btn" data-theme="light" onclick="bzxzTheme.set('light')">☀️ 浅色</button>
+        </div>
+      </div>
+    </div>
     <div class="me-footer">
       <span id="meVersion">标准盒子</span>
     </div>
@@ -636,6 +651,7 @@
 <script src="/js/app-qual.js"></script>
 <script src="/js/app-labr.js"></script>
 <script src="/js/app-mobile.js"></script>
+<script src="/js/app-theme.js"></script>
 
 </body>
 </html>

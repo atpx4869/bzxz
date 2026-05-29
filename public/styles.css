@@ -45,6 +45,48 @@
   --topbar-h: 52px;
 }
 
+/* Light theme(<html data-theme="light"> 触发)。镜像 web/src/styles/base.css */
+:root[data-theme="light"] {
+  --bg:        #f5f7fa;
+  --bg:        oklch(98% 0.005 255);
+  --surface:   #ffffff;
+  --surface:   oklch(100% 0 0);
+  --surface-h: #f0f3f7;
+  --surface-h: oklch(96% 0.008 255);
+  --border:    #dde2ea;
+  --border:    oklch(88% 0.008 255);
+  --text:      #1a1d24;
+  --text:      oklch(18% 0.01 255);
+  --text-2:    #585c66;
+  --text-2:    oklch(40% 0.012 255);
+  --text-3:    #8a8e98;
+  --text-3:    oklch(60% 0.012 255);
+  --accent:    #2563eb;
+  --accent:    oklch(56% 0.22 250);
+  --accent-h:  #1d4ed8;
+  --accent-h:  oklch(52% 0.22 250);
+  --accent-g:  #6b8cb5;
+  --accent-g:  oklch(60% 0.10 250);
+  --success:   #0e8a5f;
+  --success:   oklch(58% 0.16 158);
+  --danger:    #c33b2c;
+  --danger:    oklch(54% 0.20 25);
+  --warning:   #b07d12;
+  --warning:   oklch(58% 0.14 85);
+  --glass-bg:     rgba(255, 255, 255, 0.78);
+  --glass-bg:     oklch(100% 0 0 / 0.78);
+  --glass-border: rgba(220, 226, 234, 0.6);
+  --glass-border: oklch(88% 0.008 255 / 0.6);
+}
+:root[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #c2c8d2;
+  background: oklch(82% 0.012 255);
+}
+:root[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: #a8aeb8;
+  background: oklch(74% 0.012 255);
+}
+
 html { background: var(--bg); color: var(--text); font: 400 15px/1.65 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 body { min-height: 100vh; overflow-x: hidden; }
 
@@ -1612,6 +1654,33 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
 .me-row-arrow { color: var(--text-3); font-size: 18px; }
 .me-footer { text-align: center; font-size: 11px; color: var(--text-3); padding: 8px 0; }
 
+/* 主题切换行 — 「我」页 chip 风,所有用户可见 */
+.me-theme-row { display: flex; align-items: center; gap: 12px; padding: 14px; }
+.me-theme-row .me-row-label { flex: 0 0 auto; font-size: 14px; font-weight: 500; color: var(--text); }
+.me-theme-options { margin-left: auto; display: flex; gap: 6px; }
+.me-theme-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
+}
+.me-theme-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.me-theme-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* 顶栏主题切换按钮(桌面端) — 复用 .topbar-btn 基础样式,这里只调字号 */
+#topbarThemeToggle { font-size: 17px; }
+
 /* ─────────────────────────────────────────────────────────────────────
    Theme cohesion — bring main UI in line with the dark glass-morphism
    login screen. These overrides intentionally come last so they win
@@ -1769,6 +1838,125 @@ body::before {
   box-shadow: 0 0 12px rgba(98, 157, 255, 0.6); box-shadow: 0 0 12px oklch(70% 0.22 260 / 0.6);
 }
 .sidebar-item { position: relative; }
+
+/* ─── Light theme overrides。镜像 web/src/styles/theme/glass.css。
+   覆盖所有 hardcode 深色玻璃形象规则 ─── */
+:root[data-theme="light"] html {
+  background:
+    radial-gradient(80% 60% at 12% -8%, rgba(99, 132, 220, 0.10) 0%, transparent 60%),
+    radial-gradient(70% 55% at 105% 110%, rgba(176, 142, 220, 0.10) 0%, transparent 60%),
+    radial-gradient(60% 55% at 50% 110%, rgba(120, 180, 200, 0.08) 0%, transparent 60%),
+    var(--bg); background:
+    radial-gradient(80% 60% at 12% -8%, oklch(60% 0.16 270 / 0.10) 0%, transparent 60%),
+    radial-gradient(70% 55% at 105% 110%, oklch(64% 0.14 320 / 0.10) 0%, transparent 60%),
+    radial-gradient(60% 55% at 50% 110%, oklch(70% 0.10 200 / 0.08) 0%, transparent 60%),
+    var(--bg);
+}
+:root[data-theme="light"] body::before {
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.025) 1px, transparent 1px); background-image:
+    linear-gradient(oklch(0% 0 0 / 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(0% 0 0 / 0.025) 1px, transparent 1px);
+}
+:root[data-theme="light"] .topbar {
+  background: rgba(255, 255, 255, 0.75); background: oklch(100% 0 0 / 0.75);
+  border-bottom-color: rgba(0, 0, 0, 0.06); border-bottom-color: oklch(0% 0 0 / 0.06);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03) inset; box-shadow: 0 1px 0 oklch(0% 0 0 / 0.03) inset;
+}
+:root[data-theme="light"] .topbar-logo {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.10)); filter: drop-shadow(0 2px 4px oklch(0% 0 0 / 0.10));
+}
+:root[data-theme="light"] .topbar-btn:hover {
+  background: rgba(0, 0, 0, 0.06); background: oklch(0% 0 0 / 0.06);
+}
+:root[data-theme="light"] .sidebar {
+  background: rgba(255, 255, 255, 0.72); background: oklch(100% 0 0 / 0.72);
+  border-right-color: rgba(0, 0, 0, 0.06); border-right-color: oklch(0% 0 0 / 0.06);
+}
+:root[data-theme="light"] .sidebar-item:hover {
+  background: rgba(0, 0, 0, 0.05); background: oklch(0% 0 0 / 0.05);
+  color: var(--text);
+}
+:root[data-theme="light"] .sidebar-item.active {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.10), rgba(124, 75, 235, 0.10));
+  background: linear-gradient(135deg, oklch(56% 0.22 250 / 0.10), oklch(54% 0.22 290 / 0.10));
+  color: #1d4ed8; color: oklch(50% 0.22 255);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.18) inset,
+              0 4px 12px -8px rgba(37, 99, 235, 0.30); box-shadow: 0 0 0 1px oklch(56% 0.22 250 / 0.18) inset,
+              0 4px 12px -8px oklch(56% 0.22 250 / 0.30);
+}
+:root[data-theme="light"] .sidebar-item.active .sidebar-desc {
+  color: #2563eb; color: oklch(56% 0.22 250);
+}
+:root[data-theme="light"] .sidebar-user {
+  border-top-color: rgba(0, 0, 0, 0.06); border-top-color: oklch(0% 0 0 / 0.06);
+}
+:root[data-theme="light"] .sidebar-user-avatar {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.22), rgba(124, 75, 235, 0.22));
+  background: linear-gradient(135deg, oklch(56% 0.22 250 / 0.22), oklch(54% 0.22 290 / 0.22));
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06) inset;
+  box-shadow: 0 0 0 1px oklch(0% 0 0 / 0.06) inset;
+}
+:root[data-theme="light"] .confirm-card,
+:root[data-theme="light"] .download-center,
+:root[data-theme="light"] .auth-card-fallback,
+:root[data-theme="light"] .user-dropdown,
+:root[data-theme="light"] .shortcuts-panel {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: rgba(0, 0, 0, 0.08); border-color: oklch(0% 0 0 / 0.08);
+}
+:root[data-theme="light"] .search-row {
+  background: rgba(255, 255, 255, 0.70); background: oklch(100% 0 0 / 0.70);
+  border-color: rgba(0, 0, 0, 0.10); border-color: oklch(0% 0 0 / 0.10);
+}
+:root[data-theme="light"] .search-row:focus-within {
+  border-color: rgba(37, 99, 235, 0.7); border-color: oklch(56% 0.22 250 / 0.7);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.10),
+              0 8px 32px -8px rgba(37, 99, 235, 0.25); box-shadow: 0 0 0 4px oklch(56% 0.22 250 / 0.10),
+              0 8px 32px -8px oklch(56% 0.22 250 / 0.25);
+}
+:root[data-theme="light"] .result-card {
+  background: rgba(255, 255, 255, 0.70); background: oklch(100% 0 0 / 0.70);
+  border-color: rgba(0, 0, 0, 0.08); border-color: oklch(0% 0 0 / 0.08);
+}
+:root[data-theme="light"] .result-card:hover {
+  background: rgba(255, 255, 255, 0.92); background: oklch(100% 0 0 / 0.92);
+  border-color: rgba(0, 0, 0, 0.14); border-color: oklch(0% 0 0 / 0.14);
+}
+:root[data-theme="light"] .toolbar {
+  background: rgba(255, 255, 255, 0.65); background: oklch(100% 0 0 / 0.65);
+  border-color: rgba(0, 0, 0, 0.08); border-color: oklch(0% 0 0 / 0.08);
+}
+:root[data-theme="light"] .mobile-tabbar {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-top-color: rgba(0, 0, 0, 0.06); border-top-color: oklch(0% 0 0 / 0.06);
+}
+@media (max-width: 640px) {
+  :root[data-theme="light"] body:not(.force-desktop) .result-card,
+  :root[data-theme="light"] body:not(.force-desktop) .qual-result-group,
+  :root[data-theme="light"] body:not(.force-desktop) .labr-row {
+    background: rgba(255, 255, 255, 0.82); background: oklch(100% 0 0 / 0.82);
+    border-color: rgba(0, 0, 0, 0.08); border-color: oklch(0% 0 0 / 0.08);
+  }
+  :root[data-theme="light"] body:not(.force-desktop) #page-search.search-stage-active .search-area,
+  :root[data-theme="light"] body:not(.force-desktop) #page-qual.search-stage-active .qual-search-row,
+  :root[data-theme="light"] body:not(.force-desktop) #page-qual.search-stage-active .qual-filters,
+  :root[data-theme="light"] body:not(.force-desktop) #page-labr.search-stage-active .labr-search-row {
+    background: rgba(255, 255, 255, 0.90); background: oklch(100% 0 0 / 0.90);
+    border-bottom-color: rgba(0, 0, 0, 0.08); border-bottom-color: oklch(0% 0 0 / 0.08);
+  }
+}
+:root[data-theme="light"] .qual-badge-cnas {
+  background: rgba(37, 99, 235, 0.10); background: oklch(56% 0.22 250 / 0.10);
+  color: #1d4ed8; color: oklch(48% 0.22 250);
+  border-color: rgba(37, 99, 235, 0.30); border-color: oklch(56% 0.22 250 / 0.30);
+}
+:root[data-theme="light"] .qual-badge-cma {
+  background: rgba(15, 138, 95, 0.10); background: oklch(58% 0.16 158 / 0.10);
+  color: #0e8a5f; color: oklch(45% 0.16 158);
+  border-color: rgba(15, 138, 95, 0.30); border-color: oklch(58% 0.16 158 / 0.30);
+}
 
 
 /* ===== Announcement modal ===== */

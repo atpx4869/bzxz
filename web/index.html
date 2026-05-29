@@ -2,6 +2,8 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<!-- 主题预设(避免 FOUC):必须放在所有 CSS 加载之前 -->
+<script>(function(){try{var t=localStorage.getItem('bzxz.theme');document.documentElement.setAttribute('data-theme',(t==='light'||t==='dark')?t:'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>标准盒子 · StandardsBox</title>
 <link rel="icon" type="image/png" sizes="256x256" href="/favicon-256.png">
@@ -22,6 +24,7 @@
   <div class="topbar-actions">
     <button class="topbar-btn download-center-toggle" id="downloadCenterToggle" onclick="toggleDownloadCenter()" title="下载中心">下载 <span id="downloadCenterBadge">0</span></button>
     <button class="topbar-btn" onclick="switchTab('stats')" title="使用统计">📊</button>
+    <button class="topbar-btn" id="topbarThemeToggle" onclick="bzxzTheme.toggle()" title="切换到浅色">☀️</button>
     <button class="topbar-btn" onclick="toggleUserDropdown()" id="sidebarUserToggle" title="用户">👤</button>
   </div>
 </header>
@@ -583,6 +586,7 @@
 <script src="/legacy/app-announcements.js"></script>
 <script src="/legacy/app-qual.js"></script>
 <script src="/legacy/app-labr.js"></script>
+<script src="/legacy/app-theme.js"></script>
 
 </body>
 </html>

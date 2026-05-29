@@ -163,3 +163,130 @@ body::before {
   box-shadow: 0 0 12px rgba(98, 157, 255, 0.6); box-shadow: 0 0 12px oklch(70% 0.22 260 / 0.6);
 }
 .sidebar-item { position: relative; }
+
+/* ─────────────────────────────────────────────────────────────────────
+   Light theme overrides。
+   覆盖所有上方 hardcode 深色的玻璃形象规则。变量已经在 base.css 切换,
+   下面只处理无变量驱动的 hardcode 色值(html bg / body::before grid /
+   topbar/sidebar 等 frosted 容器的具体 rgba/oklch)。
+   ───────────────────────────────────────────────────────────────────── */
+:root[data-theme="light"] html {
+  background:
+    radial-gradient(80% 60% at 12% -8%, rgba(99, 132, 220, 0.10) 0%, transparent 60%),
+    radial-gradient(70% 55% at 105% 110%, rgba(176, 142, 220, 0.10) 0%, transparent 60%),
+    radial-gradient(60% 55% at 50% 110%, rgba(120, 180, 200, 0.08) 0%, transparent 60%),
+    var(--bg); background:
+    radial-gradient(80% 60% at 12% -8%, oklch(60% 0.16 270 / 0.10) 0%, transparent 60%),
+    radial-gradient(70% 55% at 105% 110%, oklch(64% 0.14 320 / 0.10) 0%, transparent 60%),
+    radial-gradient(60% 55% at 50% 110%, oklch(70% 0.10 200 / 0.08) 0%, transparent 60%),
+    var(--bg);
+}
+:root[data-theme="light"] body::before {
+  /* 暗色网格在亮底上才看得到,从 rgba(255,255,255,0.018) 翻成 rgba(0,0,0,0.025) */
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.025) 1px, transparent 1px); background-image:
+    linear-gradient(oklch(0% 0 0 / 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(0% 0 0 / 0.025) 1px, transparent 1px);
+}
+:root[data-theme="light"] .topbar {
+  background: rgba(255, 255, 255, 0.75); background: oklch(100% 0 0 / 0.75);
+  border-bottom-color: rgba(0, 0, 0, 0.06); border-bottom-color: oklch(0% 0 0 / 0.06);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03) inset; box-shadow: 0 1px 0 oklch(0% 0 0 / 0.03) inset;
+}
+:root[data-theme="light"] .topbar-logo {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.10)); filter: drop-shadow(0 2px 4px oklch(0% 0 0 / 0.10));
+}
+:root[data-theme="light"] .topbar-btn:hover {
+  background: rgba(0, 0, 0, 0.06); background: oklch(0% 0 0 / 0.06);
+}
+:root[data-theme="light"] .sidebar {
+  background: rgba(255, 255, 255, 0.72); background: oklch(100% 0 0 / 0.72);
+  border-right-color: rgba(0, 0, 0, 0.06); border-right-color: oklch(0% 0 0 / 0.06);
+}
+:root[data-theme="light"] .sidebar-item:hover {
+  background: rgba(0, 0, 0, 0.05); background: oklch(0% 0 0 / 0.05);
+  color: var(--text);
+}
+:root[data-theme="light"] .sidebar-item.active {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.10), rgba(124, 75, 235, 0.10));
+  background: linear-gradient(135deg, oklch(56% 0.22 250 / 0.10), oklch(54% 0.22 290 / 0.10));
+  color: #1d4ed8; color: oklch(50% 0.22 255);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.18) inset,
+              0 4px 12px -8px rgba(37, 99, 235, 0.30); box-shadow: 0 0 0 1px oklch(56% 0.22 250 / 0.18) inset,
+              0 4px 12px -8px oklch(56% 0.22 250 / 0.30);
+}
+:root[data-theme="light"] .sidebar-item.active .sidebar-desc {
+  color: #2563eb; color: oklch(56% 0.22 250);
+}
+:root[data-theme="light"] .sidebar-user {
+  border-top-color: rgba(0, 0, 0, 0.06); border-top-color: oklch(0% 0 0 / 0.06);
+}
+:root[data-theme="light"] .sidebar-user-avatar {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.22), rgba(124, 75, 235, 0.22));
+  background: linear-gradient(135deg, oklch(56% 0.22 250 / 0.22), oklch(54% 0.22 290 / 0.22));
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06) inset;
+  box-shadow: 0 0 0 1px oklch(0% 0 0 / 0.06) inset;
+}
+:root[data-theme="light"] .confirm-card,
+:root[data-theme="light"] .download-center,
+:root[data-theme="light"] .auth-card-fallback,
+:root[data-theme="light"] .user-dropdown,
+:root[data-theme="light"] .shortcuts-panel {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-color: rgba(0, 0, 0, 0.08); border-color: oklch(0% 0 0 / 0.08);
+}
+:root[data-theme="light"] .search-row {
+  background: rgba(255, 255, 255, 0.70); background: oklch(100% 0 0 / 0.70);
+  border-color: rgba(0, 0, 0, 0.10); border-color: oklch(0% 0 0 / 0.10);
+}
+:root[data-theme="light"] .search-row:focus-within {
+  border-color: rgba(37, 99, 235, 0.7); border-color: oklch(56% 0.22 250 / 0.7);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.10),
+              0 8px 32px -8px rgba(37, 99, 235, 0.25); box-shadow: 0 0 0 4px oklch(56% 0.22 250 / 0.10),
+              0 8px 32px -8px oklch(56% 0.22 250 / 0.25);
+}
+:root[data-theme="light"] .result-card {
+  background: rgba(255, 255, 255, 0.70); background: oklch(100% 0 0 / 0.70);
+  border-color: rgba(0, 0, 0, 0.08); border-color: oklch(0% 0 0 / 0.08);
+}
+:root[data-theme="light"] .result-card:hover {
+  background: rgba(255, 255, 255, 0.92); background: oklch(100% 0 0 / 0.92);
+  border-color: rgba(0, 0, 0, 0.14); border-color: oklch(0% 0 0 / 0.14);
+}
+:root[data-theme="light"] .toolbar {
+  background: rgba(255, 255, 255, 0.65); background: oklch(100% 0 0 / 0.65);
+  border-color: rgba(0, 0, 0, 0.08); border-color: oklch(0% 0 0 / 0.08);
+}
+/* mobile-tabbar 在 light 也要切配色 */
+:root[data-theme="light"] .mobile-tabbar {
+  background: rgba(255, 255, 255, 0.85); background: oklch(100% 0 0 / 0.85);
+  border-top-color: rgba(0, 0, 0, 0.06); border-top-color: oklch(0% 0 0 / 0.06);
+}
+/* 手机端搜索结果卡 / 资质组 / labr-row 也需要 light 化(它们用了 hardcode 深色) */
+@media (max-width: 640px) {
+  :root[data-theme="light"] body:not(.force-desktop) .result-card,
+  :root[data-theme="light"] body:not(.force-desktop) .qual-result-group,
+  :root[data-theme="light"] body:not(.force-desktop) .labr-row {
+    background: rgba(255, 255, 255, 0.82); background: oklch(100% 0 0 / 0.82);
+    border-color: rgba(0, 0, 0, 0.08); border-color: oklch(0% 0 0 / 0.08);
+  }
+  :root[data-theme="light"] body:not(.force-desktop) #page-search.search-stage-active .search-area,
+  :root[data-theme="light"] body:not(.force-desktop) #page-qual.search-stage-active .qual-search-row,
+  :root[data-theme="light"] body:not(.force-desktop) #page-qual.search-stage-active .qual-filters,
+  :root[data-theme="light"] body:not(.force-desktop) #page-labr.search-stage-active .labr-search-row {
+    background: rgba(255, 255, 255, 0.90); background: oklch(100% 0 0 / 0.90);
+    border-bottom-color: rgba(0, 0, 0, 0.08); border-bottom-color: oklch(0% 0 0 / 0.08);
+  }
+}
+/* 资质徽章 light 配色 — 原暗紫底色在亮底上看不见,翻成淡蓝/淡绿 chip */
+:root[data-theme="light"] .qual-badge-cnas {
+  background: rgba(37, 99, 235, 0.10); background: oklch(56% 0.22 250 / 0.10);
+  color: #1d4ed8; color: oklch(48% 0.22 250);
+  border-color: rgba(37, 99, 235, 0.30); border-color: oklch(56% 0.22 250 / 0.30);
+}
+:root[data-theme="light"] .qual-badge-cma {
+  background: rgba(15, 138, 95, 0.10); background: oklch(58% 0.16 158 / 0.10);
+  color: #0e8a5f; color: oklch(45% 0.16 158);
+  border-color: rgba(15, 138, 95, 0.30); border-color: oklch(58% 0.16 158 / 0.30);
+}

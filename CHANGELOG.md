@@ -3,6 +3,20 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat: 双主题(dark/light)切换 + 个人偏好持久化** — 用户原需求"再新增一套明亮色主题,用户可以在设置里面切换"。设计:
+  - 双主题:**dark(默认)** / **light**;由 `<html data-theme="dark|light">` 驱动,CSS 用 `:root[data-theme="light"]` 覆写变量 + hardcode 色值
+  - 持久化:`localStorage 'bzxz.theme'`,跨会话保留
+  - **避免 FOUC**:public/index.html + web/index.html `<head>` 顶部加内联 script,在 CSS 加载前先把 data-theme 设上,浏览器一开始就按目标主题渲染
+  - 入口(主题是个人偏好,与角色无关,所有用户可用,不放设置页):
+    - **桌面 topbar**:`🌙 / ☀️` 切换按钮,放在统计 + 用户头像之间,点击 toggle
+    - **手机「我」页**:`🎨 主题 [🌙 深色] [☀️ 浅色]` chip 行,所有登录用户可见
+  - 实施:
+    - 新 `public/js/app-theme.js`:`bzxzTheme.get/set/toggle`,启动调 `syncThemeUI()` 让两套 UI 同步当前态;切换时 dispatch `themechange` CustomEvent 给下游订阅
+    - `base.css` + `public/styles.css` 镜像加 `:root[data-theme="light"]` 变量覆写段(双声明 sRGB + oklch fallback,Win7 Chrome ≤109 兼容)
+    - `theme/glass.css` + `public/styles.css` glass 段加 light 覆写:html 渐变 / body::before 网格 / topbar / sidebar / 玻璃面板 / search-row / result-card / toolbar / sidebar-item.active / mobile-tabbar / 手机卡片化容器 / 资质徽章 全套
+    - HTML:topbar 加 `<button id="topbarThemeToggle">`,「我」页加 `.me-theme-row` 含两个 `.me-theme-btn[data-theme]`
+    - CSS 新增 `.me-theme-row` / `.me-theme-btn` / `#topbarThemeToggle` 样式(active 态 accent 蓝底白字)
+  - 不动:announcement / admin 已用亮色调色板(CLAUDE.md 强制保留具体色值),不受 data-theme 影响。chart.js 颜色暂不动(用户能看到就行,后续可加 themechange 订阅做重绘)
 - **polish(mobile): 结果卡按钮改 chip 风(靠右贴边)** — 用户反馈手机端结果卡两个按钮(详情+预览)"框体太高了,宽度又太窄了,所有信息全挤左边"。诊断:flex 1 1 0 拉伸 + 44px 高 + accent 蓝大色块,视觉压迫感强,左侧文字信息 vs 右下两大色块对比悬殊。改 chip 风:
   - `display: flex; justify-content: flex-end` 靠右
   - `flex: 0 0 auto; min-width: 64px; min-height: 36px; padding: 0 16px`(从拉伸改 auto 宽 + 文字 padding)

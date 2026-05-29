@@ -52,6 +52,55 @@
   --topbar-h: 52px;
 }
 
+/* ─── Light theme 覆写 ──────────────────────────────────────────────
+   通过 <html data-theme="light"> 触发(由 app-theme.js 维护,FOUC 由 index.html
+   <head> 内联 script 提前应用)。
+   保持 oklch + sRGB 双声明,Win7 Chrome ≤109 也兼容。
+   除变量外还需在 theme/glass.css 覆写 html 渐变 / body::before 网格 / topbar /
+   sidebar / 玻璃面板等 hardcode 深色。 */
+:root[data-theme="light"] {
+  --bg:        #f5f7fa;
+  --bg:        oklch(98% 0.005 255);
+  --surface:   #ffffff;
+  --surface:   oklch(100% 0 0);
+  --surface-h: #f0f3f7;
+  --surface-h: oklch(96% 0.008 255);
+  --border:    #dde2ea;
+  --border:    oklch(88% 0.008 255);
+  --text:      #1a1d24;
+  --text:      oklch(18% 0.01 255);
+  --text-2:    #585c66;
+  --text-2:    oklch(40% 0.012 255);
+  --text-3:    #8a8e98;
+  --text-3:    oklch(60% 0.012 255);
+  --accent:    #2563eb;
+  --accent:    oklch(56% 0.22 250);
+  --accent-h:  #1d4ed8;
+  --accent-h:  oklch(52% 0.22 250);
+  --accent-g:  #6b8cb5;
+  --accent-g:  oklch(60% 0.10 250);
+  --success:   #0e8a5f;
+  --success:   oklch(58% 0.16 158);
+  --danger:    #c33b2c;
+  --danger:    oklch(54% 0.20 25);
+  --warning:   #b07d12;
+  --warning:   oklch(58% 0.14 85);
+  --glass-bg:     rgba(255, 255, 255, 0.78);
+  --glass-bg:     oklch(100% 0 0 / 0.78);
+  --glass-border: rgba(220, 226, 234, 0.6);
+  --glass-border: oklch(88% 0.008 255 / 0.6);
+}
+
+/* Light theme 滚动条:从深色 thumb 换成浅色 */
+:root[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #c2c8d2;
+  background: oklch(82% 0.012 255);
+}
+:root[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: #a8aeb8;
+  background: oklch(74% 0.012 255);
+}
+
 html {
   background: var(--bg);
   color: var(--text);
