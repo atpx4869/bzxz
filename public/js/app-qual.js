@@ -335,8 +335,8 @@ function buildQualUnifiedList(items, opts) {
       + arrowHtml
       + sourceChip
       + '<span class="qual-std-code">' + escapeHtml(grp.stdCode || '') + '</span>'
-      + '<span class="qual-std-name">' + escapeHtml(cleanName) + '</span>'
       + scopeChip
+      + '<span class="qual-std-name">' + escapeHtml(cleanName) + '</span>'
       + '<span style="margin-left:auto;font-size:11px;color:var(--text-3)">' + grp.items.length + ' 项</span>'
       + '</div>'
       + limitRowHtml
