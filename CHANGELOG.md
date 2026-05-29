@@ -3,6 +3,13 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix: 防 0KB / 损坏 PDF 入库（三层下载完整性校验）** — 用户报告 gbw 偶发下到 0 字节 PDF,排查发现上游验证码通过后 `viewGb` 偶有 race(cookie 时序 / CDN 304 转 200 空 body),adapter 拿到 HTTP 200 + content-type=pdf 但 body 为空时直接 `writeFile` 入库 → 库里多出无法打开的 0KB 文件。三层防御:
+  - **Layer 1（各 adapter `writeFile` 前 buffer 校验，最早最便宜）**:新增 `src/shared/download-integrity.ts` 暴露 `MIN_PDF_BYTES=1024` + `assertDownloadedPdf(bytes, label)`（size + `%PDF-` magic 双检）+ `assertNonEmptyDownload(bytes, label)`（仅 size，labr 可能是 doc/docx）。接入点:`gbw-adapter.ts:tryDownloadFinalFile`(原地抛 UpstreamError 被本函数 try/catch 降级 status=failed,让 `autoDownloadInner` 的 3 次 OCR 循环天然走下一轮重试 → 用户感知 = 成功率提升)、`by-adapter.ts:downloadPdf`(被本函数 catch → return false → 现有"下载失败"路径)、`labr-service.ts:downloadInner`(抛错让 batch flow 标该 did 失败、其他继续)、`bz-zhenggui-adapter.ts:exportStandardInner`(合成后 fs.stat size 兜底,pdf-lib magic 必然正确不查 magic)
+  - **Layer 2（`addFileToLibrary` 入库前 `fs.stat` srcPath 兜底，漏改 adapter 也拦得住）**:`library-index.ts:570` 入函数早期 stat + unlink 残文 + 抛 `[download-integrity]` 前缀错;错误被 `moveDownloadToLibrary` 现有 try/catch 吃掉 → API 响应 `library_failed` + `libraryError` 冒到前端
+  - **Layer 3（`moveDownloadToLibrary` 入口检查 `result.fileSize`，省一次 IO）**:adapter 已知 fileSize 时直接 early-return error,不进入库
+  - 阈值 1024B 的依据:拦 0KB / 几十字节错误页 HTML 残骸;不误伤极小标准(gbw/by 单页 PDF 起步 5KB+,有效空 PDF 也得 700B+,1024 留余量)。万一误伤下调到 512 一行 const 改完
+  - 单测:`src/shared/download-integrity.test.ts` 覆盖 0/100B/1024B + magic 正确/1024B HTML / 大尺寸 / labr 宽校验 共 8 case
+  - 静态核查所有 `arrayBuffer()` → `writeFile` 落盘点已全覆盖;bz 单页 JPEG `bytes.length < 5000 + JPEG magic` 本就有自校验,无需重复
 - **fix: tooltip detach 后样式失效(独立 floating class)** — 用户反馈强刷后 tooltip 还是大字 + 重叠看不清,跟前一版 polish 完全没生效。根因:JS portal `setupQualTooltipPortal` 把 tooltip 节点 detach 出 `.qual-badge` 后,CSS 后代选择器 `.qual-badge .qual-tooltip` 不再命中 → 字号 10px / 半透背景 / 毛玻璃 / box-shadow / padding / 宽度 / line-height 等全部失效,只剩 JS 设的 inline style(position/top/left/opacity 等几个),tooltip 视觉回退到 browser default(大字、无背景、占屏宽)。
   - 改 `public/styles.css` + `web/src/styles/pages/qualifications.css`:新增 `.qual-tooltip.qual-tooltip-floating` 独立选择器,复制一份样式(背景 + 毛玻璃 + 字号 10px + padding + 宽度 + shadow + line-height 等),只有 position/opacity 由 JS 管
   - 改 `public/js/app-qual.js` `setupQualTooltipPortal`:`showTip` detach 后立即 `tip.classList.add('qual-tooltip-floating')`;`hideTip` 复位前 `tip.classList.remove('qual-tooltip-floating')`

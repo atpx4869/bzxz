@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { stat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 
 import type {
@@ -10,6 +11,7 @@ import type {
   StandardSummary,
 } from '../../domain/standard';
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
+import { MIN_PDF_BYTES } from '../../shared/download-integrity';
 import { buildFileName, getExportsDir } from '../../shared/fs';
 import { parseStandardId } from '../../shared/id';
 import { pooledFetch } from '../../shared/http';
@@ -170,6 +172,15 @@ export class BzZhengguiAdapter implements SourceAdapter {
       outputPath: filePath,
       onProgress,
     });
+
+    // 合成后 size 兜底：pdf-lib worker 极罕见情况下 save 出 0/截断文件，再走入库
+    // 就把空 pdf 永久塞库。magic 必然正确（pdf-lib 控制），只查 size 即可。
+    const fileStat = await stat(filePath);
+    if (fileStat.size < MIN_PDF_BYTES) {
+      throw new UpstreamError(
+        `[download-integrity] bz mergeJpegsToPdf 输出 ${fileStat.size}B < ${MIN_PDF_BYTES}B 阈值，疑似合成失败 (${filePath})`,
+      );
+    }
 
     return {
       standardId: id,

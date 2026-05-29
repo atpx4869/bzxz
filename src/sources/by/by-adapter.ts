@@ -10,6 +10,7 @@ import type {
   StandardSummary,
 } from '../../domain/standard';
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
+import { assertDownloadedPdf } from '../../shared/download-integrity';
 import { buildFileName, getExportsDir } from '../../shared/fs';
 import { createStandardId, parseStandardId } from '../../shared/id';
 import { searchCache } from '../../shared/cache';
@@ -401,6 +402,9 @@ export class ByAdapter implements SourceAdapter {
       }
 
       const bytes = Buffer.from(await resp.arrayBuffer());
+      // 防 0KB / 错误页：buffer 校验失败抛 UpstreamError，被本函数 catch → return false，
+      // 走 by 现有"下载失败重试或换源"路径
+      assertDownloadedPdf(bytes, `by url=${url}`);
       await writeFile(filePath, bytes);
       return true;
     } catch (err) {

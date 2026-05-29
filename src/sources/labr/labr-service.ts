@@ -36,6 +36,7 @@ import { getDb, getSetting, setSetting } from '../../services/db';
 import { addFileToLibrary } from '../../services/library-index';
 import { getSourceSemaphore } from '../../shared/source-semaphore';
 import { BadRequestError, UpstreamError } from '../../shared/errors';
+import { assertNonEmptyDownload } from '../../shared/download-integrity';
 import { cleanStdCode } from '../../shared/std-code';
 import {
   LabrAuthError,
@@ -256,6 +257,10 @@ export class LabrService {
     } else {
       buf = await this.fetchKind1(db, did, ctx);
     }
+
+    // 防 0KB / 错误页：labr ext 可能是 pdf/doc/docx，只查 size 不查 PDF magic。
+    // 抛 UpstreamError 让上层 batch flow 标该 did 为失败，其他 did 继续。
+    assertNonEmptyDownload(buf, `labr did=${did} kind=${kind} ext=${ext}`);
 
     // 临时落盘，再 addFileToLibrary 走统一入库流（rename 而非 copy）
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'labr-'));

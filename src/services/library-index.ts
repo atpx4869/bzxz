@@ -17,6 +17,7 @@ import type Database from 'better-sqlite3';
 import { extractBaseCode } from './qualification-service';
 import { resolveLibraryDir, isInsideLibrary } from '../shared/library-paths';
 import { renderLibraryFilenameWithExt } from './library-naming';
+import { MIN_PDF_BYTES } from '../shared/download-integrity';
 import { getSetting } from './db';
 import type { SourceName } from '../domain/standard';
 
@@ -571,6 +572,23 @@ export async function addFileToLibrary(
   db: Database.Database,
   params: AddFileParams,
 ): Promise<AddFileResult> {
+  // Layer 2 完整性兜底：srcPath 0KB / 几十字节错误页直接拒绝入库 + 删残文。
+  // 抛错被 moveDownloadToLibrary 的 try/catch 吃掉 → API 响应 library_failed +
+  // libraryError 冒到前端。详见 src/shared/download-integrity.ts
+  try {
+    const preStat = await fs.stat(params.srcPath);
+    if (preStat.size < MIN_PDF_BYTES) {
+      await fs.unlink(params.srcPath).catch(() => { /* 删不掉就算了，反正不入库 */ });
+      throw new Error(
+        `[download-integrity] 拒绝入库 source=${params.source} stdCode=${params.stdCode}: ` +
+        `${preStat.size}B < ${MIN_PDF_BYTES}B 阈值，疑似损坏 (${params.srcPath})`,
+      );
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith('[download-integrity]')) throw e;
+    // ENOENT 等：srcPath 不存在直接交给 moveIntoLibrary 报更明确的错
+  }
+
   const status = await resolveLibraryDir(db);
   if (!status.writable) {
     throw new Error('标准库目录不可写，跳过入库');

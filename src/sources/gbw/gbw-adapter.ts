@@ -11,6 +11,7 @@ import type {
   StandardSummary,
 } from '../../domain/standard';
 import { BadRequestError, NotFoundError, UpstreamError } from '../../shared/errors';
+import { assertDownloadedPdf } from '../../shared/download-integrity';
 import { buildFileName, getExportsDir } from '../../shared/fs';
 import { createStandardId, parseStandardId } from '../../shared/id';
 import { pooledFetch } from '../../shared/http';
@@ -419,22 +420,36 @@ export class GbwAdapter implements SourceAdapter {
     };
 
     if (verificationPassed) {
-      const fileProbe = await this.tryDownloadFinalFile(session, viewUrl);
-      if (fileProbe.kind === 'file') {
-        nextStatus = 'downloaded';
+      try {
+        const fileProbe = await this.tryDownloadFinalFile(session, viewUrl);
+        if (fileProbe.kind === 'file') {
+          nextStatus = 'downloaded';
+          nextMeta = {
+            ...nextMeta,
+            filePath: fileProbe.filePath,
+            fileName: fileProbe.fileName,
+            contentType: fileProbe.contentType,
+            fileSize: fileProbe.fileSize,
+          };
+        } else {
+          nextMeta = {
+            ...nextMeta,
+            contentType: fileProbe.contentType,
+            htmlPreview: fileProbe.htmlPreview,
+            note: 'Captcha verification succeeded, but final response was not a direct file stream.',
+          };
+        }
+      } catch (err) {
+        // download-integrity 抛 UpstreamError（0KB / 非 PDF magic）→ 降级 failed，
+        // 让 autoDownloadInner 的 for 循环走下一轮重试（验证码已用、得重拿）。
+        // 不 rethrow：抛出去会直接终止 OCR 重试循环，跟单次 OCR 错语义混淆。
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`[gbw] tryDownloadFinalFile failed sessionId=${sessionId}: ${msg}`);
+        nextStatus = 'failed';
         nextMeta = {
           ...nextMeta,
-          filePath: fileProbe.filePath,
-          fileName: fileProbe.fileName,
-          contentType: fileProbe.contentType,
-          fileSize: fileProbe.fileSize,
-        };
-      } else {
-        nextMeta = {
-          ...nextMeta,
-          contentType: fileProbe.contentType,
-          htmlPreview: fileProbe.htmlPreview,
-          note: 'Captcha verification succeeded, but final response was not a direct file stream.',
+          note: 'Captcha verified but final file invalid (size/magic check failed).',
+          downloadIntegrityError: msg,
         };
       }
     }
@@ -607,6 +622,9 @@ export class GbwAdapter implements SourceAdapter {
     }
 
     const bytes = Buffer.from(await response.arrayBuffer());
+    // 防 0KB / 错误页：buffer 校验失败抛 UpstreamError，被 autoDownloadInner 的 OCR
+    // 重试循环 catch + 走下一轮 —— 不用动重试代码就拿到自动重试
+    assertDownloadedPdf(bytes, `gbw hcno=${session.hcno}`);
     const detail = await this.getStandardDetail(session.standardId);
     const fileName = buildFileName(detail.standardNumber, detail.title, guessExtension(contentType));
     const filePath = path.join(getExportsDir(), fileName);

@@ -12,10 +12,12 @@
 //
 // 抽出到独立 service 是因为 preview-routes（自动下载预览流）也要复用。
 
+import { promises as fs } from 'node:fs';
 import type Database from 'better-sqlite3';
 import type { SourceRegistry } from './source-registry';
 import type { SourceName } from '../domain/standard';
 import { addFileToLibrary } from './library-index';
+import { MIN_PDF_BYTES } from '../shared/download-integrity';
 
 export interface MoveDownloadResult {
   fileId?: number;
@@ -35,6 +37,17 @@ export async function moveDownloadToLibrary(
   result: { filePath?: string; fileName?: string; fileSize?: number },
 ): Promise<MoveDownloadResult> {
   if (!result.filePath) return {};
+
+  // Layer 3 早拦截：adapter 已给出 fileSize 且明显损坏 → 不走入库，省一次 stat IO。
+  // Layer 1 应该已经在 adapter 抛错拦截了，这里是漏改 adapter 时的兜底。
+  if (result.fileSize !== undefined && result.fileSize < MIN_PDF_BYTES) {
+    await fs.unlink(result.filePath).catch(() => { /* 删不掉就算了 */ });
+    const msg = `[download-integrity] 拒绝入库 source=${source} standardId=${standardId}: ` +
+      `${result.fileSize}B < ${MIN_PDF_BYTES}B 阈值，疑似损坏`;
+    console.error(msg);
+    return { error: msg };
+  }
+
   try {
     let stdCode = '';
     let title = '';
