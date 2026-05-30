@@ -247,7 +247,25 @@ Phase F 与移动选择器同改；本页 Phase B 无独立可做项（无内联
   三语义色（ok / warn / bad），与搜索页三态徽章共享语义。
 - 进度条 `.progress-wrap`（与全局下载日志面板同款）确认复用同一组件，不要再造。
 
-**③ 阶段**：Phase C（页头规范、结构清晰，是把 `.set-split`/`.set-card`/`.set-row` 跑通的好样板）。
+**③ 阶段**：Phase C（页头规范、结构清晰，是把 `.set-card` 跑通的好样板）。
+
+> **⚠ 落地记录（2026-05-30）：**
+> - **已落地（骨架）**：页头 `.page-heading`→`.set-page-head`；两张卡 `.batch-card`→`.set-card`
+>   （`overflow:hidden`，正文移入新增的 `.set-card-body`）；卡头 `.batch-card-head`+`.batch-kicker`+
+>   `h3`→`.set-card-head`+`.set-kicker`+`.set-card-title`；源提示 `.batch-mode-pill`→`.set-badge is-muted`。
+>   两个 `index.html` 同步。`.batch-textarea`（**资质页共用**）/`.batch-actions`/`.batch-action-hint`/
+>   `.progress-wrap` 保留不动。
+> - **更正方案**：`.batch-workspace` 实为**单列** `grid`（`gap:14px`，无列定义），不是"二列 grid" ——
+>   故**不套 `.set-split`**，保留原 `.batch-workspace`。
+> - **更正方案**：`#batchSummary` 装的是长串（"解析完成 · 匹配 X / 未匹配 Y …"，JS 还会注入
+>   `<span style=color:danger>`），`.set-badge` 的 `nowrap`+描边会溢出 —— 故 summary **保留
+>   `.batch-summary`**（已纯 token），只有短的 mode-pill 用 `.set-badge`。
+> - **挪到 Phase F / 后续结果区专项**：`renderBatchResults` 产出的 `.batch-result-card`/`.batch-toolbar`/
+>   `.batch-stats`/`.batch-results-empty` 不动 —— `.batch-result-card` 带**重度移动端"查阅而非管理"
+>   处理**（`responsive.css` 248–372：隐勾选/副标题、堆叠 meta-line、隐下载/收藏），与搜索结果卡同
+>   一耦合类，桌面单改会破移动端；且这些是 JS 多处 emit。结果区随移动端一并收口。
+> - 旧 class（`.batch-card`/`.batch-card-head`/`.batch-kicker`/`.batch-mode-pill`）CSS 规则暂留
+>   （已无引用、无害），待 legacy 入口废弃时清，同设置页 Phase C 做法。
 
 ---
 
@@ -280,6 +298,13 @@ Phase F 与移动选择器同改；本页 Phase B 无独立可做项（无内联
   逻辑不变，仅视觉收口。
 
 **③ 阶段**：Phase C（与批量同期，结构同构）。
+
+> **⚠ 落地记录（2026-05-30，分两步走）：**
+> 本页（及 §4.5 本地库 / §4.6 历史 / §4.8 统计）的**页头**已先行统一为 `.set-page-head`
+> （两个 `index.html` 同步，纯标记替换、`.page-heading` 是共享组件不删、零 JS/移动端风险，
+> 立得全站页头一致）。页内本体（步骤卡 `.complete-step` / 选项胶囊 / 状态卡）仍待后续：
+> `.complete-step` 有 `responsive.css` 45–46/167–169 的网格收口、`.complete-options` 表单交互，
+> 转 `.set-stepper`/`.set-chip` 时要同步改对应 responsive 段，留到本页本体专项。
 
 ---
 

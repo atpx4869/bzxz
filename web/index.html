@@ -144,41 +144,45 @@
 
   <!-- Page: Batch -->
   <div class="page" id="page-batch">
-    <div class="page-heading">
-      <div>
-        <h2>批量下载</h2>
+    <div class="set-page-head">
+      <div class="set-page-head-main">
+        <h1>批量下载</h1>
         <p>粘贴标准号后先解析匹配，再按当前下载策略批量处理。</p>
       </div>
     </div>
 
     <div class="batch-workspace">
-      <section class="batch-card batch-input-card">
-        <div class="batch-card-head">
+      <section class="set-card batch-input-card">
+        <div class="set-card-head">
           <div>
-            <div class="batch-kicker">1 输入</div>
-            <h3>标准号列表</h3>
+            <div class="set-kicker">1 输入</div>
+            <div class="set-card-title">标准号列表</div>
           </div>
-          <span class="batch-mode-pill" id="batchSourceHint">级联顺序：BW → BY → BZ（超时 15s）</span>
+          <span class="set-badge is-muted" id="batchSourceHint">级联顺序：BW → BY → BZ（超时 15s）</span>
         </div>
-        <textarea class="batch-textarea" id="batchInput" placeholder="粘贴标准号，每行一个&#10;例如：&#10;GB/T 1.1&#10;GB/T 12345-2020&#10;YY/T 0287&#10;DB44/T 1234"></textarea>
-        <div class="batch-actions">
-          <button class="btn btn-primary btn-sm" id="batchResolveBtn" onclick="doBatchResolve()">解析标准号</button>
-          <span class="batch-action-hint">解析会按当前来源优先级逐源匹配。</span>
+        <div class="set-card-body">
+          <textarea class="batch-textarea" id="batchInput" placeholder="粘贴标准号，每行一个&#10;例如：&#10;GB/T 1.1&#10;GB/T 12345-2020&#10;YY/T 0287&#10;DB44/T 1234"></textarea>
+          <div class="batch-actions">
+            <button class="btn btn-primary btn-sm" id="batchResolveBtn" onclick="doBatchResolve()">解析标准号</button>
+            <span class="batch-action-hint">解析会按当前来源优先级逐源匹配。</span>
+          </div>
         </div>
       </section>
 
-      <section class="batch-card batch-output-card">
-        <div class="batch-card-head">
+      <section class="set-card batch-output-card">
+        <div class="set-card-head">
           <div>
-            <div class="batch-kicker">2 解析结果</div>
-            <h3>匹配与下载任务</h3>
+            <div class="set-kicker">2 解析结果</div>
+            <div class="set-card-title">匹配与下载任务</div>
           </div>
-          <div class="batch-summary" id="batchSummary">等待解析</div>
+          <span class="batch-summary" id="batchSummary">等待解析</span>
         </div>
-        <div id="batchResults" class="batch-results-empty">解析后会在这里显示匹配结果。</div>
-        <div class="progress-wrap" id="batchProgressWrap">
-          <div class="progress-track"><div class="progress-fill" id="batchProgressFill"></div></div>
-          <span class="progress-text" id="batchProgressText"></span>
+        <div class="set-card-body">
+          <div id="batchResults" class="batch-results-empty">解析后会在这里显示匹配结果。</div>
+          <div class="progress-wrap" id="batchProgressWrap">
+            <div class="progress-track"><div class="progress-fill" id="batchProgressFill"></div></div>
+            <span class="progress-text" id="batchProgressText"></span>
+          </div>
         </div>
       </section>
     </div>
@@ -186,9 +190,9 @@
 
   <!-- Page: Complete -->
   <div class="page" id="page-complete">
-    <div class="page-heading">
-      <div>
-        <h2>标准补全</h2>
+    <div class="set-page-head">
+      <div class="set-page-head-main">
+        <h1>标准补全</h1>
         <p>上传 Excel 或 CSV，识别 A 列标准号，并输出完整标准号与标准名称。</p>
       </div>
     </div>
@@ -246,12 +250,14 @@
 
   <!-- Page: Local Library -->
   <div class="page" id="page-local">
-    <div class="page-heading">
-      <div>
-        <h2>本地文件库</h2>
+    <div class="set-page-head">
+      <div class="set-page-head-main">
+        <h1>本地文件库</h1>
         <p>已下载标准 PDF 的集中管理：预览 / 下载 / 重命名 / 批量删除。</p>
       </div>
-      <button class="btn btn-sm btn-ghost" onclick="refreshFileLibrary()">刷新</button>
+      <div class="set-page-head-actions">
+        <button class="btn btn-sm btn-ghost" onclick="refreshFileLibrary()">刷新</button>
+      </div>
     </div>
     <div class="local-toolbar">
       <input class="library-search" id="fileLibrarySearch" placeholder="按标准号或标准名称筛选…" oninput="renderFileLibrary()">
@@ -282,9 +288,9 @@
 
   <!-- Page: History -->
   <div class="page" id="page-history">
-    <div class="page-heading">
-      <div>
-        <h2>下载历史</h2>
+    <div class="set-page-head">
+      <div class="set-page-head-main">
+        <h1>下载历史</h1>
         <p>记录每一次下载行为。收藏夹用于监控收藏标准是否有新版本。</p>
       </div>
     </div>
@@ -359,7 +365,12 @@
 
   <!-- Page: Stats -->
   <div class="page" id="page-stats">
-    <h2 style="font-size:20px;font-weight:600;margin-bottom:18px">使用统计</h2>
+    <div class="set-page-head">
+      <div class="set-page-head-main">
+        <h1>使用统计</h1>
+        <p>按时间区间查看下载量趋势与来源分布。</p>
+      </div>
+    </div>
     <div class="stats-controls">
       <input type="date" id="statsFrom">
       <span style="color:var(--text-3);font-size:12px">至</span>

@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat(ui): 全站重设计 Phase C — 批量下载骨架 + 五页页头统一 `.set-page-head`** — 用 Phase A 组件层把"规范派"页面收口,分两步降风险:
+  - **批量下载页骨架**:两张卡 `.batch-card`→`.set-card`(正文移入 `.set-card-body`),卡头 `.batch-card-head`+`.batch-kicker`+`h3`→`.set-card-head`+`.set-kicker`+`.set-card-title`,源提示 `.batch-mode-pill`→`.set-badge is-muted`。`.batch-textarea`(资质共用)/`.batch-actions`/`.progress-wrap` 保留
+  - **页头统一**:批量/标准补全/本地库/下载历史/使用统计五页页头(`.page-heading` 或裸 `<h2 style>`)统一为 `.set-page-head`(h1+p,本地库"刷新"进 `.set-page-head-actions`,统计补副说明)。`.page-heading` 是共享组件、不删,纯标记替换
+  - 两个 `index.html` 同步(5×`.set-page-head` 对齐,0 残留 `.page-heading`)
+  - **更正方案两处**:`.batch-workspace` 实为单列 grid(非"二列"),不套 `.set-split`;`#batchSummary` 装长串+JS 注入 span,`.set-badge` 的 nowrap+描边会溢出,故 summary 保留 `.batch-summary`
+  - **暂缓(各有耦合,留专项)**:`renderBatchResults` 的 `.batch-result-card`/`.batch-toolbar`(重度移动端"查阅而非管理"处理,同搜索结果卡)、补全步骤卡 `.complete-step`/选项胶囊、本地库 `.local-table`、历史 `.library-grid`——转 `.set-*` 时需同步改 `responsive.css` 对应段,随各页本体专项做。详见 `docs/PAGES-REDESIGN.md` §4.3–4.8 落地记录
 - **feat(qual): 全站重设计 Phase B — 资质查询 tab 去内联(`switchQualTab` 只切 class)** — 清掉资质查询页两个 tab(搜索/可视化)的内联 style,这是 `app-qual.js` 85 处内联里最扎眼、最独立的一刀:
   - `switchQualTab` 删掉 `t.style.color` / `t.style.borderBottomColor` 两行内联赋值,只切 `.qual-tab.active`(与同文件 `switchQualSettingsTab` 同款 CSS 驱动写法)
   - `.qual-tab` 外观移入 CSS:`padding 8px 16px`/`13px`/`2px` 下边框 + `.qual-tab.active`(`var(--text)` + `var(--accent)` 下边框)沿用原内联值,视觉零变化。`web/src/styles/pages/qualifications.css` + `public/styles.css` 镜像
