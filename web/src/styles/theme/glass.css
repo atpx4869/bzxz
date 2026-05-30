@@ -268,7 +268,8 @@ body::before {
 :root[data-theme="light"] .download-center,
 :root[data-theme="light"] .auth-card-fallback,
 :root[data-theme="light"] .user-dropdown,
-:root[data-theme="light"] .shortcuts-panel {
+:root[data-theme="light"] .shortcuts-panel,
+:root[data-theme="light"] .toast {
   background: rgba(255, 255, 255, 0.92); background: oklch(100% 0 0 / 0.92);
   border-color: rgba(220, 226, 234, 0.6); border-color: oklch(85% 0.020 245 / 0.6);
   backdrop-filter: blur(24px) saturate(180%);
@@ -598,7 +599,8 @@ body::before {
 :root[data-theme="paper"] .download-center,
 :root[data-theme="paper"] .auth-card-fallback,
 :root[data-theme="paper"] .user-dropdown,
-:root[data-theme="paper"] .shortcuts-panel {
+:root[data-theme="paper"] .shortcuts-panel,
+:root[data-theme="paper"] .toast {
   background: rgba(255, 255, 255, 0.96); background: oklch(100% 0 0 / 0.96);
   border-color: rgba(223, 216, 198, 0.6); border-color: oklch(86% 0.025 75 / 0.6);
   backdrop-filter: blur(8px);

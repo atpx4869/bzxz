@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix(theme): toast 在亮色/纸张主题下补浮层覆盖(检查更新等弹出不再是暗灰)** — `.toast` 背景写死暗色(`rgba(17,22,29,0.9)`),而它的同类浮层(`.confirm-card`/`.download-center`/`.user-dropdown`/`.shortcuts-panel`)在 `glass.css` 都有 light/paper 覆盖、唯独漏了 toast,导致亮/纸张主题下"检查更新""已是最新版"等提示仍是难看的暗灰块。把 `.toast` 加进这两个主题的浮层覆盖选择器组(白底 + frosted + 主题描边),文字色本就走 `var(--text)` 自适应。`glass.css` light/paper 两段 + `public/styles.css` 镜像同改
 - **feat(ui): 全站重设计 Phase C — 批量下载骨架 + 五页页头统一 `.set-page-head`** — 用 Phase A 组件层把"规范派"页面收口,分两步降风险:
   - **批量下载页骨架**:两张卡 `.batch-card`→`.set-card`(正文移入 `.set-card-body`),卡头 `.batch-card-head`+`.batch-kicker`+`h3`→`.set-card-head`+`.set-kicker`+`.set-card-title`,源提示 `.batch-mode-pill`→`.set-badge is-muted`。`.batch-textarea`(资质共用)/`.batch-actions`/`.progress-wrap` 保留
   - **页头统一**:批量/标准补全/本地库/下载历史/使用统计五页页头(`.page-heading` 或裸 `<h2 style>`)统一为 `.set-page-head`(h1+p,本地库"刷新"进 `.set-page-head-actions`,统计补副说明)。`.page-heading` 是共享组件、不删,纯标记替换
