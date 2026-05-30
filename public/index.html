@@ -84,6 +84,11 @@
       <span class="sidebar-text">资质查询<span class="sidebar-desc">CNAS/CMA 资质</span></span>
     </button>
     <div class="sidebar-sep"></div>
+    <button class="sidebar-item" data-tab="logs" onclick="switchTab('logs')">
+      <span class="sidebar-icon">📋</span>
+      <span class="sidebar-text">运行日志<span class="sidebar-desc">搜索/下载/同步记录</span></span>
+      <span class="log-nav-badge" id="logNavBadge" style="display:none">0</span>
+    </button>
     <button class="sidebar-item" data-tab="stats" onclick="switchTab('stats')">
       <span class="sidebar-icon">📊</span>
       <span class="sidebar-text">使用统计<span class="sidebar-desc">查看使用数据</span></span>
@@ -376,6 +381,70 @@
     </div>
   </div>
 
+  <!-- Page: Logs（运行日志，独立菜单。镜像 web/index.html 同段） -->
+  <div class="page" id="page-logs">
+    <div class="set-page-head">
+      <div class="set-page-head-main">
+        <span class="set-kicker">RUNTIME LOG</span>
+        <h1>运行日志</h1>
+        <p>记录搜索、下载、补全、资质同步、验证码识别与系统运行事件。可按模块 / 级别 / 时间筛选、关键词搜索。</p>
+      </div>
+      <div class="set-page-head-actions">
+        <button class="btn btn-sm btn-ghost" onclick="exportLogs()">导出</button>
+        <button class="btn btn-sm btn-ghost" onclick="clearLogs()">清空</button>
+      </div>
+    </div>
+    <div class="log-layout">
+      <aside class="log-filters">
+        <div>
+          <div class="log-filter-title">概览</div>
+          <div class="log-stats">
+            <div class="log-stat"><div class="log-stat-v" id="logStatTotal">0</div><div class="log-stat-l">总计</div></div>
+            <div class="log-stat ok"><div class="log-stat-v" id="logStatOk">0</div><div class="log-stat-l">成功</div></div>
+            <div class="log-stat bad"><div class="log-stat-v" id="logStatBad">0</div><div class="log-stat-l">失败</div></div>
+            <div class="log-stat warn"><div class="log-stat-v" id="logStatWarn">0</div><div class="log-stat-l">警告</div></div>
+          </div>
+        </div>
+        <div>
+          <div class="log-filter-title">模块</div>
+          <div class="log-chip-list" id="logModList">
+            <button class="log-chip active" onclick="setLogModule(this,'all')"><span class="log-dot"></span>全部模块<span class="log-cnt" id="logCntAll">0</span></button>
+            <button class="log-chip" onclick="setLogModule(this,'search')"><span class="log-dot mod-search"></span>标准检索<span class="log-cnt" id="logCnt_search">0</span></button>
+            <button class="log-chip" onclick="setLogModule(this,'download')"><span class="log-dot mod-download"></span>下载<span class="log-cnt" id="logCnt_download">0</span></button>
+            <button class="log-chip" onclick="setLogModule(this,'complete')"><span class="log-dot mod-complete"></span>标准补全<span class="log-cnt" id="logCnt_complete">0</span></button>
+            <button class="log-chip" onclick="setLogModule(this,'qual')"><span class="log-dot mod-qual"></span>资质同步<span class="log-cnt" id="logCnt_qual">0</span></button>
+            <button class="log-chip" onclick="setLogModule(this,'ocr')"><span class="log-dot mod-ocr"></span>验证码 OCR<span class="log-cnt" id="logCnt_ocr">0</span></button>
+            <button class="log-chip" onclick="setLogModule(this,'local')"><span class="log-dot mod-local"></span>本地库<span class="log-cnt" id="logCnt_local">0</span></button>
+            <button class="log-chip" onclick="setLogModule(this,'system')"><span class="log-dot mod-system"></span>系统<span class="log-cnt" id="logCnt_system">0</span></button>
+          </div>
+        </div>
+        <div>
+          <div class="log-filter-title">级别</div>
+          <div class="log-chip-list" id="logLvList">
+            <button class="log-chip active" onclick="setLogLevel(this,'all')"><span class="log-dot"></span>全部级别</button>
+            <button class="log-chip" onclick="setLogLevel(this,'success')"><span class="log-dot lv-success"></span>成功</button>
+            <button class="log-chip" onclick="setLogLevel(this,'fail')"><span class="log-dot lv-fail"></span>失败</button>
+            <button class="log-chip" onclick="setLogLevel(this,'warn')"><span class="log-dot lv-warn"></span>警告</button>
+            <button class="log-chip" onclick="setLogLevel(this,'info')"><span class="log-dot lv-info"></span>信息</button>
+          </div>
+        </div>
+      </aside>
+      <section class="log-main">
+        <div class="log-toolbar">
+          <div class="log-search"><span class="log-search-ico">🔍</span><input id="logKw" placeholder="搜索日志正文 / 标准号 / 来源…" oninput="onLogSearch(this.value)"></div>
+          <div class="log-seg" id="logTimeSeg">
+            <button class="active" onclick="setLogTime(this,'all')">全部</button>
+            <button onclick="setLogTime(this,'today')">今天</button>
+            <button onclick="setLogTime(this,'7d')">近7天</button>
+          </div>
+          <label class="log-verbose"><input type="checkbox" id="logVerbose" onchange="onLogVerbose(this.checked)"> 详细模式</label>
+        </div>
+        <div class="log-table" id="logBody"></div>
+        <div class="log-foot"><span id="logFootCount">—</span><span>本地持久化 · 保留最近 10000 条 / 30 天</span></div>
+      </section>
+    </div>
+  </div>
+
   <!-- Page: Stats -->
   <div class="page" id="page-stats">
     <div class="set-page-head">
@@ -543,17 +612,11 @@
 </nav>
 
 <!-- Log panel -->
-<div class="log-panel collapsed" id="logPanel">
-  <div class="log-header" id="logToggle">
-    <span id="logTitle">📋 下载日志</span>
-    <button class="log-export-btn" id="exportLogs" title="导出日志">导出</button>
-    <span id="logChevron" style="font-size:12px">▲</span>
-  </div>
-  <div class="progress-wrap" id="progressWrap">
-    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
-    <span class="progress-text" id="progressText"></span>
-  </div>
-  <div class="log-body" id="logBody"></div>
+<!-- 下载实时进度条（原底部日志面板已迁为独立「运行日志」页 #page-logs；
+     此处仅保留下载进行中的轻量进度 strip，仅在 .visible 时显示） -->
+<div class="progress-strip" id="progressWrap">
+  <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+  <span class="progress-text" id="progressText"></span>
 </div>
 
 <!-- Modal overlay -->

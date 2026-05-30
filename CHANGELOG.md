@@ -3,6 +3,15 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat(logs): 运行日志系统重做 Phase 1 — 独立菜单 + 持久化 + 四维筛选** — 把原悬浮在所有页面底部的「下载日志」可折叠面板，重做成与标准检索/系统设置同级的独立「运行日志」页。方案见 `docs/LOG-SYSTEM-REDESIGN.md`，预览 `docs/log-system-prototype.html`：
+  - **数据模型扩字段**：`addLog` 从 `(msg,status)` 扩为 `(msg,{module,level,detail,verbose})`，**兼容旧两参调用**（旧 status 归一到 level，module 按文本推断）；时间戳从"时:分"升到完整日期+时:分:秒。模块：搜索/下载/补全/资质同步/验证码 OCR/本地库/系统
+  - **localStorage 持久化**：关客户端重启仍可查史，滚动保留最近 10000 条 / 30 天，配额超限静默不打断业务
+  - **独立页 `#page-logs`**：`.set-page-head` + 左筛选栏（概览数字 + 模块/级别 chip 竖列，带计数）+ 右列表（时间/模块徽章/正文/级别色条）。四维筛选可叠加：模块 ∩ 级别 ∩ 时间(全部/今天/近7天) ∩ 关键词
+  - **详细模式开关**：默认只显示业务事件，打开后连同 `verbose` 调试条目（HTTP 步骤、worker 输出等）一并显示，灰一档+等宽字
+  - **侧栏入口**：「运行日志」菜单项 + 失败数角标；`switchTab('logs')` + `TAB_LABELS.logs`
+  - **底部面板退役**：删 `#logPanel`（日志头/体/折叠/导出），仅保留下载实时进度 `.progress-strip`（取代原 `.progress-wrap`，`app-download.js` 进度逻辑不变）。导出改为页头按钮、清空走二次确认
+  - 两个 `index.html`（侧栏 + `#page-logs` + 进度 strip）同步；CSS 重写 `layout/log-panel.css` + 镜像 `public/styles.css`
+  - **遗留待清**（无害死规则，元素已不存在）：`responsive.css` 183–187 与 `glass.css` 的 `.log-panel`/`.log-header`/`.log-export-btn` 主题覆盖，待后续清理
 - **fix(mobile): 修复输入框聚焦放大不还原 + 资质页多余"搜索"tab 露出** —
   - **聚焦放大**:iOS Safari 聚焦 `font-size<16px` 的输入框会自动放大页面、且无 `maximum-scale` 时不还原（退出输入后仍放大 → 又溢出）。手机端搜索 input(`.search-row input` / `.qual-search-row .qual-search-input`)字号 15px→16px；两个 `index.html` 的 viewport 补 `maximum-scale=1.0, user-scalable=no` 兜底其它小字号输入框
   - **多余"搜索"tab**:`.qual-tab-bar` 容器带内联 `display:flex`，优先级高于 `responsive.css` 的 `.qual-tab-bar{display:none}`，导致手机端隐藏失效——可视化 tab 被 class 规则藏了、只剩"搜索"孤零零露出。把容器内联移进 CSS(`qualifications.css` + `public/styles.css` 镜像)，两个 `index.html` 去内联，窄屏 `display:none` 恢复生效

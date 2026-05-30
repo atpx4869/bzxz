@@ -1,33 +1,98 @@
-/* Log panel —— 原 public/styles.css 行 383–410（panel + progress bar）+ 571–572（.log-export-btn）。
- * 行 949–954 的窄屏 @media 仍归 responsive.css。 */
+/* 运行日志系统（重做）—— 取代原底部悬浮 .log-panel。
+ * 现在日志在独立「运行日志」页 #page-logs（侧栏菜单，与系统设置同级）。
+ * 本文件保留两部分：① 下载实时进度 strip（原 .progress-wrap 迁为 .progress-strip）；
+ * ② 日志页 .log-* 组件（页内两栏：左筛选 + 右列表）。
+ * 方案见 docs/LOG-SYSTEM-REDESIGN.md。纯 token，无裸 oklch / color-mix。 */
 
-.log-panel { position: fixed; bottom: 0; left: var(--sidebar-w); right: 0; z-index: 100; background: rgba(9, 14, 20, 0.92); background: oklch(16% 0.016 255 / 0.92); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px); border-top: 1px solid rgba(36, 41, 48, 0.5); border-top: 1px solid oklch(28% 0.014 255 / 0.5); transition: transform 0.3s var(--ease-out), left 0.3s var(--ease-out); }
-.log-panel.collapsed { transform: translateY(calc(100% - 44px)); }
-body.sidebar-collapsed .log-panel { left: var(--sidebar-collapsed-w); }
-.log-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; cursor: pointer; user-select: none; font-size: 13px; font-weight: 500; }
-.log-header:hover { background: rgba(17, 22, 29, 0.4); background: oklch(20% 0.016 255 / 0.4); }
-.log-body { max-height: 200px; overflow-y: auto; padding: 0 24px 14px; }
-.log-summary { display: flex; gap: 8px; padding: 2px 0 10px; flex-wrap: wrap; }
-.log-summary span { display: inline-flex; align-items: center; gap: 4px; padding: 4px 9px; border-radius: 999px; background: rgba(22, 27, 33, 0.65); background: oklch(22% 0.014 255 / 0.65); color: var(--text-3); font-size: 11px; }
-.log-summary strong { color: var(--text-2); }
-.log-item { display: grid; grid-template-columns: 52px minmax(0, 1fr) 56px; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid rgba(32, 36, 42, 0.3); border-bottom: 1px solid oklch(26% 0.012 255 / 0.3); border-left: 2px solid transparent; font-size: 13px; }
-.log-item:last-child { border: none; }
-.log-item.success { border-left-color: var(--success); }
-.log-item.fail { border-left-color: var(--danger); }
-.log-item.pending { border-left-color: var(--warning); }
-.log-time { color: var(--text-3); font: 400 12px 'DM Mono', monospace; min-width: 52px; }
-.log-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.log-status { font-weight: 600; min-width: 48px; text-align: right; font-size: 12px; }
-.log-status.success { color: var(--success); }
-.log-status.fail { color: var(--danger); }
-.log-status.pending { color: var(--warning); }
-
-.progress-wrap { margin: 0 24px 12px; display: none; }
-.progress-wrap.visible { display: block; }
-.progress-track { height: 3px; background: #1b2026; background: oklch(24% 0.014 255); border-radius: 2px; overflow: hidden; }
-.progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s var(--ease-out); width: 0%; box-shadow: 0 0 8px rgba(0, 149, 254, 0.4); box-shadow: 0 0 8px oklch(66% 0.20 250 / 0.4); }
+/* ── 下载实时进度 strip：固定底部细条，仅 .visible 时显示 ── */
+.progress-strip { position: fixed; left: var(--sidebar-w); right: 0; bottom: 0; z-index: 100; padding: 8px 24px; background: var(--surface); border-top: 1px solid var(--border); display: none; transition: left 0.3s var(--ease-out); }
+.progress-strip.visible { display: block; }
+body.sidebar-collapsed .progress-strip { left: var(--sidebar-collapsed-w); }
+.progress-track { height: 3px; background: var(--surface-h); border-radius: 2px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s var(--ease-out); width: 0%; }
 .progress-text { font-size: 11px; color: var(--text-3); margin-top: 4px; display: block; }
 
-/* Log export 按钮 —— 原行 571–572，与 log panel 一并存放（在 download-center 之间的孤儿规则）。 */
-.log-export-btn { margin-left: auto; margin-right: 8px; height: 24px; padding: 0 8px; border: 1px solid rgba(42, 46, 52, 0.6); border: 1px solid oklch(30% 0.012 255 / 0.6); border-radius: var(--radius-sm); background: rgba(13, 18, 24, 0.62); background: oklch(18% 0.014 255 / 0.62); color: var(--text-3); cursor: pointer; font: 700 11px 'DM Sans', sans-serif; }
-.log-export-btn:hover { color: var(--text); border-color: var(--accent-g); }
+/* ── 侧栏「运行日志」失败角标 ── */
+.log-nav-badge { margin-left: auto; font: 700 10px 'DM Mono', monospace; background: var(--danger); color: #fff; padding: 1px 6px; border-radius: 999px; }
+
+/* ── 日志页两栏布局 ── */
+.log-layout { display: grid; grid-template-columns: 212px minmax(0, 1fr); gap: 22px; align-items: start; }
+.log-filters { position: sticky; top: calc(var(--topbar-h, 52px) + 16px); display: flex; flex-direction: column; gap: 18px; }
+.log-filter-title { font: 700 11px 'DM Mono', monospace; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 8px; }
+
+/* 概览数字卡 */
+.log-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.log-stat { padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.log-stat-v { font: 700 19px 'DM Mono', monospace; line-height: 1; }
+.log-stat-l { margin-top: 3px; font-size: 11px; color: var(--text-3); }
+.log-stat.ok .log-stat-v { color: var(--success); }
+.log-stat.bad .log-stat-v { color: var(--danger); }
+.log-stat.warn .log-stat-v { color: var(--warning); }
+
+/* 筛选 chip 竖列 */
+.log-chip-list { display: flex; flex-direction: column; gap: 3px; }
+.log-chip { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-2); font: 500 13px 'DM Sans', sans-serif; text-align: left; cursor: pointer; transition: background 0.12s var(--ease-out), color 0.12s var(--ease-out); }
+.log-chip:hover { background: var(--surface-h); color: var(--text); }
+.log-chip.active { background: var(--surface); border-color: var(--border); color: var(--text); font-weight: 600; }
+.log-chip .log-cnt { margin-left: auto; font: 600 11px 'DM Mono', monospace; color: var(--text-3); }
+
+/* 模块 / 级别色点 */
+.log-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--text-3); }
+.log-dot.mod-search { background: var(--accent); }
+.log-dot.mod-download { background: var(--accent-g); }
+.log-dot.mod-complete { background: var(--accent-h); }
+.log-dot.mod-qual { background: var(--warning); }
+.log-dot.mod-ocr { background: var(--success); }
+.log-dot.mod-local { background: var(--text-2); }
+.log-dot.mod-system { background: var(--text-3); }
+.log-dot.lv-success { background: var(--success); }
+.log-dot.lv-fail { background: var(--danger); }
+.log-dot.lv-warn { background: var(--warning); }
+.log-dot.lv-info { background: var(--accent-g); }
+
+/* 右栏工具条 */
+.log-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.log-search { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); flex: 1; min-width: 200px; }
+.log-search:focus-within { border-color: var(--accent); }
+.log-search-ico { color: var(--text-3); flex-shrink: 0; }
+.log-search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); font-size: 14px; outline: none; }
+.log-search input::placeholder { color: var(--text-3); }
+.log-seg { display: inline-flex; gap: 2px; padding: 3px; background: var(--surface-h); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.log-seg button { border: 0; background: transparent; color: var(--text-2); font: 600 12px 'DM Sans', sans-serif; padding: 6px 11px; border-radius: 6px; cursor: pointer; }
+.log-seg button.active { background: var(--accent); color: #fff; }
+.log-verbose { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-2); cursor: pointer; user-select: none; white-space: nowrap; }
+.log-verbose input { accent-color: var(--accent); }
+
+/* 列表 */
+.log-table { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+.log-row { display: grid; grid-template-columns: 78px 96px 1fr 76px; gap: 12px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); border-left: 3px solid transparent; font-size: 13px; }
+.log-row:last-child { border-bottom: 0; }
+.log-row:hover { background: var(--surface-h); }
+.log-row.lv-success { border-left-color: var(--success); }
+.log-row.lv-fail { border-left-color: var(--danger); }
+.log-row.lv-warn { border-left-color: var(--warning); }
+.log-row.lv-info { border-left-color: var(--accent-g); }
+.log-row.is-verbose { opacity: 0.72; }
+.log-row.is-verbose .log-msg { font-family: 'DM Mono', monospace; font-size: 12px; }
+.log-row .log-time { display: flex; flex-direction: column; font: 500 12px 'DM Mono', monospace; color: var(--text-3); white-space: nowrap; min-width: 0; }
+.log-row .log-time small { font-size: 10px; opacity: 0.7; }
+.log-mod { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: var(--text-2); white-space: nowrap; }
+.log-msg { min-width: 0; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-msg .log-det { color: var(--text-3); font-size: 12px; }
+.log-lv { justify-self: end; font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.log-lv.lv-success { color: var(--success); }
+.log-lv.lv-fail { color: var(--danger); }
+.log-lv.lv-warn { color: var(--warning); }
+.log-lv.lv-info { color: var(--accent-g); }
+.log-lv.lv-pending { color: var(--text-3); }
+
+.log-foot { display: flex; align-items: center; justify-content: space-between; padding: 10px 4px; color: var(--text-3); font-size: 12px; }
+.log-empty { padding: 48px; text-align: center; color: var(--text-3); }
+
+/* 窄屏：筛选栏转横向滚动，行收两列 */
+@media (max-width: 860px) {
+  .log-layout { grid-template-columns: 1fr; gap: 14px; }
+  .log-filters { position: static; flex-direction: row; overflow-x: auto; gap: 12px; }
+  .log-row { grid-template-columns: 60px 1fr; gap: 6px; }
+  .log-row .log-mod, .log-row .log-lv { display: none; }
+}

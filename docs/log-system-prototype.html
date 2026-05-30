@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>日志系统重做预览 · StandardsBox</title>
+<style>
+/* ===== 真实主题 token（取自 web/src/styles/base.css，仅 sRGB hex） ===== */
+:root{
+  --bg:#0e1118; --surface:#161a22; --surface-h:#1d212c; --border:#252934;
+  --text:#e4e6ea; --text-2:#a5a9b3; --text-3:#696d77;
+  --accent:#4f6df0; --accent-h:#6a85ff; --accent-g:#7585b8;
+  --success:#36b988; --danger:#d75541; --warning:#cba03e;
+  --radius-sm:8px; --radius:12px; --radius-lg:18px;
+  --ease-out:cubic-bezier(0.16,1,0.3,1);
+  --sidebar-w:240px; --topbar-h:52px;
+  --mono:'DM Mono',ui-monospace,Consolas,monospace;
+}
+[data-theme="light"]{
+  --bg:#f4f7fb; --surface:#fbfcfe; --surface-h:#eef3f9; --border:#dbe2eb;
+  --text:#1a2030; --text-2:#4a5568; --text-3:#8390a3;
+  --accent:#2855d4; --accent-h:#1d47bd; --accent-g:#5a78d0;
+  --success:#0f7d54; --danger:#c83838; --warning:#a3771a;
+}
+[data-theme="paper"]{
+  --bg:#f5f1e8; --surface:#fbfaf5; --surface-h:#efe9da; --border:#dfd8c6;
+  --text:#2b2820; --text-2:#5c5648; --text-3:#928a76;
+  --accent:#c96342; --accent-h:#b04e2f; --accent-g:#c08164;
+  --success:#5a7d3e; --danger:#b94432; --warning:#a87520;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font:400 14px/1.5 'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;}
+
+/* ===== Topbar ===== */
+.topbar{position:fixed;top:0;left:0;right:0;height:var(--topbar-h);display:flex;align-items:center;gap:12px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--border);z-index:30;}
+.topbar-logo{width:24px;height:24px;border-radius:6px;background:linear-gradient(135deg,var(--accent),var(--accent-h));}
+.topbar-title{font-weight:600;font-size:15px;}
+.topbar-title small{color:var(--text-3);font-weight:400;margin-left:6px;}
+.topbar-spacer{flex:1;}
+.theme-switch{display:flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:3px;}
+.theme-switch button{border:none;background:transparent;color:var(--text-2);font-size:12px;padding:5px 12px;border-radius:999px;cursor:pointer;transition:all .15s var(--ease-out);}
+.theme-switch button.active{background:var(--accent);color:#fff;}
+
+/* ===== Sidebar ===== */
+.sidebar{position:fixed;top:var(--topbar-h);left:0;bottom:0;width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--border);padding:12px 10px;overflow-y:auto;}
+.nav-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border:1px solid transparent;border-radius:var(--radius-sm);background:transparent;color:var(--text-2);font-size:13.5px;font-weight:500;font-family:inherit;text-align:left;cursor:pointer;transition:all .15s var(--ease-out);}
+.nav-item:hover{background:var(--surface-h);color:var(--text);}
+.nav-item.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.nav-ico{width:18px;text-align:center;}
+.nav-sep{height:1px;background:var(--border);margin:8px 6px;}
+.nav-badge{margin-left:auto;font:700 10px var(--mono);background:var(--danger);color:#fff;padding:1px 6px;border-radius:999px;}
+
+/* ===== Content shell ===== */
+.content{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:24px 30px;min-height:calc(100vh - var(--topbar-h));}
+
+/* ===== 统一页头 .set-page-head ===== */
+.set-page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px;}
+.set-kicker{display:inline-block;font:700 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent-g);margin-bottom:6px;}
+.set-page-head h1{font-size:21px;font-weight:700;letter-spacing:.01em;}
+.set-page-head p{margin-top:5px;font-size:13px;color:var(--text-3);max-width:60ch;}
+.set-page-head-actions{display:flex;gap:8px;flex-shrink:0;}
+
+.btn{border:1px solid var(--border);background:var(--surface);color:var(--text-2);font:600 13px 'DM Sans',sans-serif;padding:7px 14px;border-radius:var(--radius-sm);cursor:pointer;transition:all .15s var(--ease-out);}
+.btn:hover{color:var(--text);border-color:var(--accent-g);}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.btn.danger:hover{color:var(--danger);border-color:var(--danger);}
+
+/* ===== 日志页主体：左筛选栏 + 右列表 ===== */
+.log-layout{display:grid;grid-template-columns:212px minmax(0,1fr);gap:22px;align-items:start;}
+.log-filters{position:sticky;top:calc(var(--topbar-h) + 16px);display:flex;flex-direction:column;gap:18px;}
+.filter-group-title{font:700 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);margin-bottom:8px;}
+
+/* 概览数字卡 .set-stats */
+.set-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.set-stat{padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);}
+.set-stat-value{font:700 19px var(--mono);line-height:1;}
+.set-stat-label{margin-top:3px;font-size:11px;color:var(--text-3);}
+.set-stat.ok .set-stat-value{color:var(--success);}
+.set-stat.bad .set-stat-value{color:var(--danger);}
+.set-stat.warn .set-stat-value{color:var(--warning);}
+
+/* 筛选 chip 竖列 */
+.filter-list{display:flex;flex-direction:column;gap:3px;}
+.filter-chip{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;border:1px solid transparent;border-radius:var(--radius-sm);background:transparent;color:var(--text-2);font:500 13px 'DM Sans',sans-serif;text-align:left;cursor:pointer;transition:all .12s var(--ease-out);}
+.filter-chip:hover{background:var(--surface-h);color:var(--text);}
+.filter-chip.active{background:var(--surface);border-color:var(--border);color:var(--text);font-weight:600;}
+.filter-chip .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--text-3);}
+.filter-chip .cnt{margin-left:auto;font:600 11px var(--mono);color:var(--text-3);}
+.dot.mod-search{background:var(--accent);}
+.dot.mod-download{background:#3b82f6;}
+.dot.mod-complete{background:#a855f7;}
+.dot.mod-qual{background:var(--warning);}
+.dot.mod-ocr{background:#14b8a6;}
+.dot.mod-system{background:var(--text-3);}
+.dot.lv-success{background:var(--success);}
+.dot.lv-fail{background:var(--danger);}
+.dot.lv-warn{background:var(--warning);}
+.dot.lv-info{background:var(--accent-g);}
+
+/* 顶部工具条 */
+.log-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+.set-search{display:flex;align-items:center;gap:8px;padding:7px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);flex:1;min-width:200px;}
+.set-search:focus-within{border-color:var(--accent);}
+.set-search input{flex:1;border:0;background:transparent;color:var(--text);font-size:14px;outline:none;}
+.set-search input::placeholder{color:var(--text-3);}
+.seg{display:inline-flex;gap:2px;padding:3px;background:var(--surface-h);border:1px solid var(--border);border-radius:var(--radius-sm);}
+.seg button{border:0;background:transparent;color:var(--text-2);font:600 12px 'DM Sans',sans-serif;padding:6px 11px;border-radius:6px;cursor:pointer;}
+.seg button.active{background:var(--accent);color:#fff;}
+.verbose-toggle{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-2);cursor:pointer;user-select:none;white-space:nowrap;}
+.verbose-toggle input{accent-color:var(--accent);}
+
+/* 日志列表（表格式行）*/
+.log-table{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface);}
+.log-row{display:grid;grid-template-columns:78px 92px 1fr 82px;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);border-left:3px solid transparent;font-size:13px;}
+.log-row:last-child{border-bottom:0;}
+.log-row:hover{background:var(--surface-h);}
+.log-row.is-verbose{opacity:.72;}
+.log-row.is-verbose .log-msg{font-family:var(--mono);font-size:12px;}
+.log-row.lv-success{border-left-color:var(--success);}
+.log-row.lv-fail{border-left-color:var(--danger);}
+.log-row.lv-warn{border-left-color:var(--warning);}
+.log-row.lv-info{border-left-color:var(--accent-g);}
+.log-time{font:500 12px var(--mono);color:var(--text-3);white-space:nowrap;}
+.log-time small{display:block;font-size:10px;opacity:.7;}
+.mod-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--text-2);white-space:nowrap;}
+.mod-badge .dot{width:7px;height:7px;border-radius:50%;}
+.log-msg{min-width:0;color:var(--text);overflow:hidden;text-overflow:ellipsis;}
+.log-msg .det{color:var(--text-3);font-size:12px;}
+.lv-tag{justify-self:end;font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px;border:1px solid currentColor;white-space:nowrap;}
+.lv-tag.success{color:var(--success);}
+.lv-tag.fail{color:var(--danger);}
+.lv-tag.warn{color:var(--warning);}
+.lv-tag.info{color:var(--accent-g);}
+
+.list-foot{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;color:var(--text-3);font-size:12px;}
+.empty{padding:48px;text-align:center;color:var(--text-3);}
+
+/* 说明条 */
+.note{margin-top:22px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);font-size:12.5px;color:var(--text-3);line-height:1.7;}
+.note b{color:var(--text-2);}
+
+@media(max-width:860px){
+  .log-layout{grid-template-columns:1fr;}
+  .log-filters{position:static;flex-direction:row;overflow-x:auto;}
+  .log-row{grid-template-columns:64px 1fr;gap:6px;}
+  .log-row .mod-badge,.log-row .lv-tag{display:none;}
+}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="topbar-logo"></div>
+  <div class="topbar-title">StandardsBox <small>日志系统预览</small></div>
+  <div class="topbar-spacer"></div>
+  <div class="theme-switch">
+    <button onclick="setTheme('dark',this)" class="active">暗色</button>
+    <button onclick="setTheme('light',this)">极地蓝</button>
+    <button onclick="setTheme('paper',this)">纸张</button>
+  </div>
+</div>
+
+<div class="sidebar">
+  <button class="nav-item"><span class="nav-ico">🔍</span>标准检索</button>
+  <button class="nav-item"><span class="nav-ico">🔬</span>Labr库检索</button>
+  <button class="nav-item"><span class="nav-ico">📦</span>批量下载</button>
+  <button class="nav-item"><span class="nav-ico">🧩</span>标准补全</button>
+  <button class="nav-item"><span class="nav-ico">🗂</span>本地文件库</button>
+  <button class="nav-item"><span class="nav-ico">📜</span>下载历史</button>
+  <button class="nav-item"><span class="nav-ico">🛡</span>资质查询</button>
+  <div class="nav-sep"></div>
+  <button class="nav-item active"><span class="nav-ico">📋</span>运行日志<span class="nav-badge" id="navBadge">3</span></button>
+  <button class="nav-item"><span class="nav-ico">📊</span>使用统计</button>
+  <button class="nav-item"><span class="nav-ico">⚙</span>系统设置</button>
+</div>
+
+<div class="content">
+  <div class="set-page-head">
+    <div>
+      <span class="set-kicker">RUNTIME LOG</span>
+      <h1>运行日志</h1>
+      <p>记录搜索、下载、补全、资质同步与系统运行的全部事件，可按模块 / 级别 / 时间筛选，可关键词搜索。</p>
+    </div>
+    <div class="set-page-head-actions">
+      <button class="btn" onclick="alert('演示：导出当前筛选结果为 .log / .csv')">导出</button>
+      <button class="btn danger" onclick="alert('演示：二次确认后清空日志（不可逆）')">清空</button>
+    </div>
+  </div>
+
+  <div class="log-layout">
+    <!-- 左：筛选栏 -->
+    <aside class="log-filters">
+      <div>
+        <div class="filter-group-title">概览</div>
+        <div class="set-stats">
+          <div class="set-stat"><div class="set-stat-value" id="stTotal">0</div><div class="set-stat-label">总计</div></div>
+          <div class="set-stat ok"><div class="set-stat-value" id="stOk">0</div><div class="set-stat-label">成功</div></div>
+          <div class="set-stat bad"><div class="set-stat-value" id="stBad">0</div><div class="set-stat-label">失败</div></div>
+          <div class="set-stat warn"><div class="set-stat-value" id="stWarn">0</div><div class="set-stat-label">警告</div></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="filter-group-title">模块</div>
+        <div class="filter-list" id="modList">
+          <button class="filter-chip active" data-mod="all"><span class="dot"></span>全部模块<span class="cnt" id="cmAll">0</span></button>
+          <button class="filter-chip" data-mod="search"><span class="dot mod-search"></span>标准检索<span class="cnt" id="cmSearch">0</span></button>
+          <button class="filter-chip" data-mod="download"><span class="dot mod-download"></span>下载<span class="cnt" id="cmDownload">0</span></button>
+          <button class="filter-chip" data-mod="complete"><span class="dot mod-complete"></span>标准补全<span class="cnt" id="cmComplete">0</span></button>
+          <button class="filter-chip" data-mod="qual"><span class="dot mod-qual"></span>资质同步<span class="cnt" id="cmQual">0</span></button>
+          <button class="filter-chip" data-mod="ocr"><span class="dot mod-ocr"></span>验证码 OCR<span class="cnt" id="cmOcr">0</span></button>
+          <button class="filter-chip" data-mod="system"><span class="dot mod-system"></span>系统<span class="cnt" id="cmSystem">0</span></button>
+        </div>
+      </div>
+
+      <div>
+        <div class="filter-group-title">级别</div>
+        <div class="filter-list" id="lvList">
+          <button class="filter-chip active" data-lv="all"><span class="dot"></span>全部级别</button>
+          <button class="filter-chip" data-lv="success"><span class="dot lv-success"></span>成功</button>
+          <button class="filter-chip" data-lv="fail"><span class="dot lv-fail"></span>失败</button>
+          <button class="filter-chip" data-lv="warn"><span class="dot lv-warn"></span>警告</button>
+          <button class="filter-chip" data-lv="info"><span class="dot lv-info"></span>信息</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 右：工具条 + 列表 -->
+    <section>
+      <div class="log-toolbar">
+        <div class="set-search"><span style="color:var(--text-3)">🔍</span><input id="kw" placeholder="搜索日志正文 / 标准号 / 来源…" oninput="render()"></div>
+        <div class="seg" id="timeSeg">
+          <button class="active" data-time="all" onclick="setTime(this)">全部</button>
+          <button data-time="today" onclick="setTime(this)">今天</button>
+          <button data-time="7d" onclick="setTime(this)">近7天</button>
+        </div>
+        <label class="verbose-toggle"><input type="checkbox" id="verbose" onchange="render()"> 详细模式</label>
+      </div>
+      <div class="log-table" id="logTable"></div>
+      <div class="list-foot"><span id="footCount">—</span><span>实时刷新 · 最多保留 10000 条 / 30 天</span></div>
+    </section>
+  </div>
+
+  <div class="note">
+    <b>这是预览原型</b>，数据为示例。真实版要点：① 与「标准检索 / 系统设置」同级的独立菜单（侧栏 + 移动端「我」页入口），取代当前悬浮在所有页面底部的可折叠日志面板；② 前端操作日志（addLog 扩 <b>module / level / 完整时间戳 / 详情</b>）+ 后端 <b>log-buffer</b>（已存在的 console 拦截环形缓冲）统一汇入；③ <b>持久化到本地</b>（关客户端重启仍可查史）；④ 四维筛选：模块 / 级别 / 时间 / 关键词，可叠加。
+  </div>
+</div>
+
+<script>
+// ── 示例数据（演示四维筛选 + 视觉）。真实数据来自前端 addLog + 后端 /api/diagnostics/logs ──
+const now = Date.now();
+const m = (min)=> new Date(now - min*60000);
+// verbose:true = 调试级条目，默认隐藏，开「详细模式」才显示
+const DATA = [
+  {t:m(0),   mod:'download', lv:'fail',    msg:'GB/T 12345-2020 下载失败',     det:'BW → BY → BZ 全部超时（15s）'},
+  {t:m(0.2), mod:'download', lv:'warn',    verbose:1, msg:'[by-adapter] downloadPdf got HTTP 500', det:'url=…/file/2233, 将转下一源'},
+  {t:m(0.3), mod:'download', lv:'info',    verbose:1, msg:'[gbw] tryDownloadFinalFile failed sessionId=9f2a', det:'timeout 15000ms'},
+  {t:m(1),   mod:'download', lv:'success', msg:'GB/T 1.1-2020 下载完成',       det:'命中 BW · 2.3MB · 1.8s'},
+  {t:m(1.5), mod:'ocr',      lv:'success', msg:'验证码识别成功',                det:'结果 7K3D · 置信度 0.94 · 220ms'},
+  {t:m(2),   mod:'search',   lv:'success', msg:'搜索「食品安全」完成',          det:'BW(+12) BY(+8) BZ(+3)'},
+  {t:m(2.4), mod:'search',   lv:'info',    verbose:1, msg:'[resolver] source by ok', det:'query="食品安全" hits=8 · 640ms'},
+  {t:m(2.5), mod:'qual',     lv:'warn',    verbose:1, msg:'CNAS anti-bot at offset 200', det:'waiting 30s then re-navigating (retry 1/3)'},
+  {t:m(3),   mod:'qual',     lv:'warn',    msg:'CNAS L0290 同步：3 条记录字段缺失', det:'已跳过，继续同步'},
+  {t:m(4),   mod:'complete', lv:'success', msg:'标准补全 48/50 匹配',           det:'2 条未匹配已标红'},
+  {t:m(5),   mod:'ocr',      lv:'fail',    msg:'验证码识别失败',                det:'置信度 0.31 < 阈值，已重试'},
+  {t:m(5.2), mod:'ocr',      lv:'info',    verbose:1, msg:'[ocr-worker stdout] tess pass2', det:'psm=7 oem=1'},
+  {t:m(6),   mod:'search',   lv:'fail',    msg:'搜索 BZ(YY/T 0287) 失败',       det:'连接被重置'},
+  {t:m(7),   mod:'qual',     lv:'warn',    verbose:1, msg:'[by-adapter] login step 3 expected 302, got 200', det:'凭据疑似错误'},
+  {t:m(9),   mod:'system',   lv:'info',    msg:'本地标准库扫描完成',            det:'共 1,284 个 PDF'},
+  {t:m(14),  mod:'qual',     lv:'success', msg:'CMA 221700110366 同步成功',     det:'28,110 条记录'},
+  {t:m(33),  mod:'download', lv:'success', msg:'批量下载完成 18/20',            det:'42s · 2 条失败已重试'},
+  {t:m(60),  mod:'system',   lv:'info',    verbose:1, msg:'[db-backup] 备份完成', det:'app-20260531.db'},
+  {t:m(95),  mod:'ocr',      lv:'warn',    msg:'OCR 验证码识别置信度偏低',       det:'已自动重试一次'},
+  {t:m(190), mod:'search',   lv:'success', msg:'搜索「淀粉」完成',              det:'BW(+5)'},
+  {t:m(1500),mod:'download', lv:'fail',    msg:'DB44/T 1234 无可用下载源',      det:'四源均未匹配'},
+];
+const MODS={search:'标准检索',download:'下载',complete:'标准补全',qual:'资质同步',ocr:'验证码 OCR',system:'系统'};
+const LVS={success:'成功',fail:'失败',warn:'警告',info:'信息'};
+let fMod='all', fLv='all', fTime='all';
+
+function fmtTime(d){
+  const p=n=>String(n).padStart(2,'0');
+  return {hm:`${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`, md:`${p(d.getMonth()+1)}-${p(d.getDate())}`};
+}
+function passTime(d){
+  if(fTime==='all')return true;
+  const diff=now-d.getTime();
+  if(fTime==='today')return d.toDateString()===new Date(now).toDateString();
+  if(fTime==='7d')return diff<=7*864e5;
+  return true;
+}
+function render(){
+  const kw=(document.getElementById('kw').value||'').trim().toLowerCase();
+  const verbose=document.getElementById('verbose').checked;
+  // 详细模式关 → 隐藏 verbose 调试条目；这是"先有的全集"
+  const base=DATA.filter(r=> verbose || !r.verbose);
+  const rows=base.filter(r=>
+    (fMod==='all'||r.mod===fMod) &&
+    (fLv==='all'||r.lv===fLv) &&
+    passTime(r.t) &&
+    (!kw || (r.msg+r.det).toLowerCase().includes(kw))
+  );
+  const tbl=document.getElementById('logTable');
+  tbl.innerHTML = rows.length ? rows.map(r=>{
+    const f=fmtTime(r.t);
+    return `<div class="log-row lv-${r.lv}${r.verbose?' is-verbose':''}">
+      <span class="log-time">${f.hm}<small>${f.md}</small></span>
+      <span class="mod-badge"><span class="dot mod-${r.mod}"></span>${MODS[r.mod]}</span>
+      <span class="log-msg">${r.msg} <span class="det">· ${r.det}</span></span>
+      <span class="lv-tag ${r.lv}">${LVS[r.lv]}</span>
+    </div>`;
+  }).join('') : `<div class="empty">没有符合条件的日志</div>`;
+  document.getElementById('footCount').textContent = `显示 ${rows.length} / ${base.length} 条${verbose?'（含调试）':''}`;
+
+  // 概览 / 计数都按当前 base（是否含调试）统计，与列表一致
+  document.getElementById('stTotal').textContent=base.length;
+  document.getElementById('stOk').textContent=base.filter(r=>r.lv==='success').length;
+  document.getElementById('stBad').textContent=base.filter(r=>r.lv==='fail').length;
+  document.getElementById('stWarn').textContent=base.filter(r=>r.lv==='warn').length;
+  document.getElementById('cmAll').textContent=base.length;
+  for(const k of Object.keys(MODS)){
+    const el=document.getElementById('cm'+k.charAt(0).toUpperCase()+k.slice(1));
+    if(el)el.textContent=base.filter(r=>r.mod===k).length;
+  }
+  document.getElementById('navBadge').textContent=base.filter(r=>r.lv==='fail').length;
+}
+document.getElementById('modList').addEventListener('click',e=>{
+  const b=e.target.closest('.filter-chip'); if(!b)return;
+  fMod=b.dataset.mod;
+  [...document.querySelectorAll('#modList .filter-chip')].forEach(x=>x.classList.toggle('active',x===b));
+  render();
+});
+document.getElementById('lvList').addEventListener('click',e=>{
+  const b=e.target.closest('.filter-chip'); if(!b)return;
+  fLv=b.dataset.lv;
+  [...document.querySelectorAll('#lvList .filter-chip')].forEach(x=>x.classList.toggle('active',x===b));
+  render();
+});
+function setTime(b){fTime=b.dataset.time;[...document.querySelectorAll('#timeSeg button')].forEach(x=>x.classList.toggle('active',x===b));render();}
+function setTheme(t,b){document.documentElement.dataset.theme=t;[...document.querySelectorAll('.theme-switch button')].forEach(x=>x.classList.toggle('active',x===b));}
+render();
+</script>
+</body>
+</html>

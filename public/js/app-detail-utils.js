@@ -253,64 +253,166 @@ document.getElementById('modalOverlay').addEventListener('click', e => {
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') document.getElementById('modalOverlay').classList.remove('open'); });
 
-// ── Log ──
+// ══ 运行日志系统（重做：独立「运行日志」页 #page-logs，取代旧底部 #logPanel）══
+// 方案见 docs/LOG-SYSTEM-REDESIGN.md。条目扩字段 module/level/完整时间戳/detail，
+// localStorage 持久化（滚动保留），#page-logs 内四维筛选（模块/级别/时间/关键词）+ 详细模式。
+// addLog 兼容旧两参调用：addLog(msg, 'success'|'fail'|'pending') 仍可用。
+const LOG_STORAGE_KEY = 'bzxz_logs_v1';
+const LOG_MAX = 10000;            // 滚动保留上限
+const LOG_MAX_AGE_MS = 30 * 864e5; // 30 天
 let logIdCounter = 0;
 let logRenderScheduled = false;
-function addLog(msg, status) {
-  const now = new Date(new Date().getTime() + 8*3600000);
-  const time = `${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}`;
+// 日志页筛选态
+let logFilter = { module: 'all', level: 'all', time: 'all', kw: '', verbose: false };
+
+const LOG_MODULES = { search:'标准检索', download:'下载', complete:'标准补全', qual:'资质同步', ocr:'验证码 OCR', local:'本地库', system:'系统' };
+const LOG_LEVELS  = { success:'成功', fail:'失败', warn:'警告', info:'信息', pending:'进行中' };
+
+function loadPersistedLogs() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(LOG_STORAGE_KEY) || '[]');
+    if (Array.isArray(arr)) {
+      logEntries = arr;
+      logIdCounter = arr.reduce((m, l) => Math.max(m, l.id || 0), 0);
+    }
+  } catch { /* 损坏的存储忽略，从空开始 */ }
+}
+function persistLogs() {
+  try {
+    // 滚动裁剪：超量 / 超期都丢弃旧条
+    const cutoff = Date.now() - LOG_MAX_AGE_MS;
+    if (logEntries.length > LOG_MAX) logEntries = logEntries.slice(0, LOG_MAX);
+    logEntries = logEntries.filter(l => !l.tsMs || l.tsMs >= cutoff);
+    localStorage.setItem(LOG_STORAGE_KEY, JSON.stringify(logEntries));
+  } catch { /* 配额超限等：静默，不打断业务 */ }
+}
+
+// 旧两参 status 归一到新 level；module 缺省按文本推断兜底
+function normalizeLogStatus(s) { return LOG_LEVELS[s] ? s : 'info'; }
+function inferModule(msg) {
+  const t = String(msg || '');
+  if (/验证码|ocr/i.test(t)) return 'ocr';
+  if (/搜索/.test(t)) return 'search';
+  if (/下载|批量|切源|未匹配|可用下载源/.test(t)) return 'download';
+  if (/补全/.test(t)) return 'complete';
+  if (/资质|CNAS|CMA|同步/.test(t)) return 'qual';
+  if (/库|扫描|文件/.test(t)) return 'local';
+  return 'system';
+}
+
+// addLog(msg) | addLog(msg, 'success') | addLog(msg, { module, level, detail, verbose })
+function addLog(msg, opt) {
+  let module, level, detail, verbose;
+  if (typeof opt === 'string') { level = normalizeLogStatus(opt); }
+  else if (opt && typeof opt === 'object') { module = opt.module; level = opt.level; detail = opt.detail; verbose = opt.verbose; }
+  level = level || 'info';
+  module = module || inferModule(msg);
+  const d = new Date();
+  const tsMs = d.getTime();
+  const p = n => String(n).padStart(2, '0');
+  const time = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  const date = `${p(d.getMonth()+1)}-${p(d.getDate())}`;
   const id = ++logIdCounter;
-  logEntries.unshift({ id, time, msg, status });
-  if (!logRenderScheduled) {
-    logRenderScheduled = true;
-    requestAnimationFrame(() => { renderLogs(); logRenderScheduled = false; });
-  }
+  logEntries.unshift({ id, tsMs, time, date, module, level, msg, detail: detail || '', verbose: !!verbose });
+  scheduleLogRender();
   return id;
 }
 function updateLog(id, msg, status) {
   const entry = logEntries.find(l => l.id === id);
   if (entry) {
     entry.msg = msg;
-    if (status) entry.status = status;
-    if (!logRenderScheduled) {
-      logRenderScheduled = true;
-      requestAnimationFrame(() => { renderLogs(); logRenderScheduled = false; });
-    }
+    if (status) entry.level = normalizeLogStatus(status);
+    scheduleLogRender();
   }
 }
-function renderLogs() {
-  const visible = logEntries.slice(0, 50);
-  const successCount = logEntries.filter(l => l.status === 'success').length;
-  const failCount = logEntries.filter(l => l.status === 'fail').length;
-  const pendingCount = logEntries.filter(l => l.status === 'pending').length;
-  const summary = logEntries.length ? `
-    <div class="log-summary">
-      <span><strong>${successCount}</strong> 成功</span>
-      <span><strong>${failCount}</strong> 失败</span>
-      <span><strong>${pendingCount}</strong> 进行中</span>
-    </div>` : '';
-  document.getElementById('logBody').innerHTML = summary + visible.map(l =>
-    `<div class="log-item ${l.status}"><span class="log-time">${l.time}</span><span class="log-text">${escapeHtml(l.msg)}</span><span class="log-status ${l.status}">${l.status === 'success' ? '成功' : l.status === 'fail' ? '失败' : '进行中'}</span></div>`
-  ).join('');
-  document.getElementById('logTitle').textContent = `📋 下载日志 (${logEntries.length})`;
+function scheduleLogRender() {
+  if (logRenderScheduled) return;
+  logRenderScheduled = true;
+  requestAnimationFrame(() => { renderLogs(); persistLogs(); logRenderScheduled = false; });
 }
-document.getElementById('logToggle').addEventListener('click', () => {
-  const panel = document.getElementById('logPanel');
-  panel.classList.toggle('collapsed');
-  document.getElementById('logChevron').textContent = panel.classList.contains('collapsed') ? '▲' : '▼';
-  // Adjust toast position based on log panel state
-  const toastContainer = document.getElementById('toastContainer');
-  if (panel.classList.contains('collapsed')) {
-    toastContainer.style.bottom = '160px';
-  } else {
-    toastContainer.style.bottom = '260px';
-  }
-});
 
-document.getElementById('exportLogs').addEventListener('click', e => {
-  e.stopPropagation();
-  exportLogs();
-});
+function renderLogs() {
+  // 概览（始终基于全集，反映"目前累计"）
+  const ok = logEntries.filter(l => l.level === 'success').length;
+  const bad = logEntries.filter(l => l.level === 'fail').length;
+  const warn = logEntries.filter(l => l.level === 'warn').length;
+  setText('logStatTotal', logEntries.length);
+  setText('logStatOk', ok);
+  setText('logStatBad', bad);
+  setText('logStatWarn', warn);
+  // 侧栏失败角标
+  const badge = document.getElementById('logNavBadge');
+  if (badge) { badge.textContent = bad; badge.style.display = bad ? '' : 'none'; }
+  // 模块计数（基于"详细模式"决定的 base）
+  const base = logEntries.filter(l => logFilter.verbose || !l.verbose);
+  setText('logCntAll', base.length);
+  for (const k of Object.keys(LOG_MODULES)) setText('logCnt_' + k, base.filter(l => l.module === k).length);
+
+  const body = document.getElementById('logBody');
+  if (!body) return; // 日志页未挂载（如登录前）
+
+  const kw = (logFilter.kw || '').trim().toLowerCase();
+  const cutoffToday = new Date(); cutoffToday.setHours(0,0,0,0);
+  const rows = base.filter(l =>
+    (logFilter.module === 'all' || l.module === logFilter.module) &&
+    (logFilter.level === 'all' || l.level === logFilter.level) &&
+    passLogTime(l) &&
+    (!kw || (l.msg + ' ' + (l.detail||'')).toLowerCase().includes(kw))
+  );
+  body.innerHTML = rows.length ? rows.map(l =>
+    `<div class="log-row lv-${l.level}${l.verbose ? ' is-verbose' : ''}">
+      <span class="log-time">${l.time}<small>${l.date}</small></span>
+      <span class="log-mod"><span class="log-dot mod-${l.module}"></span>${LOG_MODULES[l.module] || l.module}</span>
+      <span class="log-msg">${escapeHtml(l.msg)}${l.detail ? ` <span class="log-det">· ${escapeHtml(l.detail)}</span>` : ''}</span>
+      <span class="log-lv lv-${l.level}">${LOG_LEVELS[l.level] || l.level}</span>
+    </div>`
+  ).join('') : `<div class="log-empty">没有符合条件的日志</div>`;
+  setText('logFootCount', `显示 ${rows.length} / ${base.length} 条${logFilter.verbose ? '（含调试）' : ''}`);
+}
+function passLogTime(l) {
+  if (logFilter.time === 'all') return true;
+  if (!l.tsMs) return true;
+  if (logFilter.time === 'today') { const c = new Date(); c.setHours(0,0,0,0); return l.tsMs >= c.getTime(); }
+  if (logFilter.time === '7d') return l.tsMs >= Date.now() - 7*864e5;
+  return true;
+}
+function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
+
+// 日志页交互入口（HTML onclick 调用）
+function setLogModule(b, mod) { logFilter.module = mod; logSelectChip('logModList', b); renderLogs(); }
+function setLogLevel(b, lv) { logFilter.level = lv; logSelectChip('logLvList', b); renderLogs(); }
+function setLogTime(b, t) { logFilter.time = t; logSelectChip('logTimeSeg', b); renderLogs(); }
+function onLogSearch(v) { logFilter.kw = v; renderLogs(); }
+function onLogVerbose(checked) { logFilter.verbose = !!checked; renderLogs(); }
+function logSelectChip(listId, b) {
+  const list = document.getElementById(listId);
+  if (list) [...list.children].forEach(x => x.classList.toggle('active', x === b));
+}
+async function clearLogs() {
+  if (!await showConfirm({ title: '清空日志', body: `确定清空全部 ${logEntries.length} 条运行日志？此操作不可恢复。`, danger: true, confirmText: '清空' })) return;
+  logEntries = [];
+  persistLogs();
+  renderLogs();
+  showToast('日志已清空');
+}
+
+function exportLogs() {
+  if (!logEntries.length) { showToast('暂无日志可导出', 'fail'); return; }
+  const rows = [['日期', '时间', '模块', '级别', '消息', '详情']];
+  logEntries.slice().reverse().forEach(l => rows.push([l.date||'', l.time||'', LOG_MODULES[l.module]||l.module||'', LOG_LEVELS[l.level]||l.level||'', l.msg||'', l.detail||'']));
+  const csv = rows.map(r => r.map(c => `"${String(c || '').replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `运行日志_${beijingDate()}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast(`已导出 ${logEntries.length} 条日志`);
+}
+
+// 启动：恢复持久化日志 + 首屏渲染
+loadPersistedLogs();
+requestAnimationFrame(() => { try { renderLogs(); } catch { /* 页面未挂载忽略 */ } });
 
 // ── Utils ──
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
@@ -351,19 +453,7 @@ function recordDownload(source, fileName, standardNumber) {
   }
 }
 
-function exportLogs() {
-  if (!logEntries.length) { showToast('暂无日志可导出', 'fail'); return; }
-  const rows = [['时间', '状态', '消息']];
-  logEntries.slice().reverse().forEach(l => rows.push([l.time, l.status, l.msg]));
-  const csv = rows.map(r => r.map(c => `"${String(c || '').replace(/"/g, '""')}"`).join(',')).join('\n');
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `下载日志_${beijingDate()}.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-  showToast(`已导出 ${logEntries.length} 条日志`);
-}
+// （旧 exportLogs 已移除——重做版在上方运行日志系统段，用 module/level/detail 字段）
 
 // ── Search history ──
 const SEARCH_HISTORY_KEY = 'bzxz_search_history';

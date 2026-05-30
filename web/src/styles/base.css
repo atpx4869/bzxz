@@ -209,10 +209,15 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   /* 横向溢出兜底也加到 html：移动端(iOS Safari / 部分安卓)body 的 overflow-x
-     常被浏览器提升到 html 而失效，只设 body 会出现"默认能横拖、要双指缩小才看全"。 */
+     常被浏览器提升到 html 而失效，只设 body 会出现"默认能横拖、要双指缩小才看全"。
+     用 clip 而非 hidden：hidden 会让元素变成滚动容器（overflow-y:visible 被算成 auto），
+     导致内部 position:sticky（如设置页 .set-nav 浮动二级菜单）相对它而非视口定位而失效。
+     clip 同样裁掉横向溢出但不创建滚动容器、不破坏 sticky。双声明兜底：老浏览器不识别
+     clip 时退回上一条 hidden（Win7 Chrome ≤109 已支持 clip）。 */
   overflow-x: hidden;
+  overflow-x: clip;
 }
-body { min-height: 100vh; overflow-x: hidden; }
+body { min-height: 100vh; overflow-x: hidden; overflow-x: clip; }
 
 /* 全站滚动条 —— 原 public/styles.css 行 470-474。
  * 放 base 是因为这是单一全局选择器，没有组件归属。 */
