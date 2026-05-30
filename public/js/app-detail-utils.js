@@ -756,12 +756,19 @@ function showConfirmHtml({ title = '请确认', bodyHtml = '', confirmText = '�
           <button class="btn btn-sm ${danger ? 'btn-danger' : 'btn-primary'}" data-confirm-action="confirm"${confirmDisabled ? ' disabled' : ''}>${escapeHtml(confirmText)}</button>
         </div>
       </div>`;
+    // 代际守卫：连续弹窗（如关联流程连开两次 showPrompt）复用同一 #confirmOverlay。
+    // finish() 里延迟 200ms 清空 innerHTML，若期间已开新弹窗，旧 timer 会把新弹窗的
+    // 卡片清掉，只剩带 backdrop-filter 的空遮罩 → 界面卡在高斯模糊。记一个递增 token，
+    // 只有"自己仍是最新一次"才真正收起/清空。
+    const myGen = (showConfirmHtml._gen = (showConfirmHtml._gen || 0) + 1);
     requestAnimationFrame(() => overlay.classList.add('open'));
     const finish = (result) => {
-      overlay.classList.remove('open');
-      setTimeout(() => { overlay.innerHTML = ''; }, 200);
       document.removeEventListener('keydown', onKey);
       resolve(result);
+      // 被后续弹窗接管 → 不要动 overlay（新弹窗自己负责显示/清理）
+      if (showConfirmHtml._gen !== myGen) return;
+      overlay.classList.remove('open');
+      setTimeout(() => { if (showConfirmHtml._gen === myGen) overlay.innerHTML = ''; }, 200);
     };
     const onKey = (e) => {
       if (e.key === 'Escape') { e.stopPropagation(); finish(false); }

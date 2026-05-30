@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix(ui): 修复连续弹窗导致界面卡在高斯模糊（关联流程连开两个 showPrompt）** — `showConfirmHtml` 在 `finish()` 里 `setTimeout(200ms)` 清空 `overlay.innerHTML`，而 `.confirm-overlay` 自带 `backdrop-filter:blur(4px)`。关联流程连开两次 showPrompt 复用同一 `#confirmOverlay`，第一个的清空 timer 在第二个渲染后才触发，把第二个卡片内容清掉 → 只剩带模糊的空遮罩、界面卡死。加"代际守卫"（递增 `_gen` token，只有仍是最新一次的弹窗才收起/清空），被新弹窗接管的旧 timer 不再误清。`app-detail-utils.js`
 - **fix(qual): 修复资质订阅"编辑/关联"报错 + win 客户端点击无效（两个叠加 bug）** —
   - **空 id**:`renderQualLabs` 的 `idField`/`nameField` 误写 snake_case(`lab_no`/`lab_name`),但 API 返回的是 camelCase(`labNo`/`labName`/`certNumber`,同函数 471/477/487/519 行都在用)。导致 CNAS 卡的"编辑/关联CMA"按钮 `lab[idField]` 取到 `undefined`→空 id→`PUT /api/qualifications/labs/cnas/`(尾部空)、关联 body `cnas_lab_no` 为空→后端 invalid request。改回 `labNo`/`labName`/`certNumber`。(CMA 卡另走分支、直接用 `lab.certNumber`,故幸免)
   - **win 端点击无效**:编辑/关联依赖 `window.prompt`,而 Electron 默认禁用原生 prompt（返回空 + 控制台报 "prompt() is not supported"），故 web 能用、win 点了没反应。新增 `showPrompt()`（基于 `showConfirmHtml` 的 `onMount` 钩子塞 input，返回 `Promise<string|null>`，单行 Enter 提交），替换 `editQualLabName`/`linkQualLab` 的 3 处 `prompt()`。`app-detail-utils.js`(新增)+ `app-qual.js`(替换)，两入口经 `/legacy/` 共用同一份、无需镜像
