@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <!-- 主题预设(避免 FOUC):必须放在所有 CSS 加载之前 -->
 <script>(function(){try{var t=localStorage.getItem('bzxz.theme');document.documentElement.setAttribute('data-theme',(t==='light'||t==='dark')?t:'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>标准盒子 · StandardsBox</title>
 <link rel="icon" type="image/png" sizes="256x256" href="/favicon-256.png">
 <link rel="shortcut icon" href="/favicon.ico">
@@ -312,7 +312,7 @@
   <!-- Page: Qualification -->
   <div class="page" id="page-qual">
     <h2 style="font-size:20px;font-weight:600;margin-bottom:18px">资质查询</h2>
-    <div class="qual-tab-bar" style="display:flex;gap:0;margin-bottom:14px;border-bottom:1px solid var(--border)">
+    <div class="qual-tab-bar">
       <button class="qual-tab active" data-qual-tab="search" onclick="switchQualTab('search')">搜索</button>
       <button class="qual-tab" data-qual-tab="visual" onclick="switchQualTab('visual')">可视化</button>
     </div>

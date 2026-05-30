@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix(mobile): 修复输入框聚焦放大不还原 + 资质页多余"搜索"tab 露出** —
+  - **聚焦放大**:iOS Safari 聚焦 `font-size<16px` 的输入框会自动放大页面、且无 `maximum-scale` 时不还原（退出输入后仍放大 → 又溢出）。手机端搜索 input(`.search-row input` / `.qual-search-row .qual-search-input`)字号 15px→16px；两个 `index.html` 的 viewport 补 `maximum-scale=1.0, user-scalable=no` 兜底其它小字号输入框
+  - **多余"搜索"tab**:`.qual-tab-bar` 容器带内联 `display:flex`，优先级高于 `responsive.css` 的 `.qual-tab-bar{display:none}`，导致手机端隐藏失效——可视化 tab 被 class 规则藏了、只剩"搜索"孤零零露出。把容器内联移进 CSS(`qualifications.css` + `public/styles.css` 镜像)，两个 `index.html` 去内联，窄屏 `display:none` 恢复生效
 - **fix(ui): 修复连续弹窗导致界面卡在高斯模糊（关联流程连开两个 showPrompt）** — `showConfirmHtml` 在 `finish()` 里 `setTimeout(200ms)` 清空 `overlay.innerHTML`，而 `.confirm-overlay` 自带 `backdrop-filter:blur(4px)`。关联流程连开两次 showPrompt 复用同一 `#confirmOverlay`，第一个的清空 timer 在第二个渲染后才触发，把第二个卡片内容清掉 → 只剩带模糊的空遮罩、界面卡死。加"代际守卫"（递增 `_gen` token，只有仍是最新一次的弹窗才收起/清空），被新弹窗接管的旧 timer 不再误清。`app-detail-utils.js`
 - **fix(qual): 修复资质订阅"编辑/关联"报错 + win 客户端点击无效（两个叠加 bug）** —
   - **空 id**:`renderQualLabs` 的 `idField`/`nameField` 误写 snake_case(`lab_no`/`lab_name`),但 API 返回的是 camelCase(`labNo`/`labName`/`certNumber`,同函数 471/477/487/519 行都在用)。导致 CNAS 卡的"编辑/关联CMA"按钮 `lab[idField]` 取到 `undefined`→空 id→`PUT /api/qualifications/labs/cnas/`(尾部空)、关联 body `cnas_lab_no` 为空→后端 invalid request。改回 `labNo`/`labName`/`certNumber`。(CMA 卡另走分支、直接用 `lab.certNumber`,故幸免)

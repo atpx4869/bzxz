@@ -110,6 +110,10 @@
 .qual-add-form input:focus { border-color: var(--accent); }
 .qual-section-title { font-size: 12px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.06em; margin: 18px 0 10px; display: flex; align-items: center; gap: 8px; }
 .qual-section-title::after { content: ''; flex: 1; height: 1px; background: rgba(36, 41, 48, 0.4); background: oklch(28% 0.014 255 / 0.4); }
+/* tab-bar 容器外观入 CSS（HTML 去内联）。原先内联 display:flex 优先级高于
+   responsive.css 的 .qual-tab-bar{display:none}，导致手机端隐藏失效、"搜索"
+   tab 孤零零露出来。移进 CSS 后窄屏 display:none 才能正常接管。 */
+.qual-tab-bar { display: flex; gap: 0; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
 /* tab 外观全交给 CSS（HTML 去内联、switchQualTab 只切 .active）。
    尺寸/字号沿用原内联值：padding 8px 16px、13px、2px 下边框。 */
 .qual-tab { padding: 8px 16px; font-size: 13px; font-weight: 500; border: none; background: none; cursor: pointer; color: var(--text-3); border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; }

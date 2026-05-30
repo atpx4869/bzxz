@@ -85,7 +85,7 @@
   body:not(.force-desktop) .search-row input {
     flex: 1 1 0;             /* 让 input + searchBtn 共占第一行 */
     padding: 11px 4px;
-    font-size: 15px;
+    font-size: 16px;         /* ≥16px：iOS Safari 聚焦 <16px 输入框会自动放大页面且不还原 */
     min-width: 0;
   }
   body:not(.force-desktop) .search-row #searchBtn,
@@ -115,7 +115,7 @@
     border: none;
     border-radius: 0;
     box-shadow: none;
-    font-size: 15px;
+    font-size: 16px;         /* ≥16px：iOS Safari 聚焦 <16px 输入框会自动放大页面且不还原 */
     min-width: 0;
     color: var(--text);
   }
