@@ -136,16 +136,20 @@ module 按调用文件兜底推断），逐处补 `module`。`ts` 用完整 ISO�
 
 ## 六、分期
 
-- **Phase 1（独立页骨架 + 前端日志迁入）**
+- **Phase 1 ✅ 已落地（独立页骨架 + 前端日志迁入）**
   - 侧栏加「运行日志」项 + `#page-logs`（两个 index.html）；`switchTab('logs')` 接上。
-  - `addLog` 扩字段（兼容旧两参）；各调用点补 `module`；`ts` 改完整时间戳。
-  - 渲染从 `#logPanel` 迁到 `#page-logs`，实现四维筛选（纯前端内存即可先跑通）。
+  - `addLog` 扩字段（兼容旧两参，module 按文本推断）；`ts` 改完整时间戳。
+  - 渲染从 `#logPanel` 迁到 `#page-logs`，实现四维筛选 + 详细模式。
   - localStorage 持久化 + 容量滚动 + 清空二次确认。
-  - 删 / 隐藏底部 `#logPanel`（保留下载实时进度的轻量提示，见风险）。
-- **Phase 2（后端日志汇入）**
-  - `log-buffer.ts` 加 `module`/`level` 映射；前端页拉 `/api/diagnostics/logs` 与本地段归并。
-  - 权限：`/api/diagnostics/logs` 现为 **requireAdmin** —— 非管理员的日志页是否显示后端段？
-    建议非管理员只看自己的前端操作日志，后端段对管理员可见（与现有权限一致）。
+  - 删底部 `#logPanel`，保留下载实时进度 `.progress-strip`。
+- **Phase 2 ✅ 已落地（后端日志汇入）**
+  - `log-buffer.ts` 加 `module`（按 `[前缀]`/关键词推断）；`/api/diagnostics/logs` 随之返回 module。
+  - 前端 `loadBackendLogs()`：切到日志页 / 点「刷新」时拉 `/api/diagnostics/logs?limit=500`，
+    映射 level（error→fail、warn→warn、log→info 且标 verbose）后与本地前端段 `getMergedLogs()`
+    按 tsMs 归并倒序。概览/计数/列表/导出全部基于合并集。
+  - 权限：`/api/diagnostics/logs` 仍 **requireAdmin** —— 非管理员请求被 403，前端静默只显前端日志
+    （后端段对管理员可见，与现有权限一致）。
+  - 清空只清前端本地段，后端 buffer 不归前端清（重启服务才滚动覆盖）；文案已说明。
 - **Phase 3（可选增强）**：后端日志落地按天文件；`app_logs` 表统一落库；导出 csv/log；
   日志详情展开（堆栈、请求参数）。
 

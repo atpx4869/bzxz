@@ -178,6 +178,7 @@ function switchTab(tab) {
   });
   var titleEl = document.querySelector('.topbar-title');
   if (titleEl) titleEl.textContent = TAB_LABELS[tab] || '标准检索';
+  if (tab === 'logs' && typeof loadBackendLogs === 'function') loadBackendLogs();
   if (tab === 'stats') loadStats();
   if (tab === 'users') loadUsers();
   if (tab === 'history') renderDownloadHistory();

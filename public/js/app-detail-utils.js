@@ -331,12 +331,51 @@ function scheduleLogRender() {
   requestAnimationFrame(() => { renderLogs(); persistLogs(); logRenderScheduled = false; });
 }
 
+// Phase 2：后端运行日志（/api/diagnostics/logs，仅管理员可拉）。映射到前端同一形状。
+// 后端 level: error→fail（默认可见）、warn→warn（默认可见）、log→info（标 verbose，仅详细模式）。
+let backendLogEntries = [];
+let backendLogsLoading = false;
+async function loadBackendLogs() {
+  if (backendLogsLoading) return;
+  backendLogsLoading = true;
+  try {
+    const res = await fetch('/api/diagnostics/logs?limit=500');
+    if (!res.ok) { backendLogEntries = []; return; } // 非管理员 403 等 → 静默只显前端日志
+    const data = await readApiResponse(res);
+    const items = (data && data.items) || [];
+    backendLogEntries = items.map((it, i) => {
+      const d = it.ts ? new Date(it.ts) : new Date();
+      const tsMs = d.getTime();
+      const p = n => String(n).padStart(2, '0');
+      const level = it.level === 'error' ? 'fail' : it.level === 'warn' ? 'warn' : 'info';
+      return {
+        id: 'be_' + i,
+        tsMs,
+        time: `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,
+        date: `${p(d.getMonth()+1)}-${p(d.getDate())}`,
+        module: it.module || 'system',
+        level,
+        msg: it.message || '',
+        detail: '',
+        verbose: it.level === 'log',   // 普通 log 归调试档，默认折叠
+        source: 'backend',
+      };
+    });
+  } catch { backendLogEntries = []; }
+  finally { backendLogsLoading = false; renderLogs(); }
+}
+// 前端 + 后端合并，按时间倒序（新在上）
+function getMergedLogs() {
+  return logEntries.concat(backendLogEntries).sort((a, b) => (b.tsMs || 0) - (a.tsMs || 0));
+}
+
 function renderLogs() {
+  const all = getMergedLogs();
   // 概览（始终基于全集，反映"目前累计"）
-  const ok = logEntries.filter(l => l.level === 'success').length;
-  const bad = logEntries.filter(l => l.level === 'fail').length;
-  const warn = logEntries.filter(l => l.level === 'warn').length;
-  setText('logStatTotal', logEntries.length);
+  const ok = all.filter(l => l.level === 'success').length;
+  const bad = all.filter(l => l.level === 'fail').length;
+  const warn = all.filter(l => l.level === 'warn').length;
+  setText('logStatTotal', all.length);
   setText('logStatOk', ok);
   setText('logStatBad', bad);
   setText('logStatWarn', warn);
@@ -344,7 +383,7 @@ function renderLogs() {
   const badge = document.getElementById('logNavBadge');
   if (badge) { badge.textContent = bad; badge.style.display = bad ? '' : 'none'; }
   // 模块计数（基于"详细模式"决定的 base）
-  const base = logEntries.filter(l => logFilter.verbose || !l.verbose);
+  const base = all.filter(l => logFilter.verbose || !l.verbose);
   setText('logCntAll', base.length);
   for (const k of Object.keys(LOG_MODULES)) setText('logCnt_' + k, base.filter(l => l.module === k).length);
 
@@ -389,17 +428,19 @@ function logSelectChip(listId, b) {
   if (list) [...list.children].forEach(x => x.classList.toggle('active', x === b));
 }
 async function clearLogs() {
-  if (!await showConfirm({ title: '清空日志', body: `确定清空全部 ${logEntries.length} 条运行日志？此操作不可恢复。`, danger: true, confirmText: '清空' })) return;
+  // 只清前端本地日志；后端 log-buffer 是服务进程内的环形缓冲，不归这里清（重启服务才滚动覆盖）。
+  if (!await showConfirm({ title: '清空日志', body: `确定清空 ${logEntries.length} 条本地（前端）运行日志？后端运行日志不受影响。此操作不可恢复。`, danger: true, confirmText: '清空' })) return;
   logEntries = [];
   persistLogs();
   renderLogs();
-  showToast('日志已清空');
+  showToast('本地日志已清空');
 }
 
 function exportLogs() {
-  if (!logEntries.length) { showToast('暂无日志可导出', 'fail'); return; }
-  const rows = [['日期', '时间', '模块', '级别', '消息', '详情']];
-  logEntries.slice().reverse().forEach(l => rows.push([l.date||'', l.time||'', LOG_MODULES[l.module]||l.module||'', LOG_LEVELS[l.level]||l.level||'', l.msg||'', l.detail||'']));
+  const all = getMergedLogs();              // 含前端 + 后端，按时间倒序
+  if (!all.length) { showToast('暂无日志可导出', 'fail'); return; }
+  const rows = [['日期', '时间', '模块', '级别', '来源', '消息', '详情']];
+  all.slice().reverse().forEach(l => rows.push([l.date||'', l.time||'', LOG_MODULES[l.module]||l.module||'', LOG_LEVELS[l.level]||l.level||'', l.source==='backend'?'后端':'前端', l.msg||'', l.detail||'']));
   const csv = rows.map(r => r.map(c => `"${String(c || '').replace(/"/g, '""')}"`).join(',')).join('\n');
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
@@ -407,7 +448,7 @@ function exportLogs() {
   a.download = `运行日志_${beijingDate()}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
-  showToast(`已导出 ${logEntries.length} 条日志`);
+  showToast(`已导出 ${all.length} 条日志`);
 }
 
 // 启动：恢复持久化日志 + 首屏渲染

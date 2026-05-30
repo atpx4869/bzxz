@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat(logs): 运行日志系统 Phase 2 — 汇入后端运行日志** — 把后端 `log-buffer`（拦截 console 的环形缓冲）的运行日志接入「运行日志」页，与前端操作日志统一展示：
+  - **后端**：`log-buffer.ts` 的 `LogEntry` 加 `module` 字段，按消息里的 `[前缀]`/关键词（`[ocr-worker]`/`[by-adapter]`/`[gbw]`/`[resolver]`/`[cnas]`/`[library]`/`[db-backup]` 等）推断归到前端同一套模块分类；`/api/diagnostics/logs` 随之返回 module（接口签名不变，仍 requireAdmin）
+  - **前端**：新增 `loadBackendLogs()`，切到日志页或点页头「刷新」时拉 `/api/diagnostics/logs?limit=500`，映射 level（error→失败、warn→警告、log→信息且标 verbose 归调试档）后与本地前端段 `getMergedLogs()` 按时间戳归并倒序。概览数字 / 模块计数 / 列表 / 导出全部基于合并集
+  - **权限优雅降级**：非管理员请求 403 → 静默，只显前端日志（后端段对管理员可见，与现有权限一致）
+  - **清空语义**：仅清前端本地段，后端 buffer 不归前端清（重启服务才滚动覆盖），confirm 文案已说明
+  - 导出 CSV 增「来源」列（前端/后端）；页头加「刷新」按钮（两个 index.html 同步）
 - **feat(logs): 运行日志系统重做 Phase 1 — 独立菜单 + 持久化 + 四维筛选** — 把原悬浮在所有页面底部的「下载日志」可折叠面板，重做成与标准检索/系统设置同级的独立「运行日志」页。方案见 `docs/LOG-SYSTEM-REDESIGN.md`，预览 `docs/log-system-prototype.html`：
   - **数据模型扩字段**：`addLog` 从 `(msg,status)` 扩为 `(msg,{module,level,detail,verbose})`，**兼容旧两参调用**（旧 status 归一到 level，module 按文本推断）；时间戳从"时:分"升到完整日期+时:分:秒。模块：搜索/下载/补全/资质同步/验证码 OCR/本地库/系统
   - **localStorage 持久化**：关客户端重启仍可查史，滚动保留最近 10000 条 / 30 天，配额超限静默不打断业务
