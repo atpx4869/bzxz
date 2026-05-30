@@ -398,15 +398,35 @@ function renderLogs() {
     passLogTime(l) &&
     (!kw || (l.msg + ' ' + (l.detail||'')).toLowerCase().includes(kw))
   );
-  body.innerHTML = rows.length ? rows.map(l =>
-    `<div class="log-row lv-${l.level}${l.verbose ? ' is-verbose' : ''}">
+  body.innerHTML = rows.length ? rows.map(l => {
+    const full = l.msg + (l.detail ? '\n' + l.detail : '');
+    // 可展开 = 多行（堆栈）或正文偏长，被单行 nowrap 截断看不全
+    const expandable = /[\n\r]/.test(full) || full.length > 80;
+    const open = logExpanded.has(String(l.id));
+    return `<div class="log-row lv-${l.level}${l.verbose ? ' is-verbose' : ''}${expandable ? ' is-expandable' : ''}${open ? ' is-open' : ''}"${expandable ? ` data-log-id="${l.id}"` : ''}>
       <span class="log-time">${l.time}<small>${l.date}</small></span>
       <span class="log-mod"><span class="log-dot mod-${l.module}"></span>${LOG_MODULES[l.module] || l.module}</span>
-      <span class="log-msg">${escapeHtml(l.msg)}${l.detail ? ` <span class="log-det">· ${escapeHtml(l.detail)}</span>` : ''}</span>
+      <span class="log-msg">${expandable ? '<span class="log-caret">▸</span>' : ''}${escapeHtml(l.msg)}${l.detail ? ` <span class="log-det">· ${escapeHtml(l.detail)}</span>` : ''}</span>
       <span class="log-lv lv-${l.level}">${LOG_LEVELS[l.level] || l.level}</span>
-    </div>`
-  ).join('') : `<div class="log-empty">没有符合条件的日志</div>`;
+      ${expandable && open ? `<pre class="log-full">${escapeHtml(full)}</pre>` : ''}
+    </div>`;
+  }).join('') : `<div class="log-empty">没有符合条件的日志</div>`;
   setText('logFootCount', `显示 ${rows.length} / ${base.length} 条${logFilter.verbose ? '（含调试）' : ''}`);
+}
+// 点击可展开行 → 切换完整正文（堆栈/长文）。事件委托，绑一次。
+let logExpanded = new Set();
+function initLogExpandDelegation() {
+  const body = document.getElementById('logBody');
+  if (!body || body._expandBound) return;
+  body._expandBound = true;
+  body.addEventListener('click', e => {
+    const row = e.target.closest('.log-row.is-expandable');
+    if (!row || !row.dataset.logId) return;
+    const id = row.dataset.logId;
+    // id 可能是数字（前端）或 'be_n'（后端），统一按字符串比对
+    if (logExpanded.has(id)) logExpanded.delete(id); else logExpanded.add(id);
+    renderLogs();
+  });
 }
 function passLogTime(l) {
   if (logFilter.time === 'all') return true;
@@ -451,9 +471,9 @@ function exportLogs() {
   showToast(`已导出 ${all.length} 条日志`);
 }
 
-// 启动：恢复持久化日志 + 首屏渲染
+// 启动：恢复持久化日志 + 首屏渲染 + 绑定展开委托
 loadPersistedLogs();
-requestAnimationFrame(() => { try { renderLogs(); } catch { /* 页面未挂载忽略 */ } });
+requestAnimationFrame(() => { try { renderLogs(); initLogExpandDelegation(); } catch { /* 页面未挂载忽略 */ } });
 
 // ── Utils ──
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }

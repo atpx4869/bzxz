@@ -5,9 +5,17 @@
  *
  * We intercept console.warn / console.error / console.log on import. The
  * originals are still called so anyone with a real console still sees output.
+ *
+ * Phase 3：内存 buffer 之外，再按天追加落地到 <userData>/bzxz-logs/app-YYYYMMDD.log，
+ * 这样进程重启后仍能在磁盘查历史（内存 buffer 重启即丢）。落地全程 best-effort：
+ * 任何 I/O 失败都静默吞掉，绝不影响业务 / console。
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
+
 const MAX_ENTRIES = 500;
+const LOG_RETENTION_DAYS = 14; // 按天文件保留天数（超期清理）
 
 // 前端「运行日志」页用的模块分类（与前端 LOG_MODULES 对齐）。
 export type LogModule = 'search' | 'download' | 'complete' | 'qual' | 'ocr' | 'local' | 'system';
@@ -35,6 +43,46 @@ function inferModule(message: string): LogModule {
   return 'system';
 }
 
+// ── 按天文件落地（best-effort，失败静默）──────────────────────────────
+// 目录优先 BZXZ_USER_DATA_DIR（Electron 主进程写入的 userData）；非 Electron
+// （开发 / 测试）下没有该变量时直接关闭文件落地，只保留内存 buffer，避免往
+// 不确定的 cwd 乱写文件。
+function logDir(): string | null {
+  const userData = process.env.BZXZ_USER_DATA_DIR;
+  if (!userData) return null;
+  return path.join(userData, 'bzxz-logs');
+}
+let cleanedOnce = false;
+function cleanupOldLogs(dir: string): void {
+  if (cleanedOnce) return;
+  cleanedOnce = true;
+  fs.readdir(dir, (err, files) => {
+    if (err) return;
+    const cutoff = Date.now() - LOG_RETENTION_DAYS * 864e5;
+    for (const f of files) {
+      const m = /^app-(\d{4})(\d{2})(\d{2})\.log$/.exec(f);
+      if (!m) continue;
+      const t = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00Z`).getTime();
+      if (t < cutoff) fs.unlink(path.join(dir, f), () => { /* 忽略 */ });
+    }
+  });
+}
+function appendToFile(entry: LogEntry): void {
+  const dir = logDir();
+  if (!dir) return;
+  try {
+    const d = new Date(entry.ts);
+    const p = (n: number) => String(n).padStart(2, '0');
+    const file = path.join(dir, `app-${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}.log`);
+    const line = `${entry.ts}\t${entry.level}\t${entry.module}\t${entry.message.replace(/\r?\n/g, '\\n')}\n`;
+    fs.mkdir(dir, { recursive: true }, (mkErr) => {
+      if (mkErr) return; // 建目录失败：静默放弃本条落地
+      fs.appendFile(file, line, () => { /* 写失败静默 */ });
+      cleanupOldLogs(dir);
+    });
+  } catch { /* 任何异常都不影响 console / 业务 */ }
+}
+
 function push(level: LogEntry['level'], args: unknown[]): void {
   const message = args
     .map((a) => {
@@ -43,8 +91,10 @@ function push(level: LogEntry['level'], args: unknown[]): void {
       try { return JSON.stringify(a); } catch { return String(a); }
     })
     .join(' ');
-  buffer.push({ ts: new Date().toISOString(), level, message, module: inferModule(message) });
+  const entry: LogEntry = { ts: new Date().toISOString(), level, message, module: inferModule(message) };
+  buffer.push(entry);
   if (buffer.length > MAX_ENTRIES) buffer.shift();
+  appendToFile(entry);
 }
 
 const originalLog = console.log;

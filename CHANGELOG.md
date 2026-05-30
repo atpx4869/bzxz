@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat(logs): 运行日志系统 Phase 3 — 详情展开 + 后端日志按天落文件** —
+  - **详情展开**：多行（堆栈）或长正文的日志行可点击展开完整内容（`.log-full` 等宽 pre 块、可滚动），解决后端 error 堆栈被单行 `nowrap` 截断看不全的问题。`logExpanded` 记展开态，行点击事件委托绑定一次（前端 id 与后端 `be_n` id 统一按字符串比对）。`app-detail-utils.js` + `log-panel.css`/`public` 镜像
+  - **后端按天落文件**：`log-buffer.ts` 在内存环形 buffer 之外，按天追加 `<userData>/bzxz-logs/app-YYYYMMDD.log`（tab 分隔 ts/level/module/message），保留最近 14 天、超期自动清理。全程 best-effort、任何 I/O 失败静默不影响 console/业务；目录取 `BZXZ_USER_DATA_DIR`（与 db-backup/library-paths 同约定），非 Electron（开发/测试）无该变量时不落文件、避免往 cwd 乱写
+  - **导出** CSV 含来源列（Phase 2 已落）
+  - **跳过 `app_logs` 入库**：按天文件已提供磁盘持久化，再建 DB 表属重复能力 + schema 迁移风险，本期不做（见 `docs/LOG-SYSTEM-REDESIGN.md` Phase 3）
 - **feat(logs): 运行日志系统 Phase 2 — 汇入后端运行日志** — 把后端 `log-buffer`（拦截 console 的环形缓冲）的运行日志接入「运行日志」页，与前端操作日志统一展示：
   - **后端**：`log-buffer.ts` 的 `LogEntry` 加 `module` 字段，按消息里的 `[前缀]`/关键词（`[ocr-worker]`/`[by-adapter]`/`[gbw]`/`[resolver]`/`[cnas]`/`[library]`/`[db-backup]` 等）推断归到前端同一套模块分类；`/api/diagnostics/logs` 随之返回 module（接口签名不变，仍 requireAdmin）
   - **前端**：新增 `loadBackendLogs()`，切到日志页或点页头「刷新」时拉 `/api/diagnostics/logs?limit=500`，映射 level（error→失败、warn→警告、log→信息且标 verbose 归调试档）后与本地前端段 `getMergedLogs()` 按时间戳归并倒序。概览数字 / 模块计数 / 列表 / 导出全部基于合并集

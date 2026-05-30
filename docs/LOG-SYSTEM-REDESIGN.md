@@ -150,8 +150,17 @@ module 按调用文件兜底推断），逐处补 `module`。`ts` 用完整 ISO�
   - 权限：`/api/diagnostics/logs` 仍 **requireAdmin** —— 非管理员请求被 403，前端静默只显前端日志
     （后端段对管理员可见，与现有权限一致）。
   - 清空只清前端本地段，后端 buffer 不归前端清（重启服务才滚动覆盖）；文案已说明。
-- **Phase 3（可选增强）**：后端日志落地按天文件；`app_logs` 表统一落库；导出 csv/log；
-  日志详情展开（堆栈、请求参数）。
+- **Phase 3 ✅ 已落地（部分，可选增强）**
+  - **日志详情展开**：多行（堆栈）/ 长正文行可点击展开完整内容（`.log-full` pre 块，等宽、可滚）；
+    `logExpanded` 记展开态，事件委托绑定一次。纯前端。
+  - **后端日志按天落文件**：`log-buffer.ts` 在内存 buffer 之外，按天追加
+    `<userData>/bzxz-logs/app-YYYYMMDD.log`（tab 分隔：ts/level/module/message），
+    保留最近 14 天、超期清理。全程 best-effort、失败静默；目录取 `BZXZ_USER_DATA_DIR`，
+    非 Electron（开发/测试）无该变量时**不落文件**，避免往 cwd 乱写。
+  - **导出 csv**：已在 Phase 2 落地（含来源列）。
+  - **跳过 `app_logs` 入库**：按天文件已提供磁盘持久化，再建 DB 表是重复能力 + 多一处 schema
+    迁移风险，**不做**。需要全文检索历史日志再议。
+  - 待办：日志页直接读取/下载后端 .log 历史文件（目前后端只回内存 buffer 的近 500 条）。
 
 ---
 
