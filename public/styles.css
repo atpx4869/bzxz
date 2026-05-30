@@ -161,7 +161,7 @@
   background: oklch(72% 0.035 75);
 }
 
-html { background: var(--bg); color: var(--text); font: 400 15px/1.65 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+html { background: var(--bg); color: var(--text); font: 400 15px/1.65 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; overflow-x: hidden; }
 body { min-height: 100vh; overflow-x: hidden; }
 
 /* ── Topbar ── */
@@ -4164,7 +4164,8 @@ body:not(.force-desktop) .preview-title { font-size: 13px; }
 .set-page-head p { margin-top: 5px; font-size: 13px; line-height: 1.55; color: var(--text-3); max-width: 60ch; }
 .set-page-head-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
-.set-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.set-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.set-card-head > :first-child { min-width: 0; }
 .set-card-title { font-size: 15px; font-weight: 650; color: var(--text); letter-spacing: 0.01em; }
 .set-card-title-sub { margin-top: 2px; font-size: 12px; color: var(--text-3); font-weight: 400; }
 .set-card-body { padding: 16px; }

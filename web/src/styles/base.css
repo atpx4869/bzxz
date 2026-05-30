@@ -208,6 +208,9 @@ html {
   font: 400 15px/1.65 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* 横向溢出兜底也加到 html：移动端(iOS Safari / 部分安卓)body 的 overflow-x
+     常被浏览器提升到 html 而失效，只设 body 会出现"默认能横拖、要双指缩小才看全"。 */
+  overflow-x: hidden;
 }
 body { min-height: 100vh; overflow-x: hidden; }
 

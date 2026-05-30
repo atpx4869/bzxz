@@ -148,7 +148,8 @@
 /* ── 卡标题（卡内一级标题，15px/650）──────────────────────────────────
  * 取代 .batch-card-head h3 / .library-head h3 / .complete-card-head h3 /
  * .qual-visual-card h3 等各页各写的卡标题。 */
-.set-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.set-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.set-card-head > :first-child { min-width: 0; }
 .set-card-title { font-size: 15px; font-weight: 650; color: var(--text); letter-spacing: 0.01em; }
 .set-card-title-sub { margin-top: 2px; font-size: 12px; color: var(--text-3); font-weight: 400; }
 .set-card-body { padding: 16px; }

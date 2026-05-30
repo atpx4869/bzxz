@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix(mobile): 修复移动端默认横向溢出(右侧被挡、需双指缩小才看全)** — 两处:
+  - **根因兜底**:`html` 补 `overflow-x: hidden`(原先只有 `body` 有)。移动端 iOS Safari / 部分安卓会把 `body` 的横向滚动提升到 `html`,只设 `body` 失效,表现为"默认能横拖、要双指缩小才看全局"。`base.css` + `public/styles.css` 镜像
+  - **新组件防溢出**:Phase C 新增的 `.set-card-head`(`justify-content:space-between`)补 `flex-wrap:wrap` + 首子元素 `min-width:0`,避免右侧长徽章(如批量页"解析完成 · 匹配 X …")不换行把卡撑宽
 - **fix(theme): toast 在亮色/纸张主题下补浮层覆盖(检查更新等弹出不再是暗灰)** — `.toast` 背景写死暗色(`rgba(17,22,29,0.9)`),而它的同类浮层(`.confirm-card`/`.download-center`/`.user-dropdown`/`.shortcuts-panel`)在 `glass.css` 都有 light/paper 覆盖、唯独漏了 toast,导致亮/纸张主题下"检查更新""已是最新版"等提示仍是难看的暗灰块。把 `.toast` 加进这两个主题的浮层覆盖选择器组(白底 + frosted + 主题描边),文字色本就走 `var(--text)` 自适应。`glass.css` light/paper 两段 + `public/styles.css` 镜像同改
 - **feat(ui): 全站重设计 Phase C — 批量下载骨架 + 五页页头统一 `.set-page-head`** — 用 Phase A 组件层把"规范派"页面收口,分两步降风险:
   - **批量下载页骨架**:两张卡 `.batch-card`→`.set-card`(正文移入 `.set-card-body`),卡头 `.batch-card-head`+`.batch-kicker`+`h3`→`.set-card-head`+`.set-kicker`+`.set-card-title`,源提示 `.batch-mode-pill`→`.set-badge is-muted`。`.batch-textarea`(资质共用)/`.batch-actions`/`.progress-wrap` 保留
