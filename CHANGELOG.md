@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat(qual): 全站重设计 Phase B — 资质查询 tab 去内联(`switchQualTab` 只切 class)** — 清掉资质查询页两个 tab(搜索/可视化)的内联 style,这是 `app-qual.js` 85 处内联里最扎眼、最独立的一刀:
+  - `switchQualTab` 删掉 `t.style.color` / `t.style.borderBottomColor` 两行内联赋值,只切 `.qual-tab.active`(与同文件 `switchQualSettingsTab` 同款 CSS 驱动写法)
+  - `.qual-tab` 外观移入 CSS:`padding 8px 16px`/`13px`/`2px` 下边框 + `.qual-tab.active`(`var(--text)` + `var(--accent)` 下边框)沿用原内联值,视觉零变化。`web/src/styles/pages/qualifications.css` + `public/styles.css` 镜像
+  - 两个 `index.html` 的 tab 按钮去掉一长串内联 style(共用同一份 app-qual.js)
+  - **重新排期说明**:资质/Labr 的页头 `.set-page-head`/搜索壳 `.set-search`/筛选胶囊 `.set-chip` 改名**挪到 Phase F** —— 这些类名被移动端 search-stage 动画(`search-stage.css`/`responsive.css`/`glass.css`)按精确选择器吃住,且 `.search-row` 与标准检索(保留原版)共用,桌面单改会静默打断移动端。已在 `docs/PAGES-REDESIGN.md` §4.2/§4.7 记录
 - **feat(ui): 全站重设计 Phase A — `.set-*` 统一组件层外扩(纯样式、零引用)** — 续设置页重构,把已验证的 `.set-*` 体系外扩到其余 8 页(标准检索/Labr/批量/补全/本地库/历史/资质/统计/用户)用,是后续各页改造的地基。方案见 `docs/PAGES-REDESIGN.md` §三;可点击原型 `docs/pages-redesign-prototype.html` + `docs/mobile-redesign-prototype.html`:
   - 在 `web/src/styles/pages/settings.css` 末尾追加「全站统一组件层」,新增成员:`.set-page-head`(kicker+h1+p+右操作位,取代 `.page-heading` 与所有裸 `<h2 style>`)/`.set-card-head`+`.set-card-title`/`.set-toolbar`(`-left/-right`,取代 `.toolbar`/`.local-toolbar`/`.stats-controls`)/`.set-table`(sticky thead+hover+`.col-check/.col-actions/.col-num`,取代 `.local-table`/`.users-table`)/`.set-search`(`.thin` 薄变体,统一三处搜索壳覆写)/`.set-chips`+`button.set-chip` 交互筛选态(取代 `.qual-filter-btn`/`.source-tag`)/`.set-stats`+`.set-stat`(语义色,取代 `.stat-card`)/`.set-empty`/`.set-stepper`+`.set-step`(态:active/done/error)/`.set-badge`(语义色变体)/`.set-split`(`-wide`,取代各页二列 grid)/`.set-switch-danger`(高危开关红色态)/`.set-scroll-pane`(收口 `100vh - topbar - 140px` 魔数)/`.set-pager`/`.set-modal`(`-backdrop/-head/-body/-foot`,`.is-danger`)
   - **纯新增、暂无 HTML 引用(CI 必绿)**;Phase B–E 各页逐步接上

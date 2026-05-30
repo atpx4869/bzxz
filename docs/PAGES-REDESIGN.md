@@ -212,7 +212,10 @@
   应收成一个布局类 `.set-scroll-pane`，别让 140px 散落。
 - 批量下载选中按钮 `#labrBatchBtn` 的 disabled 态切换逻辑确认与选中计数同步。
 
-**③ 阶段**：Phase B（页内 markup 简单，先拿它和资质练手 `.set-page-head` + `.set-search`）。
+**③ 阶段**：~~Phase B~~ → **Phase F**（与资质同因重新排期，见 §4.7 ③ 的耦合说明）。
+Labr 的 `.labr-search-row` / 裸 `<h2>`/`<p>` 同样被移动端 search-stage 选择器吃住
+（`search-stage.css` 27/47–48/58/93 行），桌面单改会断移动端。页头/搜索壳/分页器改名挪到
+Phase F 与移动选择器同改；本页 Phase B 无独立可做项（无内联 tab 之类），整体后移。
 
 ---
 
@@ -395,6 +398,19 @@
 
 **③ 阶段**：Phase B（先清 tab 内联 + 页头/搜索壳/筛选胶囊外壳；结果列表保留，风险低）。
 **注意**：结果区是"保留"，不是"重做"——本页工作量主要在清 85 处内联，不在改版式。
+
+> **⚠ 落地时发现的耦合（2026-05-30，已据此重新排期）：**
+> `.qual-search-row` / `.qual-filters` / `#page-qual > h2` / `.qual-tab-bar` 以及 `.search-row`
+> 玻璃壳，全部被**移动端 search-stage 动画**按精确类名/标签选择器吃住
+> （`search-stage.css` / `responsive.css` / `glass.css`：sticky 吸顶 + landing/active 分阶段 +
+> 窄屏隐藏），且 `.search-row` 还**与标准检索共用**（标准检索是保留原版、Phase D）。
+> 单在桌面把这些改名/换标签会**静默打断移动端**，而重写那些移动选择器本就是 **Phase F** 的活。
+> 故重新排期：
+> - **Phase B 已落地**：`switchQualTab` 去内联（只切 `.qual-tab.active`，外观移入 CSS）+
+>   两个 `index.html` tab 按钮去内联 style。**零移动端风险**，是 85 处内联里最扎眼、最独立的一刀。
+> - **页头 `.set-page-head` / 搜索壳 `.set-search` / 筛选胶囊 `.set-chip` 改名** → **挪到 Phase F**
+>   与移动 search-stage 选择器一并改，避免中间态破。
+> - 结果区分组列表（保留原版）始终不动。
 
 ---
 

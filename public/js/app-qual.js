@@ -15,11 +15,10 @@ function switchQualTab(tab) {
   // 手机端两个子标签都可用（搜索 + 可视化）。早期版本曾强制重定向到可视化，
   // 但用户能看到「搜索」按钮却点不动反而更糟。窄屏下若搜索页有局部排版问题，
   // 应在 CSS 单点修，不要禁掉整个功能。
+  // 外观（文字色 / 下边框）由 .qual-tab[.active] CSS 接管，这里只切 class
+  // （与 switchQualSettingsTab 同款写法，消除内联 style）。
   document.querySelectorAll('.qual-tab').forEach(t => {
-    const active = t.dataset.qualTab === tab;
-    t.classList.toggle('active', active);
-    t.style.color = active ? 'var(--text)' : 'var(--text-3)';
-    t.style.borderBottomColor = active ? 'var(--accent)' : 'transparent';
+    t.classList.toggle('active', t.dataset.qualTab === tab);
   });
   const searchEl = document.getElementById('qualSearchTab');
   const visualEl = document.getElementById('qualVisualTab');
