@@ -784,6 +784,45 @@ function showConfirmHtml({ title = '请确认', bodyHtml = '', confirmText = '�
   });
 }
 
+// 文本输入弹窗 —— 替代 window.prompt（Electron/win 客户端禁用原生 prompt，
+// 返回空且控制台报 "prompt() is not supported"，导致依赖 prompt 的功能在 win 端
+// 静默失效）。基于 showConfirmHtml 的 onMount 钩子塞一个 input。
+// 返回 Promise<string|null>：确认返回输入值（已 trim），取消返回 null。
+// opts: { title, label, defaultValue, placeholder, confirmText, multiline }
+function showPrompt({ title = '请输入', label = '', defaultValue = '', placeholder = '', confirmText = '确定', multiline = false } = {}) {
+  const fieldId = 'promptField_' + Math.random().toString(36).slice(2, 8);
+  const field = multiline
+    ? `<textarea id="${fieldId}" class="batch-textarea" style="min-height:96px" placeholder="${escapeHtml(placeholder)}">${escapeHtml(defaultValue)}</textarea>`
+    : `<input id="${fieldId}" type="text" class="qual-search-input" style="width:100%" placeholder="${escapeHtml(placeholder)}" value="${escapeHtml(defaultValue)}">`;
+  const bodyHtml = `${label ? `<div style="margin-bottom:8px;font-size:13px;color:var(--text-2);white-space:pre-wrap">${escapeHtml(label)}</div>` : ''}${field}`;
+  return showConfirmHtml({
+    title,
+    bodyHtml,
+    confirmText,
+    onMount(overlay) {
+      const el = overlay.querySelector('#' + fieldId);
+      if (el) {
+        el.focus();
+        if (!multiline && typeof el.select === 'function') el.select();
+        // 单行：Enter 提交（多行交给 showConfirmHtml 默认行为，避免吞掉换行）
+        if (!multiline) {
+          el.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              const btn = overlay.querySelector('[data-confirm-action="confirm"]');
+              if (btn) btn.click();
+            }
+          });
+        }
+      }
+    },
+  }).then(ok => {
+    if (!ok) return null;
+    const el = document.getElementById(fieldId);
+    return el ? el.value.trim() : null;
+  });
+}
+
 async function deleteLibraryFile(fileId, fileName) {
   if (!await showConfirm({ title: '删除文件', body: `确定删除「${fileName}」？文件将从磁盘移除，此操作不可恢复。`, danger: true, confirmText: '删除' })) return;
   try {

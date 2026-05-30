@@ -465,8 +465,12 @@ function formatSyncStatus(lab) {
 function renderQualLabs(type, labs) {
   const container = document.getElementById(type === 'cnas' ? 'qualCnasLabs' : 'qualCmaLabs');
   if (!labs.length) { container.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:8px 0">暂无订阅</div>'; return; }
-  const nameField = type === 'cnas' ? 'lab_name' : 'lab_name';
-  const idField = type === 'cnas' ? 'lab_no' : 'cert_number';
+  // 字段名用 camelCase —— API 返回的是 labNo / labName / certNumber（见同函数
+  // 471/477/487/519 行）。曾误写 snake_case(lab_no/lab_name)导致 lab[idField]
+  // 取到 undefined → 编辑/关联按钮拿到空 id → PUT /cnas/(尾部空)、关联 body
+  // cnas_lab_no 为空 → 后端 invalid request。CNAS 卡受影响、CMA 卡另走分支故幸免。
+  const nameField = 'labName';
+  const idField = type === 'cnas' ? 'labNo' : 'certNumber';
   container.innerHTML = labs.map(lab => {
     const syncInfo = lab.lastSyncAt ? `<span>${utcToBeijing(lab.lastSyncAt)}</span>` : '<span style="color:var(--text-3)">未同步</span>';
     const statusHtml = formatSyncStatus(lab);
@@ -653,7 +657,7 @@ async function addQualLab(type) {
 }
 
 async function editQualLabName(type, id, currentName) {
-  const newName = prompt('输入机构名称', currentName || '');
+  const newName = await showPrompt({ title: '编辑机构名称', label: '输入机构名称', defaultValue: currentName || '', confirmText: '保存' });
   if (newName === null) return;
   const url = type === 'cnas' ? `/api/qualifications/labs/cnas/${encodeURIComponent(id)}` : `/api/qualifications/labs/cma/${encodeURIComponent(id)}`;
   try {
@@ -677,9 +681,9 @@ async function linkQualLab(type, id, currentName) {
     const candidateId = type === 'cnas' ? l.certNumber : l.labNo;
     return `${candidateId} - ${l.labName || ''}`;
   }).join('\n');
-  const targetId = prompt(`输入要关联的${targetLabel}：\n\n可选项：\n${options || '暂无可选订阅'}`, '');
+  const targetId = await showPrompt({ title: '关联机构', label: `输入要关联的${targetLabel}：\n\n可选项：\n${options || '暂无可选订阅'}`, placeholder: targetLabel, confirmText: '下一步' });
   if (!targetId) return;
-  const displayName = prompt('输入合并后显示的机构名称', currentName || '');
+  const displayName = await showPrompt({ title: '关联机构', label: '输入合并后显示的机构名称', defaultValue: currentName || '', confirmText: '保存关联' });
   if (!displayName) return;
 
   const body = type === 'cnas'

@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix(qual): 修复资质订阅"编辑/关联"报错 + win 客户端点击无效（两个叠加 bug）** —
+  - **空 id**:`renderQualLabs` 的 `idField`/`nameField` 误写 snake_case(`lab_no`/`lab_name`),但 API 返回的是 camelCase(`labNo`/`labName`/`certNumber`,同函数 471/477/487/519 行都在用)。导致 CNAS 卡的"编辑/关联CMA"按钮 `lab[idField]` 取到 `undefined`→空 id→`PUT /api/qualifications/labs/cnas/`(尾部空)、关联 body `cnas_lab_no` 为空→后端 invalid request。改回 `labNo`/`labName`/`certNumber`。(CMA 卡另走分支、直接用 `lab.certNumber`,故幸免)
+  - **win 端点击无效**:编辑/关联依赖 `window.prompt`,而 Electron 默认禁用原生 prompt（返回空 + 控制台报 "prompt() is not supported"），故 web 能用、win 点了没反应。新增 `showPrompt()`（基于 `showConfirmHtml` 的 `onMount` 钩子塞 input，返回 `Promise<string|null>`，单行 Enter 提交），替换 `editQualLabName`/`linkQualLab` 的 3 处 `prompt()`。`app-detail-utils.js`(新增)+ `app-qual.js`(替换)，两入口经 `/legacy/` 共用同一份、无需镜像
+  - 报错提示灰难看由上一条 toast 主题修复一并解决
 - **fix(mobile): 修复移动端默认横向溢出(右侧被挡、需双指缩小才看全)** — 两处:
   - **根因兜底**:`html` 补 `overflow-x: hidden`(原先只有 `body` 有)。移动端 iOS Safari / 部分安卓会把 `body` 的横向滚动提升到 `html`,只设 `body` 失效,表现为"默认能横拖、要双指缩小才看全局"。`base.css` + `public/styles.css` 镜像
   - **新组件防溢出**:Phase C 新增的 `.set-card-head`(`justify-content:space-between`)补 `flex-wrap:wrap` + 首子元素 `min-width:0`,避免右侧长徽章(如批量页"解析完成 · 匹配 X …")不换行把卡撑宽
