@@ -138,6 +138,20 @@ actions / subsection / versions），取代旧设置页的
 - **Phase D 待办**（有可用构建环境后，把 legacy `app-settings.js` 真正抽成
   `web/src/modules/settings/` TS 组件并删除旧文件）
 
+### 全站组件层外扩（2026-05-30，PAGES-REDESIGN.md Phase A）
+
+`pages/settings.css` 末尾追加一段「全站统一组件层」，把设置页验证过的 `.set-*`
+体系外扩到其余 8 页用。新增成员：`.set-page-head`/`.set-kicker`/`.set-card-head`/
+`.set-card-title`/`.set-toolbar`(`-left/-right`)/`.set-table`(`-wrap` + `.col-check/
+.col-actions/.col-num`)/`.set-search`(`.thin`)/`.set-chips` + `button.set-chip`
+交互态/`.set-stats`/`.set-stat`(语义色)/`.set-empty`/`.set-stepper`/`.set-step`(态)/
+`.set-badge`(语义色)/`.set-split`(`-wide`)/`.set-switch-danger`/`.set-scroll-pane`/
+`.set-pager`/`.set-modal`(`-backdrop/-head/-body/-foot`，`.is-danger`)。
+**纯新增、暂无 HTML 引用**（CI 必绿），Phase B–E 各页逐步接上。同段**镜像追加**到
+`public/styles.css` 末尾（维持双入口 cascade 等价）。延续本文件主题纪律：只用 token、
+无裸 oklch、无 `color-mix`；唯一例外是 `.set-modal` 阴影沿用 `components/modal.css`
+的 rgba 字面量（`--shadow-lg` 仅 light/paper 定义，dark `:root` 无）。
+
 ## 拆分执行顺序（P1）
 
 1. ~~切出 `theme/glass.css`（最后两百行，整段贴）——

@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>全站重构预览 · StandardsBox</title>
+<style>
+/* ===== 真实主题 token（取自 web/src/styles/base.css，仅 sRGB hex，预览不依赖 oklch） ===== */
+:root{
+  --bg:#0e1118; --surface:#161a22; --surface-h:#1d212c; --border:#252934;
+  --text:#e4e6ea; --text-2:#a5a9b3; --text-3:#696d77;
+  --accent:#4f6df0; --accent-h:#6a85ff; --accent-g:#7585b8;
+  --success:#36b988; --danger:#d75541; --warning:#cba03e;
+  --radius-sm:8px; --radius:12px; --radius-lg:18px;
+  --ease-out:cubic-bezier(0.16,1,0.3,1);
+  --sidebar-w:240px; --topbar-h:52px;
+  --mono:'DM Mono',ui-monospace,Consolas,monospace;
+}
+[data-theme="light"]{
+  --bg:#f4f7fb; --surface:#fbfcfe; --surface-h:#eef3f9; --border:#dbe2eb;
+  --text:#1a2030; --text-2:#4a5568; --text-3:#8390a3;
+  --accent:#2855d4; --accent-h:#1d47bd; --accent-g:#5a78d0;
+  --success:#0f7d54; --danger:#c83838; --warning:#a3771a;
+}
+[data-theme="paper"]{
+  --bg:#f5f1e8; --surface:#fbfaf5; --surface-h:#efe9da; --border:#dfd8c6;
+  --text:#2b2820; --text-2:#5c5648; --text-3:#928a76;
+  --accent:#c96342; --accent-h:#b04e2f; --accent-g:#c08164;
+  --success:#5a7d3e; --danger:#b94432; --warning:#a87520;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font:400 14px/1.5 'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;}
+
+/* ===== Topbar ===== */
+.topbar{position:fixed;top:0;left:0;right:0;height:var(--topbar-h);display:flex;align-items:center;gap:12px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--border);z-index:30;}
+.topbar-logo{width:24px;height:24px;border-radius:6px;background:linear-gradient(135deg,var(--accent),var(--accent-h));}
+.topbar-title{font-weight:600;font-size:15px;}
+.topbar-title small{color:var(--text-3);font-weight:400;margin-left:6px;}
+.topbar-spacer{flex:1;}
+.theme-switch{display:flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:3px;}
+.theme-switch button{border:none;background:transparent;color:var(--text-2);font-size:12px;padding:5px 12px;border-radius:999px;cursor:pointer;transition:all .15s var(--ease-out);}
+.theme-switch button.active{background:var(--accent);color:#fff;}
+
+/* ===== Sidebar ===== */
+.sidebar{position:fixed;top:var(--topbar-h);left:0;bottom:0;width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--border);padding:12px 10px;overflow-y:auto;}
+.nav-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border:1px solid transparent;border-radius:var(--radius-sm);background:transparent;color:var(--text-2);font-size:13.5px;font-weight:500;font-family:inherit;text-align:left;cursor:pointer;transition:all .15s var(--ease-out);}
+.nav-item:hover{background:var(--surface-h);color:var(--text);}
+.nav-item.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.nav-ico{width:18px;text-align:center;}
+.nav-sep{height:1px;background:var(--border);margin:8px 6px;}
+
+/* ===== Content shell ===== */
+.content{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 36px;min-height:calc(100vh - var(--topbar-h));}
+.page{display:none;animation:fade .25s var(--ease-out);}
+.page.active{display:block;}
+@keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+
+/* =====================================================================
+   .set-* 统一组件系统（本预览即重构后的目标形态）
+   ===================================================================== */
+/* 页头 */
+.set-page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:22px;}
+.set-page-head h1{font-size:20px;font-weight:600;letter-spacing:-.01em;}
+.set-page-head p{margin-top:5px;color:var(--text-3);font-size:13px;max-width:62ch;}
+.set-page-head-actions{display:flex;gap:8px;flex-shrink:0;}
+
+/* 卡片（唯一一级浮起） */
+.set-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;}
+.set-card + .set-card{margin-top:14px;}
+.set-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:14px;}
+.set-kicker{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);margin-bottom:4px;}
+.set-card-title{font-size:15px;font-weight:650;color:var(--text);}
+.set-card-sub{margin-top:3px;color:var(--text-3);font-size:12px;}
+
+/* 行原子 */
+.set-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
+.set-row:last-child{border-bottom:0;}
+.set-row-main{min-width:0;flex:1;}
+.set-row-title{font-size:13.5px;color:var(--text);font-weight:500;}
+.set-row-sub{margin-top:2px;font-size:12px;color:var(--text-3);}
+.set-row-actions{display:flex;gap:6px;flex-shrink:0;}
+
+/* 工具条 */
+.set-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+.set-toolbar-right{margin-left:auto;display:flex;align-items:center;gap:8px;}
+
+/* 搜索壳 */
+.set-search{display:flex;align-items:center;gap:10px;padding:6px 8px 6px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);transition:border-color .2s;}
+.set-search:focus-within{border-color:var(--accent);}
+.set-search input{flex:1;min-width:0;border:none;background:transparent;color:var(--text);font:400 14px 'DM Sans',sans-serif;outline:none;padding:8px 0;}
+.set-search input::placeholder{color:var(--text-3);}
+
+/* 胶囊 chip */
+.set-chips{display:flex;gap:8px;flex-wrap:wrap;}
+.set-chip{padding:5px 14px;border-radius:999px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--border);color:var(--text-2);background:transparent;transition:all .15s var(--ease-out);}
+.set-chip:hover:not(.active){border-color:var(--accent-g);color:var(--text);}
+.set-chip.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+/* tabs */
+.set-tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:16px;}
+.set-tab{padding:9px 16px;border:none;background:none;color:var(--text-3);font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s;}
+.set-tab:hover{color:var(--text);}
+.set-tab.active{color:var(--text);border-bottom-color:var(--accent);}
+
+/* 表格 */
+.set-table-wrap{border:1px solid var(--border);border-radius:var(--radius);overflow:auto;}
+.set-table{width:100%;border-collapse:collapse;font-size:13px;}
+.set-table thead th{position:sticky;top:0;text-align:left;padding:10px 12px;background:var(--surface-h);color:var(--text-3);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border);}
+.set-table tbody td{padding:10px 12px;border-bottom:1px solid var(--border);color:var(--text-2);vertical-align:middle;}
+.set-table tbody tr:last-child td{border-bottom:0;}
+.set-table tbody tr:hover td{background:var(--surface-h);}
+.set-table .mono{font-family:var(--mono);color:var(--accent-h);}
+
+/* 数字概览 */
+.set-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;}
+.set-stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;}
+.set-stat-value{font:600 26px/1 'DM Sans',sans-serif;color:var(--text);}
+.set-stat-label{margin-top:6px;font-size:11px;color:var(--text-3);letter-spacing:.02em;}
+
+/* 步骤 */
+.set-stepper{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;}
+.set-step{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-3);}
+.set-step span{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:999px;background:var(--surface-h);color:var(--text-3);font-size:12px;font-weight:700;flex-shrink:0;}
+.set-step strong{display:block;color:var(--text-2);font-size:13px;font-weight:600;}
+.set-step em{display:block;margin-top:2px;color:var(--text-3);font-style:normal;font-size:11px;}
+.set-step.active{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent);}
+.set-step.active span{background:var(--accent);color:#fff;}
+.set-step.done span{background:var(--success);color:#fff;}
+
+/* 空态 */
+.set-empty{text-align:center;padding:40px 16px;color:var(--text-3);font-size:13px;border:1px dashed var(--border);border-radius:var(--radius);}
+
+/* 徽章 */
+.set-badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;}
+.set-badge.ok{background:color-mix(in srgb,var(--success) 14%,transparent);color:var(--success);}
+.set-badge.warn{background:color-mix(in srgb,var(--warning) 16%,transparent);color:var(--warning);}
+.set-badge.bad{background:color-mix(in srgb,var(--danger) 14%,transparent);color:var(--danger);}
+.set-badge.accent{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent-h);}
+.set-badge.muted{background:var(--surface-h);color:var(--text-2);}
+
+/* 按钮 */
+.btn{padding:8px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:transparent;color:var(--text-2);font:500 13px 'DM Sans',sans-serif;cursor:pointer;transition:all .15s var(--ease-out);}
+.btn:hover{border-color:var(--accent-g);color:var(--text);}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.btn-primary:hover{filter:brightness(1.08);color:#fff;}
+.btn-sm{padding:5px 11px;font-size:12px;}
+.btn-danger{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,var(--border));}
+
+/* 二列工作区（批量/补全/历史复用） */
+.set-split{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(280px,.95fr);gap:14px;align-items:start;}
+.set-textarea{width:100%;min-height:170px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font:400 13px var(--mono);resize:vertical;outline:none;}
+.set-textarea:focus{border-color:var(--accent);}
+
+/* ===== 标准检索 结果卡（沿用原有呈现，token 化） ===== */
+.sr-summary{color:var(--text-3);font-size:12.5px;margin-bottom:12px;}
+.sr-group{margin-bottom:16px;}
+.sr-group-head{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-3);font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px;}
+.sr-group-head::after{content:'';flex:1;height:1px;background:var(--border);}
+.sr-card{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);margin-bottom:6px;transition:border-color .15s;}
+.sr-card:hover{border-color:var(--accent-g);}
+.sr-card-main{min-width:0;flex:1;}
+.sr-code{font:600 14px var(--mono);color:var(--accent-h);display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.sr-name{margin-top:3px;font-size:13px;color:var(--text);}
+.sr-meta{margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.sr-src{padding:1px 8px;border-radius:4px;font-size:10px;font-weight:600;background:var(--surface-h);color:var(--text-2);}
+.sr-actions{display:flex;gap:6px;flex-shrink:0;}
+/* 三态文本徽章（原有语义色） */
+.sr-text{padding:2px 9px;border-radius:999px;font-size:10px;font-weight:600;}
+.sr-text.has{background:color-mix(in srgb,var(--success) 14%,transparent);color:var(--success);}
+.sr-text.no{background:var(--surface-h);color:var(--text-3);}
+.sr-text.unknown{background:color-mix(in srgb,var(--warning) 16%,transparent);color:var(--warning);}
+
+/* ===== 资质徽章（搜索结果行内，原有蓝/绿） ===== */
+.qual-badges{display:inline-flex;gap:5px;}
+.qual-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:999px;font-size:10px;font-weight:600;letter-spacing:.03em;}
+.qual-badge .dot{width:5px;height:5px;border-radius:50%;}
+.qual-badge-cnas{background:color-mix(in srgb,#4ba3f7 18%,transparent);color:#7cbdff;}
+.qual-badge-cnas .dot{background:#4ba3f7;}
+.qual-badge-cma{background:color-mix(in srgb,#4cb86a 18%,transparent);color:#7ccd8e;}
+.qual-badge-cma .dot{background:#4cb86a;}
+
+/* =====================================================================
+   标准检索页：沿用原有「工具条 + 筛选 chip + 分组网格表」排版
+   （类名对齐 public/styles.css 的 .toolbar/.filter-chip/.results-table-head/
+    .status-group/.result-card/.source-badge，预览忠实还原现状）
+   ===================================================================== */
+.toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);}
+.toolbar-left,.toolbar-right{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.filter-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;}
+.filter-sep{width:1px;height:18px;background:var(--border);margin:0 4px;}
+.filter-chip{padding:5px 14px;border-radius:100px;font-size:12px;font-weight:500;cursor:pointer;user-select:none;border:1px solid var(--border);background:transparent;color:var(--text-2);transition:all .18s var(--ease-out);}
+.filter-chip:hover:not(.active){border-color:var(--text-2);color:var(--text);}
+.filter-chip.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+.filter-chip[data-toggle]{border-style:dashed;}
+.filter-chip[data-toggle].active{border-style:solid;}
+.filter-chip .chip-count{opacity:.6;margin-left:4px;font-weight:400;}
+.sort-box{margin-left:auto;display:flex;align-items:center;gap:6px;color:var(--text-3);font-size:12px;}
+.sort-box select{background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:5px 8px;font:inherit;font-size:12px;}
+/* 7 列网格：勾选 / 标准号 / 名称 / 状态 / 来源 / 日期 / 操作 */
+.rs-grid{display:grid;grid-template-columns:28px minmax(140px,180px) minmax(200px,1fr) 124px 100px 132px 168px;align-items:center;gap:14px;}
+.results-table-head{padding:0 16px 8px;color:var(--text-3);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;}
+.results-table-head span:last-child{text-align:right;}
+.status-group{margin-bottom:10px;}
+.status-group-header{display:flex;align-items:center;gap:10px;padding:8px 14px;margin:6px 0 8px;background:var(--surface-h);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;user-select:none;font-size:12px;letter-spacing:.04em;}
+.status-group-caret{width:12px;font-size:10px;color:var(--text-3);transition:transform .18s var(--ease-out);}
+.status-group.collapsed .status-group-caret{transform:rotate(-90deg);}
+.status-group-name{font-weight:700;color:var(--success);}
+.status-group-count{margin-left:auto;font:600 11px var(--mono);color:var(--text-3);}
+.status-group.collapsed .status-group-body{display:none;}
+.result-card{padding:12px 16px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);margin-bottom:6px;transition:border-color .15s,transform .15s;}
+.result-card:hover{border-color:var(--accent-g);transform:translateY(-1px);}
+.result-card .check-col input{accent-color:var(--accent);width:16px;height:16px;cursor:pointer;}
+.result-card .card-number{font:600 14px var(--mono);color:var(--accent-h);}
+.result-card .card-id .qual-badges{margin-top:5px;display:flex;}
+.result-card .card-title{font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.result-card .card-subtitle{margin-top:3px;color:var(--text-3);font-size:12px;}
+.result-card .card-state{display:flex;flex-direction:column;gap:5px;align-items:flex-start;}
+.result-card .card-source-line{display:flex;gap:4px;flex-wrap:wrap;}
+.result-card .card-date{display:grid;gap:2px;color:var(--text-2);font-size:12px;}
+.result-card .card-date b{color:var(--text-3);font-size:10px;letter-spacing:.04em;text-transform:uppercase;margin-right:5px;font-weight:600;}
+.result-card .card-actions{display:flex;gap:6px;justify-content:flex-end;}
+.result-card .card-actions button{padding:6px 11px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;cursor:pointer;border:1px solid transparent;background:var(--surface-h);color:var(--text-2);transition:all .12s var(--ease-out);}
+.result-card .card-actions button:hover{color:var(--text);}
+.result-card .card-actions button.dl{background:var(--accent);color:#fff;}
+.source-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;letter-spacing:.04em;}
+.source-badge.bw{background:color-mix(in srgb,#4cb86a 20%,transparent);color:#7ccd8e;}
+.source-badge.bz{background:color-mix(in srgb,#4ba3f7 20%,transparent);color:#7cbdff;}
+.source-badge.by{background:color-mix(in srgb,#cba03e 22%,transparent);color:#e0c069;}
+.state-badge{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:100px;font-size:11px;font-weight:600;}
+.state-badge.cur{background:color-mix(in srgb,var(--success) 14%,transparent);color:var(--success);}
+.state-badge.cur .dot{width:5px;height:5px;border-radius:50%;background:var(--success);}
+
+/* ===== 资质查询页：沿用原有「分组统一列表」呈现 ===== */
+.qual-unified-list{display:flex;flex-direction:column;}
+.qual-result-group{margin-bottom:18px;}
+.qual-result-std{font:500 13px var(--mono);color:var(--accent);margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.qual-result-std .std-name{color:var(--text-2);font:400 13px 'DM Sans',sans-serif;}
+.qual-result-std .grp-count{margin-left:auto;color:var(--text-3);font-size:11px;}
+.qual-source-chip{display:inline-flex;align-items:center;justify-content:center;min-width:46px;padding:1px 7px;border-radius:3px;font:600 10px 'DM Sans',sans-serif;letter-spacing:.04em;color:#fff;}
+.qual-source-chip-cnas{background:#3b82f6;}
+.qual-source-chip-cma{background:#f59e0b;}
+.qual-source-divider{border:none;border-top:1px dashed var(--border);margin:6px 0 10px;}
+.qual-result-item{display:flex;gap:10px;padding:11px 14px;margin-bottom:5px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;color:var(--text-2);}
+.qual-result-item .lab{font-weight:500;color:var(--text);}
+.qual-result-item .dates{margin-top:3px;display:flex;gap:14px;color:var(--text-3);font-size:11px;}
+.qual-result-item-scope{background:color-mix(in srgb,var(--accent) 9%,transparent);border-color:color-mix(in srgb,var(--accent) 25%,var(--border));}
+.qual-scope-badge{display:inline-block;padding:1px 6px;margin-left:4px;border-radius:3px;font:600 10px 'DM Sans',sans-serif;border:1px solid currentColor;}
+.qual-scope-badge.scope-all{color:var(--success);background:color-mix(in srgb,var(--success) 12%,transparent);}
+.qual-scope-badge.scope-partial{color:var(--warning);background:color-mix(in srgb,var(--warning) 12%,transparent);}
+.qual-scope-limit{margin:-2px 0 8px 22px;padding:6px 10px;font-size:12px;color:var(--text-2);background:color-mix(in srgb,var(--warning) 6%,transparent);border-left:2px solid var(--warning);border-radius:0 var(--radius-sm) var(--radius-sm) 0;}
+/* 可视化能力条（原有） */
+.qv-bars{display:grid;gap:4px;margin:6px 0;}
+.qv-bars span{position:relative;overflow:hidden;padding:4px 8px;border-radius:var(--radius-sm);background:var(--surface-h);color:var(--text-2);font-size:10px;font-weight:700;}
+.qv-bars span::before{content:'';position:absolute;inset:0 auto 0 0;width:var(--w);opacity:.28;}
+.qv-bars .cnas::before{background:#3b82f6;}
+.qv-bars .cma::before{background:#f59e0b;}
+
+.note{margin:0 36px 18px;padding:10px 14px;border-left:3px solid var(--accent);background:var(--surface);border-radius:0 var(--radius-sm) var(--radius-sm) 0;color:var(--text-2);font-size:12.5px;}
+.demo-old{opacity:.55;}
+.cap{font-size:11px;color:var(--text-3);letter-spacing:.04em;text-transform:uppercase;margin:0 0 8px;}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-logo"></div>
+  <div class="topbar-title">标准盒子<small>StandardsBox · 重构预览</small></div>
+  <div class="topbar-spacer"></div>
+  <div class="theme-switch">
+    <button class="active" data-theme-btn="dark" onclick="setTheme('dark',this)">深色</button>
+    <button data-theme-btn="light" onclick="setTheme('light',this)">浅色</button>
+    <button data-theme-btn="paper" onclick="setTheme('paper',this)">Paper</button>
+  </div>
+</header>
+
+<nav class="sidebar" id="nav"></nav>
+
+<div class="content" id="content">
+
+  <div class="note">
+    这是 <strong>重构后</strong> 的目标形态预览：所有页面共用同一套 <code>.set-*</code> 组件
+    （统一页头 / 卡片 / 工具条 / 表格 / 胶囊 / 步骤 / 空态 / 徽章），三主题自适应。
+    点左侧菜单切页、右上角切主题感受一致性。预览用 <code>color-mix</code> 仅为省事，
+    真实落地会换成 token 兜底（详见方案文档）。
+  </div>
+
+  <!-- 标准检索 -->
+  <div class="page active" id="page-search">
+    <div class="set-page-head"><div><h1>标准检索</h1><p>多源搜索与下载 —— 沿用原有「工具条 + 筛选 chip + 分组网格表」排版，仅统一外壳与配色。</p></div></div>
+    <div class="set-search" style="margin-bottom:12px"><span style="color:var(--text-3)">🔍</span>
+      <input placeholder="输入标准号或关键词，年份要写完整 4 位…">
+      <button class="btn btn-primary btn-sm">搜索</button></div>
+
+    <!-- 工具条：左 选择/下载，右 收藏/视图/导出 -->
+    <div class="toolbar">
+      <div class="toolbar-left"><button class="btn btn-sm" disabled>已选 0</button><button class="btn btn-primary btn-sm">下载选中</button><button class="btn btn-sm">全选</button></div>
+      <div class="toolbar-right"><button class="btn btn-sm">收藏 0</button><button class="btn btn-sm">只看收藏</button><button class="btn btn-sm">紧凑</button><button class="btn btn-sm">导出结果</button></div>
+    </div>
+
+    <!-- 三组筛选 chip + 排序 -->
+    <div class="filter-row">
+      <span class="filter-chip active">全部<span class="chip-count">36</span></span>
+      <span class="filter-chip">BZ<span class="chip-count">20</span></span>
+      <span class="filter-chip">BW<span class="chip-count">20</span></span>
+      <span class="filter-chip">BY<span class="chip-count">0</span></span>
+    </div>
+    <div class="filter-row">
+      <span class="filter-chip active">全部<span class="chip-count">36</span></span>
+      <span class="filter-chip">现行<span class="chip-count">25</span></span>
+      <span class="filter-chip">废止<span class="chip-count">8</span></span>
+      <span class="filter-chip">即将实施<span class="chip-count">3</span></span>
+      <span class="filter-chip">其它<span class="chip-count">0</span></span>
+      <span class="filter-sep"></span>
+      <span class="filter-chip" data-toggle>可下载<span class="chip-count">27</span></span>
+      <span class="filter-chip" data-toggle>有资质<span class="chip-count">4</span></span>
+      <span class="filter-chip" data-toggle>收藏<span class="chip-count">0</span></span>
+      <div class="sort-box">排序 <select><option>智能</option><option>标准号</option><option>发布日期</option></select></div>
+    </div>
+
+    <!-- 网格表头 -->
+    <div class="rs-grid results-table-head"><span></span><span>标准号</span><span>标准名称</span><span>状态</span><span>来源</span><span>日期</span><span>操作</span></div>
+
+    <!-- 状态分组：资质·现行 -->
+    <div class="status-group">
+      <div class="status-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
+        <span class="status-group-caret">▾</span><span class="status-group-name">资质 · 现行</span><span class="status-group-count">2</span>
+      </div>
+      <div class="status-group-body">
+        <div class="rs-grid result-card">
+          <div class="check-col"><input type="checkbox"></div>
+          <div class="card-id"><div class="card-number">GB/T 3324-2024</div>
+            <div class="qual-badges"><span class="qual-badge qual-badge-cnas"><span class="dot"></span>CNAS</span><span class="qual-badge qual-badge-cma"><span class="dot"></span>CMA</span></div></div>
+          <div class="card-body"><div class="card-title">木家具通用技术条件</div><div class="card-subtitle">推荐性</div></div>
+          <div class="card-state"><span class="state-badge cur"><span class="dot"></span>现行</span><span class="sr-text has">有文本</span></div>
+          <div class="card-source-line"><span class="source-badge bw">BW</span><span class="source-badge bz">BZ</span></div>
+          <div class="card-date"><span><b>发布</b>2024-10-26</span><span><b>实施</b>2025-05-01</span></div>
+          <div class="card-actions"><button>收藏</button><button>详情</button><button>预览</button><button class="dl">下载</button></div>
+        </div>
+        <div class="rs-grid result-card">
+          <div class="check-col"><input type="checkbox"></div>
+          <div class="card-id"><div class="card-number">GB/T 33594-2025</div>
+            <div class="qual-badges"><span class="qual-badge qual-badge-cma"><span class="dot"></span>CMA</span></div></div>
+          <div class="card-body"><div class="card-title">电动汽车充电用电缆</div><div class="card-subtitle">推荐性</div></div>
+          <div class="card-state"><span class="state-badge cur"><span class="dot"></span>现行</span><span class="sr-text has">有文本</span></div>
+          <div class="card-source-line"><span class="source-badge bw">BW</span></div>
+          <div class="card-date"><span><b>发布</b>2025-10-05</span><span><b>实施</b>2026-05-01</span></div>
+          <div class="card-actions"><button>收藏</button><button>详情</button><button>预览</button><button class="dl">下载</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 状态分组：现行（无资质） -->
+    <div class="status-group">
+      <div class="status-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
+        <span class="status-group-caret">▾</span><span class="status-group-name" style="color:var(--text)">现行</span><span class="status-group-count">2</span>
+      </div>
+      <div class="status-group-body">
+        <div class="rs-grid result-card">
+          <div class="check-col"><input type="checkbox"></div>
+          <div class="card-id"><div class="card-number">GB/T 1.1-2020</div></div>
+          <div class="card-body"><div class="card-title">标准化工作导则 第1部分：标准化文件的结构和起草规则</div><div class="card-subtitle">推荐性</div></div>
+          <div class="card-state"><span class="state-badge cur"><span class="dot"></span>现行</span><span class="sr-text has">有文本</span></div>
+          <div class="card-source-line"><span class="source-badge bw">BW</span></div>
+          <div class="card-date"><span><b>发布</b>2020-03-31</span><span><b>实施</b>2020-10-01</span></div>
+          <div class="card-actions"><button>收藏</button><button>详情</button><button>预览</button><button class="dl">下载</button></div>
+        </div>
+        <div class="rs-grid result-card">
+          <div class="check-col"><input type="checkbox"></div>
+          <div class="card-id"><div class="card-number">YY/T 0287-2017</div></div>
+          <div class="card-body"><div class="card-title">医疗器械 质量管理体系 用于法规的要求</div><div class="card-subtitle">推荐性</div></div>
+          <div class="card-state"><span class="state-badge cur"><span class="dot"></span>现行</span><span class="sr-text unknown">文本未知</span></div>
+          <div class="card-source-line"><span class="source-badge bz">BZ</span></div>
+          <div class="card-date"><span><b>发布</b>2017-01-19</span><span><b>实施</b>2017-08-01</span></div>
+          <div class="card-actions"><button>收藏</button><button>详情</button><button>预览</button><button class="dl">下载</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Labr库检索 -->
+  <div class="page" id="page-labr">
+    <div class="set-page-head"><div><h1>Labr 库检索</h1><p>独立的第 4 标准源。按库内编号检索，命中即可下载。</p></div></div>
+    <div class="set-search" style="margin-bottom:12px"><span style="color:var(--text-3)">🔬</span>
+      <input placeholder="输入 Labr 库标准号或关键词…">
+      <button class="btn btn-primary btn-sm">检索</button></div>
+    <div class="set-toolbar">
+      <span class="set-badge muted">已选 1</span><button class="btn btn-primary btn-sm">下载选中</button><button class="btn btn-sm">全选</button>
+      <div class="set-toolbar-right"><span class="set-badge ok">在线</span><button class="btn btn-sm">紧凑</button></div>
+    </div>
+    <div class="sr-summary">共 2 条结果 · Labr 命中 2</div>
+    <div class="sr-group"><div class="sr-group-head">可下载（2）</div>
+      <div class="sr-card"><input type="checkbox" checked>
+        <div class="sr-card-main"><div class="sr-code">ISO 9001:2015</div>
+          <div class="sr-name">Quality management systems — Requirements</div>
+          <div class="sr-meta"><span class="sr-src">Labr</span><span class="sr-text has">有文本</span></div></div>
+        <div class="sr-actions"><button class="btn btn-sm">预览</button><button class="btn btn-primary btn-sm">下载</button></div></div>
+      <div class="sr-card"><input type="checkbox">
+        <div class="sr-card-main"><div class="sr-code">ASTM E8/E8M-21</div>
+          <div class="sr-name">Standard Test Methods for Tension Testing of Metallic Materials</div>
+          <div class="sr-meta"><span class="sr-src">Labr</span><span class="sr-text has">有文本</span></div></div>
+        <div class="sr-actions"><button class="btn btn-sm">预览</button><button class="btn btn-primary btn-sm">下载</button></div></div>
+    </div>
+  </div>
+
+  <!-- 批量下载 -->
+  <div class="page" id="page-batch">
+    <div class="set-page-head">
+      <div><h1>批量下载</h1><p>粘贴标准号先解析匹配，再按当前下载策略批量处理。</p></div>
+      <div class="set-page-head-actions"><button class="btn btn-sm">导入 txt</button></div>
+    </div>
+    <div class="set-split">
+      <div class="set-card">
+        <div class="set-card-head"><div><div class="set-kicker">1 · 输入</div><div class="set-card-title">标准号列表</div></div>
+          <span class="set-badge muted">级联 BW → BY → BZ</span></div>
+        <textarea class="set-textarea" placeholder="粘贴标准号，每行一个&#10;GB/T 1.1&#10;GB/T 12345-2020&#10;YY/T 0287"></textarea>
+        <div class="set-toolbar" style="margin-top:12px;margin-bottom:0">
+          <button class="btn btn-primary btn-sm">解析标准号</button>
+          <span style="color:var(--text-3);font-size:12px">解析会按当前来源优先级逐源匹配。</span>
+        </div>
+      </div>
+      <div class="set-card">
+        <div class="set-card-head"><div><div class="set-kicker">2 · 解析结果</div><div class="set-card-title">匹配与下载任务</div></div>
+          <span class="set-badge accent">3 / 4 命中</span></div>
+        <div class="set-row"><div class="set-row-main"><div class="set-row-title mono" style="color:var(--accent-h)">GB/T 1.1-2020</div><div class="set-row-sub">标准化工作导则 · BW 源</div></div><span class="set-badge ok">就绪</span></div>
+        <div class="set-row"><div class="set-row-main"><div class="set-row-title mono" style="color:var(--accent-h)">GB/T 12345-2020</div><div class="set-row-sub">汉字编码字符集 · BY 源</div></div><span class="set-badge ok">就绪</span></div>
+        <div class="set-row"><div class="set-row-main"><div class="set-row-title mono" style="color:var(--accent-h)">YY/T 0287</div><div class="set-row-sub">医疗器械质量管理 · BZ 源</div></div><span class="set-badge warn">仅文本</span></div>
+        <div class="set-row"><div class="set-row-main"><div class="set-row-title mono" style="color:var(--text-3)">DB44/T 9999</div><div class="set-row-sub">未匹配到任何来源</div></div><span class="set-badge bad">未命中</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 标准补全 -->
+  <div class="page" id="page-complete">
+    <div class="set-page-head"><div><h1>标准补全</h1><p>上传 Excel / CSV，识别 A 列标准号，输出完整标准号与标准名称。</p></div></div>
+    <div class="set-split">
+      <div class="set-card">
+        <div class="set-stepper">
+          <div class="set-step done"><span>✓</span><div><strong>选择文件</strong><em>Excel / CSV</em></div></div>
+          <div class="set-step active"><span>2</span><div><strong>补全处理</strong><em>多源匹配</em></div></div>
+          <div class="set-step"><span>3</span><div><strong>下载结果</strong><em>B/C 列输出</em></div></div>
+        </div>
+        <div class="set-row" style="border:1px dashed var(--border);border-radius:var(--radius-sm);padding:16px;">
+          <div class="set-row-main"><div class="set-row-title">标准清单.xlsx</div><div class="set-row-sub">读取 A 列标准号，结果写入 B / C 列</div></div>
+          <button class="btn btn-sm">重新选择</button>
+        </div>
+        <div class="set-toolbar" style="margin:14px 0 0"><button class="btn btn-primary btn-sm">上传并补全</button>
+          <span class="set-badge muted">保留原表样式</span><span class="set-badge muted">含状态</span><span class="set-badge muted">含来源</span></div>
+      </div>
+      <div class="set-card">
+        <div class="set-card-head"><div><div class="set-kicker">结果</div><div class="set-card-title">补全摘要</div></div></div>
+        <div class="set-stats">
+          <div class="set-stat"><div class="set-stat-value" style="color:var(--success)">128</div><div class="set-stat-label">已补全</div></div>
+          <div class="set-stat"><div class="set-stat-value" style="color:var(--warning)">12</div><div class="set-stat-label">需人工核对</div></div>
+          <div class="set-stat"><div class="set-stat-value">140</div><div class="set-stat-label">总行数</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 本地文件库 -->
+  <div class="page" id="page-local">
+    <div class="set-page-head"><div><h1>本地文件库</h1><p>已下载标准 PDF 的集中管理：预览 / 下载 / 重命名 / 批量删除。</p></div>
+      <div class="set-page-head-actions"><button class="btn btn-sm">刷新</button></div></div>
+    <div class="set-toolbar">
+      <div class="set-search" style="flex:1;max-width:420px"><span style="color:var(--text-3)">🔍</span><input placeholder="按标准号或标准名称筛选…"></div>
+      <div class="set-toolbar-right"><span class="set-badge muted">128 项 · 已选 2</span>
+        <button class="btn btn-sm">全选</button><button class="btn btn-sm">统一命名</button><button class="btn btn-sm btn-danger">批量删除</button></div>
+    </div>
+    <div class="set-table-wrap">
+      <table class="set-table">
+        <thead><tr><th style="width:34px"></th><th>标准号</th><th>标准名称</th><th>来源</th><th>大小</th><th>时间</th><th>操作</th></tr></thead>
+        <tbody>
+          <tr><td><input type="checkbox" checked></td><td class="mono">GB/T 1.1-2020</td><td>标准化工作导则 第1部分</td><td><span class="set-badge muted">BW</span></td><td>2.4 MB</td><td>05-28</td><td><button class="btn btn-sm">预览</button></td></tr>
+          <tr><td><input type="checkbox"></td><td class="mono">GB 5009.9-2023</td><td>食品安全国家标准 食品中淀粉的测定</td><td><span class="set-badge muted">BY</span></td><td>1.1 MB</td><td>05-27</td><td><button class="btn btn-sm">预览</button></td></tr>
+          <tr><td><input type="checkbox" checked></td><td class="mono">YY/T 0287-2017</td><td>医疗器械 质量管理体系</td><td><span class="set-badge muted">BZ</span></td><td>3.8 MB</td><td>05-26</td><td><button class="btn btn-sm">预览</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 下载历史 -->
+  <div class="page" id="page-history">
+    <div class="set-page-head"><div><h1>下载历史</h1><p>记录每一次下载行为。收藏夹用于监控收藏标准是否有新版本。</p></div></div>
+    <div class="set-split" style="grid-template-columns:minmax(0,.95fr) minmax(0,1.15fr)">
+      <div class="set-card">
+        <div class="set-card-head"><div class="set-card-title">收藏标准</div><span class="set-badge accent">6</span></div>
+        <div class="set-row"><div class="set-row-main"><div class="set-row-title mono">GB/T 1.1-2020</div><div class="set-row-sub">标准化工作导则</div></div><span class="set-badge ok">最新</span></div>
+        <div class="set-row"><div class="set-row-main"><div class="set-row-title mono">GB 2760-2014</div><div class="set-row-sub">食品添加剂使用标准</div></div><span class="set-badge warn">有新版</span></div>
+      </div>
+      <div class="set-card">
+        <div class="set-card-head"><div class="set-card-title">下载历史</div><button class="btn btn-sm">清空历史</button></div>
+        <div class="set-row"><div class="set-row-main"><div class="set-row-title mono">GB/T 12345-2020</div><div class="set-row-sub">2026-05-28 14:32 · BY 源</div></div><span class="set-badge ok">成功</span></div>
+        <div class="set-row"><div class="set-row-main"><div class="set-row-title mono">YY/T 0287-2017</div><div class="set-row-sub">2026-05-28 14:30 · BZ 源</div></div><span class="set-badge ok">成功</span></div>
+        <div class="set-row"><div class="set-row-main"><div class="set-row-title mono">DB44/T 9999</div><div class="set-row-sub">2026-05-28 14:28 · 全源未命中</div></div><span class="set-badge bad">失败</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 资质查询（外壳用 .set-*，结果区沿用原有「分组统一列表 + 来源色块 + 覆盖范围」呈现） -->
+  <div class="page" id="page-qual">
+    <div class="set-page-head"><div><h1>资质查询</h1><p>CNAS / CMA 机构能力检索与可视化。</p></div></div>
+    <div class="set-tabs">
+      <button class="set-tab active" onclick="qualTab(this,'q-search')">搜索</button>
+      <button class="set-tab" onclick="qualTab(this,'q-visual')">可视化</button>
+    </div>
+    <div id="q-search">
+      <div class="set-search" style="margin-bottom:14px"><span style="color:var(--text-3)">🔍</span><input placeholder="输入标准号、实验室名称或关键词…"><button class="btn btn-primary btn-sm">搜索</button></div>
+      <div class="set-chips" style="margin-bottom:16px"><span class="set-chip active">全部</span><span class="set-chip">CNAS</span><span class="set-chip">CMA</span></div>
+
+      <!-- 原有呈现：按 标准号 分组，组内按 来源(CNAS蓝/CMA橙) 分块，覆盖范围用 scope 标记 -->
+      <div class="qual-unified-list">
+        <div class="qual-result-group">
+          <div class="qual-result-std">GB 5009.9-2023 <span class="std-name">食品安全国家标准 食品中淀粉的测定</span>
+            <span class="qual-scope-badge scope-all">全部参数</span><span class="grp-count">3 项</span></div>
+          <div class="qual-result-item qual-result-item-scope">
+            <span class="qual-source-chip qual-source-chip-cnas">CNAS</span>
+            <div><div class="lab">某某检测技术有限公司</div><div class="dates"><span>认可有效期 2024-03 ~ 2027-03</span></div></div></div>
+          <div class="qual-result-item qual-result-item-scope">
+            <span class="qual-source-chip qual-source-chip-cnas">CNAS</span>
+            <div><div class="lab">某某省食品检验所</div><div class="dates"><span>认可有效期 2023-09 ~ 2026-09</span></div></div></div>
+          <hr class="qual-source-divider">
+          <div class="qual-result-item">
+            <span class="qual-source-chip qual-source-chip-cma">CMA</span>
+            <div><div class="lab">某某质检院 <span class="qual-scope-badge scope-partial">部分参数</span></div>
+              <div class="dates"><span>资质有效期至 2026-11</span></div></div></div>
+          <div class="qual-scope-limit">部分参数 · 仅测：淀粉含量 ≤ 50% 的样品</div>
+        </div>
+        <div class="qual-result-group">
+          <div class="qual-result-std">GB 2760-2014 <span class="std-name">食品添加剂使用标准</span>
+            <span class="qual-scope-badge scope-partial">部分参数</span><span class="grp-count">1 项</span></div>
+          <div class="qual-result-item">
+            <span class="qual-source-chip qual-source-chip-cma">CMA</span>
+            <div><div class="lab">某某检测技术有限公司</div><div class="dates"><span>资质有效期至 2027-01</span></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="q-visual" style="display:none">
+      <!-- 概览四宫格沿用 .set-stat；机构能力卡用原有「来源双栏 + 能力条」呈现 -->
+      <div class="set-stats" style="margin-bottom:14px">
+        <div class="set-stat"><div class="set-stat-value">42</div><div class="set-stat-label">命中标准</div></div>
+        <div class="set-stat"><div class="set-stat-value">18</div><div class="set-stat-label">覆盖机构</div></div>
+        <div class="set-stat"><div class="set-stat-value" style="color:var(--success)">31</div><div class="set-stat-label">全部参数</div></div>
+        <div class="set-stat"><div class="set-stat-value" style="color:var(--warning)">11</div><div class="set-stat-label">部分参数</div></div>
+      </div>
+      <div class="qual-result-group">
+        <div class="qual-result-std">GB 5009.9-2023 <span class="std-name">食品中淀粉的测定</span><span class="grp-count">覆盖 5 家机构</span></div>
+        <div class="qv-bars">
+          <span class="cnas" style="--w:62%">CNAS · 3 家机构</span>
+          <span class="cma" style="--w:40%">CMA · 2 家机构</span>
+        </div>
+        <div class="qual-result-item qual-result-item-scope">
+          <span class="qual-source-chip qual-source-chip-cnas">CNAS</span>
+          <div><div class="lab">某某检测技术有限公司 <span class="qual-scope-badge scope-all">全部参数</span></div>
+            <div class="dates"><span>有效期至 2027-03</span></div></div></div>
+        <div class="qual-result-item">
+          <span class="qual-source-chip qual-source-chip-cma">CMA</span>
+          <div><div class="lab">某某质检院 <span class="qual-scope-badge scope-partial">部分参数</span></div>
+            <div class="dates"><span>有效期至 2026-11</span></div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 使用统计 -->
+  <div class="page" id="page-stats">
+    <div class="set-page-head"><div><h1>使用统计</h1><p>下载与检索行为的趋势与来源分布。</p></div></div>
+    <div class="set-toolbar">
+      <input type="date" class="btn btn-sm" style="color:var(--text-2)">
+      <span style="color:var(--text-3);font-size:12px">至</span>
+      <input type="date" class="btn btn-sm" style="color:var(--text-2)">
+      <button class="btn btn-sm">刷新</button>
+    </div>
+    <div class="set-stats" style="margin-bottom:16px">
+      <div class="set-stat"><div class="set-stat-value">1,284</div><div class="set-stat-label">总下载</div></div>
+      <div class="set-stat"><div class="set-stat-value">3,902</div><div class="set-stat-label">总检索</div></div>
+      <div class="set-stat"><div class="set-stat-value" style="color:var(--success)">96.4%</div><div class="set-stat-label">命中率</div></div>
+      <div class="set-stat"><div class="set-stat-value">42</div><div class="set-stat-label">活跃用户</div></div>
+    </div>
+    <div class="set-split">
+      <div class="set-card"><div class="set-card-title" style="margin-bottom:12px">下载趋势</div>
+        <div style="height:160px;display:flex;align-items:flex-end;gap:8px;padding:8px 0">
+          <div style="flex:1;height:40%;background:var(--accent);border-radius:4px 4px 0 0"></div>
+          <div style="flex:1;height:65%;background:var(--accent);border-radius:4px 4px 0 0"></div>
+          <div style="flex:1;height:50%;background:var(--accent);border-radius:4px 4px 0 0"></div>
+          <div style="flex:1;height:80%;background:var(--accent);border-radius:4px 4px 0 0"></div>
+          <div style="flex:1;height:72%;background:var(--accent);border-radius:4px 4px 0 0"></div>
+          <div style="flex:1;height:95%;background:var(--accent-h);border-radius:4px 4px 0 0"></div>
+        </div></div>
+      <div class="set-card"><div class="set-card-title" style="margin-bottom:12px">来源分布</div>
+        <div class="set-row"><div class="set-row-main"><div class="set-row-title">BW</div></div><span class="set-badge accent">58%</span></div>
+        <div class="set-row"><div class="set-row-main"><div class="set-row-title">BY</div></div><span class="set-badge muted">27%</span></div>
+        <div class="set-row"><div class="set-row-main"><div class="set-row-title">BZ</div></div><span class="set-badge muted">15%</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 用户管理 -->
+  <div class="page" id="page-users">
+    <div class="set-page-head"><div><h1>用户管理</h1><p>管理账号、角色与权限开关。</p></div>
+      <div class="set-page-head-actions"><button class="btn btn-sm">默认权限</button><button class="btn btn-primary btn-sm">新建用户</button></div></div>
+    <div class="set-toolbar">
+      <span class="set-chip active">允许注册</span><span class="set-chip">需要登录</span><span class="set-chip">允许局域网游客 ⚠</span>
+    </div>
+    <div class="set-table-wrap">
+      <table class="set-table">
+        <thead><tr><th style="width:34px"></th><th>用户名</th><th>显示名</th><th>角色</th><th>状态</th><th>搜索</th><th>下载</th><th>操作</th></tr></thead>
+        <tbody>
+          <tr><td><input type="checkbox"></td><td class="mono">admin</td><td>管理员</td><td><span class="set-badge accent">admin</span></td><td><span class="set-badge ok">启用</span></td><td>✓</td><td>✓</td><td><button class="btn btn-sm">编辑</button></td></tr>
+          <tr><td><input type="checkbox"></td><td class="mono">lab01</td><td>检测一室</td><td><span class="set-badge muted">user</span></td><td><span class="set-badge ok">启用</span></td><td>✓</td><td>✓</td><td><button class="btn btn-sm">编辑</button></td></tr>
+          <tr><td><input type="checkbox"></td><td class="mono">guest</td><td>访客</td><td><span class="set-badge muted">user</span></td><td><span class="set-badge bad">禁用</span></td><td>✓</td><td>—</td><td><button class="btn btn-sm">编辑</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const NAV=[
+  ['search','🔍','标准检索'],['labr','🔬','Labr库检索'],['batch','📦','批量下载'],
+  ['complete','📋','标准补全'],['local','🗂','本地文件库'],['history','📥','下载历史'],
+  ['qual','🛡','资质查询'],null,
+  ['stats','📊','使用统计'],['users','👥','用户管理'],
+];
+const nav=document.getElementById('nav');
+NAV.forEach(it=>{
+  if(!it){const s=document.createElement('div');s.className='nav-sep';nav.appendChild(s);return;}
+  const b=document.createElement('button');b.className='nav-item'+(it[0]==='search'?' active':'');
+  b.innerHTML=`<span class="nav-ico">${it[1]}</span><span>${it[2]}</span>`;
+  b.onclick=()=>{document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));b.classList.add('active');
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    document.getElementById('page-'+it[0]).classList.add('active');
+    window.scrollTo({top:0});};
+  nav.appendChild(b);
+});
+function setTheme(t,btn){document.documentElement.setAttribute('data-theme',t);
+  document.querySelectorAll('.theme-switch button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+function qualTab(btn,id){btn.parentElement.querySelectorAll('.set-tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');
+  document.getElementById('q-search').style.display=id==='q-search'?'':'none';
+  document.getElementById('q-visual').style.display=id==='q-visual'?'':'none';}
+</script>
+</body>
+</html>

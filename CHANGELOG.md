@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat(ui): 全站重设计 Phase A — `.set-*` 统一组件层外扩(纯样式、零引用)** — 续设置页重构,把已验证的 `.set-*` 体系外扩到其余 8 页(标准检索/Labr/批量/补全/本地库/历史/资质/统计/用户)用,是后续各页改造的地基。方案见 `docs/PAGES-REDESIGN.md` §三;可点击原型 `docs/pages-redesign-prototype.html` + `docs/mobile-redesign-prototype.html`:
+  - 在 `web/src/styles/pages/settings.css` 末尾追加「全站统一组件层」,新增成员:`.set-page-head`(kicker+h1+p+右操作位,取代 `.page-heading` 与所有裸 `<h2 style>`)/`.set-card-head`+`.set-card-title`/`.set-toolbar`(`-left/-right`,取代 `.toolbar`/`.local-toolbar`/`.stats-controls`)/`.set-table`(sticky thead+hover+`.col-check/.col-actions/.col-num`,取代 `.local-table`/`.users-table`)/`.set-search`(`.thin` 薄变体,统一三处搜索壳覆写)/`.set-chips`+`button.set-chip` 交互筛选态(取代 `.qual-filter-btn`/`.source-tag`)/`.set-stats`+`.set-stat`(语义色,取代 `.stat-card`)/`.set-empty`/`.set-stepper`+`.set-step`(态:active/done/error)/`.set-badge`(语义色变体)/`.set-split`(`-wide`,取代各页二列 grid)/`.set-switch-danger`(高危开关红色态)/`.set-scroll-pane`(收口 `100vh - topbar - 140px` 魔数)/`.set-pager`/`.set-modal`(`-backdrop/-head/-body/-foot`,`.is-danger`)
+  - **纯新增、暂无 HTML 引用(CI 必绿)**;Phase B–E 各页逐步接上
+  - 同段**镜像追加**到 `public/styles.css` 末尾(维持迁移期双入口 cascade 等价);登记 `SECTIONS.md`
+  - **主题纪律**延续:只用 `var(--*)` token、无裸 oklch、无 `color-mix`;唯一例外 `.set-modal` 阴影沿用 `components/modal.css` 的 rgba 字面量(`--shadow-lg` 仅 light/paper 定义、dark `:root` 无)
 - **fix(settings): 修复深色主题下设置左导航未选中项露出浅灰原生按钮底色** — `.set-nav-item` 是 `<button>`,基础规则漏设 `background`,深色主题下浏览器原生 buttonface(浅灰)直接露出,只有 `.active`(设了 `var(--surface)`)正常。补 `background: transparent` + `text-align: left` + `font-family: inherit`(顺带 reset 原生按钮居中/系统字体)。`web/src/styles/pages/settings.css` + `public/styles.css` 镜像。
 - **fix(theme): 移除 `html` 的 ambient 径向晕染 —— 三主题统一纯色平铺** — 用户反馈内容顶部一坨"左深右浅的灰渐变,丑死了"。经 DevTools `elementsFromPoint` 确诊是 `html` 背景的三层 ambient 径向晕染(左上角 `80% 60% at 12% -8%` 那层 + `background-attachment: fixed`)在内容顶部糊出的色块,跟页面无关(search/settings 都有)、跟新做的扁平 `.set-*` 设计冲突:
   - 暗色(默认)`html` 去掉三层 radial,改纯 `var(--bg)`;亮色 `:root[data-theme="light"] html` 覆盖直接删除(base 平铺已随 token 自适应);纸张主题本就平铺,不动
