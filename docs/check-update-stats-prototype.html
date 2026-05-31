@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>标准查新 + 使用统计 预览 · StandardsBox</title>
+<style>
+:root{
+  --bg:#0e1118; --surface:#161a22; --surface-h:#1d212c; --border:#252934;
+  --text:#e4e6ea; --text-2:#a5a9b3; --text-3:#696d77;
+  --accent:#4f6df0; --accent-h:#6a85ff; --accent-g:#7585b8;
+  --success:#36b988; --danger:#d75541; --warning:#cba03e;
+  --radius-sm:8px; --radius:12px; --radius-lg:18px;
+  --ease-out:cubic-bezier(0.16,1,0.3,1); --mono:'DM Mono',ui-monospace,Consolas,monospace;
+}
+[data-theme="light"]{ --bg:#f4f7fb; --surface:#fbfcfe; --surface-h:#eef3f9; --border:#dbe2eb; --text:#1a2030; --text-2:#4a5568; --text-3:#8390a3; --accent:#2855d4; --accent-h:#1d47bd; --accent-g:#5a78d0; --success:#0f7d54; --danger:#c83838; --warning:#a3771a; }
+[data-theme="paper"]{ --bg:#f5f1e8; --surface:#fbfaf5; --surface-h:#efe9da; --border:#dfd8c6; --text:#2b2820; --text-2:#5c5648; --text-3:#928a76; --accent:#c96342; --accent-h:#b04e2f; --accent-g:#c08164; --success:#5a7d3e; --danger:#b94432; --warning:#a87520; }
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font:400 14px/1.5 'DM Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+.topbar{position:fixed;top:0;left:0;right:0;height:52px;display:flex;align-items:center;gap:12px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--border);z-index:30;}
+.topbar-logo{width:24px;height:24px;border-radius:6px;background:linear-gradient(135deg,var(--accent),var(--accent-h));}
+.topbar-title{font-weight:600;font-size:15px;}
+.topbar-title small{color:var(--text-3);font-weight:400;margin-left:6px;}
+.spacer{flex:1;}
+.switch{display:flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:3px;}
+.switch button{border:none;background:transparent;color:var(--text-2);font-size:12px;padding:5px 12px;border-radius:999px;cursor:pointer;}
+.switch button.active{background:var(--accent);color:#fff;}
+.content{margin-top:52px;padding:24px 30px;max-width:1100px;}
+.screen{display:none;} .screen.active{display:block;animation:fade .25s var(--ease-out);}
+@keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px;}
+.kicker{display:inline-block;font:700 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent-g);margin-bottom:6px;}
+.page-head h1{font-size:21px;font-weight:700;}
+.page-head p{margin-top:5px;font-size:13px;color:var(--text-3);max-width:62ch;}
+.btn{border:1px solid var(--border);background:var(--surface);color:var(--text-2);font:600 13px 'DM Sans',sans-serif;padding:7px 14px;border-radius:var(--radius-sm);cursor:pointer;}
+.btn:hover{color:var(--text);border-color:var(--accent-g);}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.head-actions{display:flex;gap:8px;}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:16px;}
+.card-head{padding:14px 16px;border-bottom:1px solid var(--border);font-size:15px;font-weight:650;}
+.card-body{padding:16px;}
+textarea{width:100%;min-height:90px;padding:12px;background:var(--surface-h);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font:400 13px/1.7 var(--mono);resize:vertical;outline:none;}
+textarea:focus{border-color:var(--accent);}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
+.stat{padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);}
+.stat-v{font:700 24px var(--mono);line-height:1;}
+.stat-l{margin-top:4px;font-size:12px;color:var(--text-3);}
+.stat.bad .stat-v{color:var(--danger);} .stat.warn .stat-v{color:var(--warning);} .stat.ok .stat-v{color:var(--success);} .stat.mut .stat-v{color:var(--text-3);}
+
+/* 查新结果 */
+.group-title{font:700 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);margin:18px 0 8px;}
+.ci{border:1px solid var(--border);border-left:3px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);margin-bottom:8px;}
+.ci.bad{border-left-color:var(--danger);} .ci.warn{border-left-color:var(--warning);} .ci.info{border-left-color:var(--accent);}
+.ci-head{display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;}
+.ci-code{font:600 13px var(--mono);color:var(--accent);min-width:150px;}
+.ci-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-size:13px;}
+.ci-badges{display:flex;gap:6px;flex-wrap:wrap;}
+.badge{font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px;border:1px solid currentColor;white-space:nowrap;}
+.badge.bad{color:var(--danger);} .badge.warn{color:var(--warning);} .badge.info{color:var(--accent);}
+.badge.ok{color:var(--success);} .badge.mut{color:var(--text-3);}
+.ci-caret{color:var(--text-3);font-size:11px;transition:transform .12s var(--ease-out);}
+.ci.open .ci-caret{transform:rotate(90deg);}
+.ci-detail{display:none;padding:0 14px 14px;}
+.ci.open .ci-detail{display:block;}
+.diff{display:grid;grid-template-columns:120px 1fr;gap:6px 14px;padding:12px 14px;background:var(--surface-h);border-radius:var(--radius-sm);font-size:13px;}
+.diff dt{color:var(--text-3);} .diff dd{color:var(--text);}
+.diff .old{color:var(--text-3);text-decoration:line-through;margin-right:8px;}
+.diff .new{color:var(--text);font-weight:600;}
+/* 无变动整组折叠 */
+.nochange{border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);}
+.nochange-head{display:flex;align-items:center;gap:8px;padding:11px 14px;cursor:pointer;color:var(--text-2);font-size:13px;}
+.nochange-body{display:none;padding:0 14px 12px;}
+.nochange.open .nochange-body{display:block;}
+.nochange.open .ci-caret{transform:rotate(90deg);}
+.nc-row{display:flex;gap:10px;padding:7px 0;border-top:1px solid var(--border);font-size:13px;}
+.nc-row .ci-code{min-width:150px;}
+
+/* 统计表 */
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center;}
+.chip{padding:6px 12px;border:1px solid var(--border);border-radius:999px;background:transparent;color:var(--text-2);font-size:12.5px;cursor:pointer;}
+.chip.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+.tbl-wrap{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface);}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+thead th{position:sticky;top:0;background:var(--surface-h);color:var(--text-2);font-weight:600;font-size:12px;text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap;}
+tbody td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+tbody tr:last-child td{border-bottom:0;}
+tbody tr.collapsible{cursor:pointer;}
+tbody tr:hover td{background:var(--surface-h);}
+.mono{font:500 12px var(--mono);color:var(--text-2);white-space:nowrap;}
+.cl-badge{font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;border:1px solid currentColor;}
+.cl-web{color:var(--accent);} .cl-desktop{color:var(--success);} .cl-mobile{color:var(--warning);}
+.op-badge{font-size:11.5px;font-weight:600;color:var(--text-2);}
+.res-badge{font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;border:1px solid currentColor;white-space:nowrap;}
+.res-ok{color:var(--success);} .res-fail{color:var(--danger);}
+.fold-caret{color:var(--text-3);font-size:10px;margin-right:6px;display:inline-block;transition:transform .12s;}
+tr.open .fold-caret{transform:rotate(90deg);}
+/* 失败行 / 含失败的折叠行：左侧红色条 */
+tbody tr.row-fail td:first-child{box-shadow:inset 3px 0 0 var(--danger);}
+.sub-row td{background:var(--surface-h);font-size:12.5px;color:var(--text-3);padding-left:34px;}
+.err-box{margin-top:6px;padding:8px 10px;background:var(--surface);border:1px solid var(--danger);border-radius:var(--radius-sm);font:400 12px/1.6 var(--mono);color:var(--danger);white-space:pre-wrap;}
+.muted{color:var(--text-3);}
+.note{margin-top:18px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);font-size:12.5px;color:var(--text-3);line-height:1.7;}
+.note b{color:var(--text-2);}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="topbar-logo"></div>
+  <div class="topbar-title">StandardsBox <small>查新 + 统计 预览</small></div>
+  <div class="spacer"></div>
+  <div class="switch" id="scr">
+    <button class="active" onclick="show('check',this)">标准查新</button>
+    <button onclick="show('stats',this)">使用统计</button>
+  </div>
+  <div class="switch" style="margin-left:8px">
+    <button class="active" onclick="setTheme('dark',this)">暗</button>
+    <button onclick="setTheme('light',this)">极地蓝</button>
+    <button onclick="setTheme('paper',this)">纸张</button>
+  </div>
+</div>
+
+<div class="content">
+  <!-- ===== 标准查新 ===== -->
+  <div class="screen active" id="screen-check">
+    <div class="page-head">
+      <div>
+        <span class="kicker">CHECK FOR UPDATES</span>
+        <h1>标准查新</h1>
+        <p>导入一批标准号，逐个比对 BW / BY / BZ 三源的当前状态。有变动的高亮展开，无变动的整组折叠。</p>
+      </div>
+      <div class="head-actions">
+        <button class="btn">导入 Excel</button>
+        <button class="btn primary">全部查新</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">导入清单 · 共 5 项</div>
+      <div class="card-body">
+        <textarea>GB/T 1.1-2009
+GB 5009.9-2016
+YY/T 0287-2017
+GB/T 19001-2016
+DB44/T 1234-2018</textarea>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="stat-v">5</div><div class="stat-l">总计</div></div>
+      <div class="stat bad"><div class="stat-v">3</div><div class="stat-l">有变动</div></div>
+      <div class="stat ok"><div class="stat-v">1</div><div class="stat-l">无变动</div></div>
+      <div class="stat mut"><div class="stat-v">1</div><div class="stat-l">无法核验</div></div>
+    </div>
+
+    <div class="group-title">⚠ 有变动（3）</div>
+
+    <div class="ci bad open" onclick="this.classList.toggle('open')">
+      <div class="ci-head">
+        <span class="ci-caret">▸</span>
+        <span class="ci-code">GB/T 1.1-2009</span>
+        <span class="ci-title">标准化工作导则 第1部分：标准的结构和编写</span>
+        <span class="ci-badges"><span class="badge bad">已作废</span><span class="badge warn">有新版本</span></span>
+      </div>
+      <div class="ci-detail">
+        <dl class="diff">
+          <dt>状态</dt><dd><span class="old">现行</span><span class="new">作废</span></dd>
+          <dt>新版本</dt><dd><span class="new">GB/T 1.1-2020</span>（据 BW 源，同基础号最新年版）</dd>
+          <dt>实施日期</dt><dd><span class="old">2009-10-01</span><span class="new">2020-10-01</span></dd>
+          <dt>被代替</dt><dd><span class="new">本标准已被 GB/T 1.1-2020 代替</span></dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="ci warn" onclick="this.classList.toggle('open')">
+      <div class="ci-head">
+        <span class="ci-caret">▸</span>
+        <span class="ci-code">GB 5009.9-2016</span>
+        <span class="ci-title">食品安全国家标准 食品中淀粉的测定</span>
+        <span class="ci-badges"><span class="badge warn">有新版本</span></span>
+      </div>
+      <div class="ci-detail">
+        <dl class="diff">
+          <dt>状态</dt><dd><span class="new">现行</span>（未变）</dd>
+          <dt>新版本</dt><dd><span class="new">GB 5009.9-2023</span>（据 BZ 源；现行版仍有效，注意新版实施时间）</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="ci info" onclick="this.classList.toggle('open')">
+      <div class="ci-head">
+        <span class="ci-caret">▸</span>
+        <span class="ci-code">YY/T 0287-2017</span>
+        <span class="ci-title">医疗器械 质量管理体系 用于法规的要求</span>
+        <span class="ci-badges"><span class="badge info">实施日期变化</span></span>
+      </div>
+      <div class="ci-detail">
+        <dl class="diff">
+          <dt>实施日期</dt><dd><span class="old">2017-05-01</span><span class="new">2017-11-01</span></dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="group-title">无变动（1）</div>
+    <div class="nochange" onclick="this.classList.toggle('open')">
+      <div class="nochange-head"><span class="ci-caret">▸</span>1 项与上次查新一致，点击展开</div>
+      <div class="nochange-body">
+        <div class="nc-row"><span class="ci-code">GB/T 19001-2016</span><span class="ci-title">质量管理体系 要求</span><span class="badge ok">现行 · 无变动</span></div>
+      </div>
+    </div>
+
+    <div class="group-title">无法核验（1）</div>
+    <div class="ci" style="border-left-color:var(--text-3)">
+      <div class="ci-head">
+        <span class="ci-code">DB44/T 1234-2018</span>
+        <span class="ci-title">（地方标准）</span>
+        <span class="ci-badges"><span class="badge mut">三源均未命中</span></span>
+      </div>
+    </div>
+
+    <div class="note"><b>预览说明</b>：数据为示例。真实版导入时存一份"基线快照"，查新时重新拉三源并逐字段 diff（状态 / 年版 / 实施日期 / 被代替）。"无法核验"= 三源都没查到，<b>不等于</b>无变动，单列出来避免漏报。批量查新走源限流 + 后台分批 + 进度条。详见 <b>docs/CHECK-UPDATE-AND-STATS.md</b>。</div>
+  </div>
+
+  <!-- ===== 使用统计 ===== -->
+  <div class="screen" id="screen-stats">
+    <div class="page-head">
+      <div>
+        <span class="kicker">USAGE ANALYTICS</span>
+        <h1>使用统计</h1>
+        <p>操作明细：时间 / 用户 / 主机名 / IP / 客户端 / 操作类型。同一用户 5 分钟内的同类操作折叠成一条。</p>
+      </div>
+      <div class="head-actions"><button class="btn">导出明细</button></div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="stat-v">1,284</div><div class="stat-l">总操作</div></div>
+      <div class="stat ok"><div class="stat-v">7</div><div class="stat-l">活跃用户</div></div>
+      <div class="stat"><div class="stat-v">486</div><div class="stat-l">下载</div></div>
+      <div class="stat bad"><div class="stat-v">31</div><div class="stat-l">失败</div></div>
+    </div>
+
+    <div class="toolbar">
+      <span style="color:var(--text-3);font-size:12px">操作类型：</span>
+      <button class="chip active">全部</button><button class="chip">查询</button><button class="chip">下载</button>
+      <button class="chip">预览</button><button class="chip">查新</button>
+      <span style="color:var(--text-3);font-size:12px;margin-left:6px">结果：</span>
+      <button class="chip active">全部</button><button class="chip">成功</button><button class="chip">失败</button>
+      <span style="margin-left:auto;color:var(--text-3);font-size:12px">客户端：</span>
+      <button class="chip active">全部</button><button class="chip">桌面</button><button class="chip">web</button><button class="chip">手机</button>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>时间</th><th>用户</th><th title="仅桌面端可获取主机名">主机名</th><th>IP</th><th>客户端</th><th>操作</th><th>结果</th><th>对象</th>
+        </tr></thead>
+        <tbody>
+          <!-- 折叠行：含失败 → 整行标红，结果列显示 11成功/1失败 -->
+          <tr class="collapsible row-fail" onclick="this.classList.toggle('open');this.nextElementSibling.style.display=this.classList.contains('open')?'table-row':'none'">
+            <td class="mono">14:32:08<br><span class="muted" style="font-size:10px">05-31</span></td>
+            <td>张三</td><td class="mono">DESKTOP-7QK3</td><td class="mono">192.168.1.42</td>
+            <td><span class="cl-badge cl-desktop">桌面</span></td>
+            <td><span class="fold-caret">▸</span><span class="op-badge">下载 ×12</span></td>
+            <td><span class="res-badge res-ok">11 成功</span> <span class="res-badge res-fail">1 失败</span></td>
+            <td class="muted">5 分钟内 12 个标准</td>
+          </tr>
+          <tr class="sub-row" style="display:none"><td colspan="8">
+            <div>GB/T 1.1-2020 · <span class="res-badge res-ok">成功</span> · 命中 BW 2.3MB</div>
+            <div>GB 5009.9-2016 · <span class="res-badge res-ok">成功</span> · 命中 BZ</div>
+            <div style="margin-top:4px">DB44/T 1234-2018 · <span class="res-badge res-fail">失败</span>
+              <div class="err-box">下载失败：BW → BY → BZ 四源均未匹配（15s 超时）</div>
+            </div>
+            <div class="muted" style="margin-top:4px">… 共 12 项（14:32:08 – 14:36:51）</div>
+          </td></tr>
+
+          <tr>
+            <td class="mono">14:30:55<br><span class="muted" style="font-size:10px">05-31</span></td>
+            <td>李四</td><td class="muted">—</td><td class="mono">192.168.1.58</td>
+            <td><span class="cl-badge cl-web">web</span></td>
+            <td><span class="op-badge">查询</span></td>
+            <td><span class="res-badge res-ok">成功</span></td>
+            <td class="muted">"食品安全" · 23 条</td>
+          </tr>
+
+          <!-- 单条失败行：可点开看 error -->
+          <tr class="collapsible row-fail" onclick="this.classList.toggle('open');this.nextElementSibling.style.display=this.classList.contains('open')?'table-row':'none'">
+            <td class="mono">14:29:12<br><span class="muted" style="font-size:10px">05-31</span></td>
+            <td>王五</td><td class="muted">—</td><td class="mono">192.168.1.77</td>
+            <td><span class="cl-badge cl-mobile">手机</span></td>
+            <td><span class="fold-caret">▸</span><span class="op-badge">预览</span></td>
+            <td><span class="res-badge res-fail">失败</span></td>
+            <td class="muted">GB/T 12345-2020</td>
+          </tr>
+          <tr class="sub-row" style="display:none"><td colspan="8">
+            <div class="err-box">预览失败：by 源 downloadPdf 返回 HTTP 500；已尝试 BW/BZ 均无可用文件</div>
+          </td></tr>
+
+          <tr class="collapsible" onclick="this.classList.toggle('open');this.nextElementSibling.style.display=this.classList.contains('open')?'table-row':'none'">
+            <td class="mono">14:20:33<br><span class="muted" style="font-size:10px">05-31</span></td>
+            <td>张三</td><td class="mono">DESKTOP-7QK3</td><td class="mono">192.168.1.42</td>
+            <td><span class="cl-badge cl-desktop">桌面</span></td>
+            <td><span class="fold-caret">▸</span><span class="op-badge">查询 ×4</span></td>
+            <td><span class="res-badge res-ok">4 成功</span></td>
+            <td class="muted">5 分钟内 4 次查询</td>
+          </tr>
+          <tr class="sub-row" style="display:none"><td colspan="8">"淀粉"、"GB 5009"、"医疗器械"、"质量管理"（14:20:33 – 14:23:47）</td></tr>
+
+          <tr>
+            <td class="mono">09:05:00<br><span class="muted" style="font-size:10px">05-31</span></td>
+            <td>张三</td><td class="mono">DESKTOP-7QK3</td><td class="mono">192.168.1.42</td>
+            <td><span class="cl-badge cl-desktop">桌面</span></td>
+            <td><span class="op-badge">打开客户端</span></td>
+            <td><span class="res-badge res-ok">成功</span></td>
+            <td class="muted">—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note"><b>预览说明</b>：示例数据。新增<b>结果列（成功/失败）</b>——失败行整行标红、可点开看 <b>error</b>（失败原因 + 关键日志摘要，与运行日志同源）。折叠行（同用户+同类型+5 分钟内）的结果列显示"N 成功 / M 失败"，含失败即标红，展开能定位到失败那条。主机名仅<b>桌面端</b>能取到（web/手机端"—"）；IP 取 req.ip。<b>底层 DB 每条单记</b>（含失败操作——以前失败根本没进统计，这次补齐），折叠只在展示层。权限：仅管理员看跨用户明细。详见 <b>docs/CHECK-UPDATE-AND-STATS.md</b>。</div>
+  </div>
+</div>
+
+<script>
+function show(s,b){
+  document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
+  document.getElementById('screen-'+s).classList.add('active');
+  [...document.querySelectorAll('#scr button')].forEach(x=>x.classList.toggle('active',x===b));
+}
+function setTheme(t,b){document.documentElement.dataset.theme=t;b.parentElement.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));}
+</script>
+</body>
+</html>
