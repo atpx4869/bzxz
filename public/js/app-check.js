@@ -72,13 +72,17 @@ function renderCheckItems(items) {
   const changed = items.filter(i => (i.changeFlags || []).length > 0);
   const notFound = items.filter(i => i.sourceUsed === 'not_found');
   const pending = items.filter(i => i.sourceUsed === 'pending');  // 建清单时有其它清单在查，尚未查基线
-  const noChange = items.filter(i => (i.changeFlags || []).length === 0 && i.sourceUsed !== 'not_found' && i.sourceUsed !== 'pending');
+  const checked = items.filter(i => (i.changeFlags || []).length === 0 && i.sourceUsed !== 'not_found' && i.sourceUsed !== 'pending');
+  // 无变动里再分：非"现行有效"状态（已废止/即将废止/即将实施/部分有效…）单独"需关注"、可展开看详情；
+  // 真正现行有效的才折叠进"无变动"。
+  const attention = checked.filter(i => !isActiveStatus(i.lastStatus));
+  const noChange = checked.filter(i => isActiveStatus(i.lastStatus));
 
   const stats = `<div class="set-stats" style="margin-bottom:16px">
     <div class="set-stat"><div class="set-stat-value">${items.length}</div><div class="set-stat-label">总计</div></div>
     <div class="set-stat is-bad"><div class="set-stat-value">${changed.length}</div><div class="set-stat-label">有变动</div></div>
-    <div class="set-stat is-ok"><div class="set-stat-value">${noChange.length}</div><div class="set-stat-label">无变动</div></div>
-    <div class="set-stat"><div class="set-stat-value">${notFound.length}</div><div class="set-stat-label">无法核验</div></div>
+    <div class="set-stat is-warn"><div class="set-stat-value">${attention.length}</div><div class="set-stat-label">需关注</div></div>
+    <div class="set-stat is-ok"><div class="set-stat-value">${noChange.length}</div><div class="set-stat-label">现行·无变动</div></div>
   </div>
   <div class="check-toolbar">
     <label class="check-auto"><input type="checkbox" id="checkAutoToggle" onchange="onCheckAutoToggle(this.checked)"> 自动查新</label>
@@ -92,8 +96,12 @@ function renderCheckItems(items) {
     html += `<div class="check-group-title">⚠ 有变动（${changed.length}）</div>`;
     html += changed.map(renderCheckChangedItem).join('');
   }
+  if (attention.length) {
+    html += `<div class="check-group-title">需关注（${attention.length}）· 非现行状态</div>`;
+    html += attention.map(renderCheckAttentionItem).join('');
+  }
   if (noChange.length) {
-    html += `<div class="check-group-title">无变动（${noChange.length}）</div>`;
+    html += `<div class="check-group-title">现行·无变动（${noChange.length}）</div>`;
     html += `<div class="check-nochange" onclick="this.classList.toggle('open')">
       <div class="check-nc-head"><span class="check-caret">▸</span>${noChange.length} 项与上次查新一致，点击展开</div>
       <div class="check-nc-body">${noChange.map(i =>
@@ -185,3 +193,28 @@ function diffRow(label, oldV, newV) {
   return `<dt>${label}</dt><dd><span class="diff-old">${escapeHtml(oldV)}</span><span class="diff-new">${escapeHtml(newV)}</span></dd>`;
 }
 function statusText(s) { return s || '—'; }
+
+// 是否"现行有效"（含部分有效也算需关注，更醒目）。非此即归"需关注"组。
+function isActiveStatus(s) { return /^现行有效$/.test((s || '').trim()); }
+function isAbolishedStatus(s) { return /废止|废除|作废/.test(s || ''); }
+
+// 需关注项（非现行状态、本次无变动）：默认收起、可点击展开看当前状态明细 + 替换信息。
+function renderCheckAttentionItem(i) {
+  const st = statusText(i.lastStatus);
+  const sev = isAbolishedStatus(i.lastStatus) ? 'bad' : 'warn';
+  const rows = [];
+  rows.push(`<dt>当前状态</dt><dd><span class="diff-new">${escapeHtml(st)}</span></dd>`);
+  if (i.lastImplDate) rows.push(`<dt>实施日期</dt><dd>${escapeHtml(i.lastImplDate)}</dd>`);
+  if (i.lastReplacedBy) rows.push(`<dt>被代替</dt><dd><span class="diff-new">本标准已被 ${escapeHtml(i.lastReplacedBy)} 代替</span></dd>`);
+  else if (isAbolishedStatus(i.lastStatus)) rows.push(`<dt>替换信息</dt><dd class="muted">BZ 未提供代替标准</dd>`);
+  if (i.newVersion) rows.push(`<dt>新版本</dt><dd><span class="diff-new">${escapeHtml(i.newVersion)}</span></dd>`);
+  return `<div class="check-item ${sev}" onclick="this.classList.toggle('open')">
+    <div class="check-item-head">
+      <span class="check-caret">▸</span>
+      <span class="check-code">${escapeHtml(i.stdCode)}</span>
+      <span class="check-title">${escapeHtml(i.lastTitle || '')}</span>
+      <span class="check-badges"><span class="check-badge ${sev}">${escapeHtml(st)} · 无变动</span></span>
+    </div>
+    <div class="check-detail"><dl class="check-diff">${rows.join('')}</dl></div>
+  </div>`;
+}
