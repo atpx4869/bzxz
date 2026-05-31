@@ -30,12 +30,7 @@ export interface CheckItemRow {
   lastCheckedAt: string | null;
   changeFlags: ChangeFlag[];
   sourceUsed: string | null;
-}
-
-// 状态归一：各源文案不同，按"是否含废止/作废"判断更稳，别死比字符串。
-function isAbolished(status: string | null | undefined): boolean {
-  if (!status) return false;
-  return /废止|废除|作废|已经废止|即将废止/.test(status);
+  newVersion: string | null;
 }
 
 export class CheckService {
@@ -49,7 +44,7 @@ export class CheckService {
     userId: number,
     name: string,
     lines: string[],
-    sources: SourceName[] = ['bz', 'gbw', 'by'],
+    sources: SourceName[] = ['bz'],
   ): Promise<{ id: number; itemCount: number }> {
     const info = this.db
       .prepare('INSERT INTO check_watchlists (user_id, name) VALUES (?, ?)')
@@ -90,7 +85,7 @@ export class CheckService {
   }
 
   // 重新查新：逐项再查 + 与基线 diff，更新 last_* 与 change_flags。
-  async recheck(watchlistId: number, sources: SourceName[] = ['bz', 'gbw', 'by']): Promise<void> {
+  async recheck(watchlistId: number, sources: SourceName[] = ['bz']): Promise<void> {
     const items = this.db
       .prepare('SELECT id, std_code FROM check_items WHERE watchlist_id = ?')
       .all(watchlistId) as Array<{ id: number; std_code: string }>;
@@ -103,7 +98,7 @@ export class CheckService {
     const update = this.db.prepare(`
       UPDATE check_items
       SET last_status = ?, last_title = ?, last_impl_date = ?, last_replaced_by = ?,
-          last_checked_at = ?, change_flags = ?, source_used = ?
+          last_checked_at = ?, change_flags = ?, source_used = ?, new_version = ?
       WHERE id = ?
     `);
     const txn = this.db.transaction(() => {
@@ -113,10 +108,10 @@ export class CheckService {
         ).get(it.id) as { base_status: string | null; base_title: string | null; base_impl_date: string | null; base_replaced_by: string | null };
         const fresh = byInput.get(it.std_code) ?? byInput.get(cleanStdCode(it.std_code));
         const sourceUsed = fresh ? fresh.source : 'not_found';
-        const flags = fresh ? this.diff(base, fresh, result.resolved) : [];
+        const d = fresh ? this.diff(base, fresh, result.resolved) : { flags: [] as ChangeFlag[], newVersion: null };
         update.run(
           fresh?.status ?? null, fresh?.title ?? null, fresh?.implementDate ?? null, fresh?.replacedStd ?? null,
-          now, JSON.stringify(flags), sourceUsed, it.id,
+          now, JSON.stringify(d.flags), sourceUsed, d.newVersion, it.id,
         );
       }
     });
@@ -124,25 +119,30 @@ export class CheckService {
     this.db.prepare('UPDATE check_watchlists SET last_checked_at = ? WHERE id = ?').run(now, watchlistId);
   }
 
-  // 逐字段 diff，产出变动标记。
+  // 逐字段 diff，产出变动标记 + 检出的具体新版本号（供 UI 展示 "GB/T 1.1-2020"）。
   private diff(
     base: { base_status: string | null; base_impl_date: string | null; base_replaced_by: string | null },
     fresh: ResolvedItem,
     allFresh: ResolvedItem[],
-  ): ChangeFlag[] {
+  ): { flags: ChangeFlag[]; newVersion: string | null } {
     const flags: ChangeFlag[] = [];
-    // 状态：按"是否废止"归一比，跨过文案差异
-    if (isAbolished(base.base_status) !== isAbolished(fresh.status)) flags.push('status');
+    // 状态：精确文案比对（现行有效→即将废止 逐级预警）
+    if ((base.base_status ?? '') !== (fresh.status ?? '')) flags.push('status');
     // 实施日期
     if ((base.base_impl_date ?? '') !== (fresh.implementDate ?? '')) flags.push('implDate');
-    // 被代替关系（仅 BZ 可靠；为空不算变化）
+    // 被代替关系（BZ 的 replacedStd；为空不算变化）
     if ((base.base_replaced_by ?? '') !== (fresh.replacedStd ?? '') && (fresh.replacedStd ?? '')) flags.push('replacedBy');
-    // 新版本：同基础号（剥年份）出现更高年版
+    // 新版本：同基础号（剥年份）出现更高年版 → 记下具体版本号
     const baseCode = extractBaseCode(fresh.standardNumber);
     const freshYear = yearOf(fresh.standardNumber);
-    const newer = allFresh.some((r) => extractBaseCode(r.standardNumber) === baseCode && yearOf(r.standardNumber) > freshYear);
-    if (newer) flags.push('newVersion');
-    return flags;
+    let newVersion: string | null = null;
+    for (const r of allFresh) {
+      if (extractBaseCode(r.standardNumber) === baseCode && yearOf(r.standardNumber) > freshYear) {
+        if (!newVersion || yearOf(r.standardNumber) > yearOf(newVersion)) newVersion = r.standardNumber;
+      }
+    }
+    if (newVersion) flags.push('newVersion');
+    return { flags, newVersion };
   }
 
   getWatchlists(userId: number) {
@@ -161,7 +161,7 @@ export class CheckService {
     const rows = this.db.prepare(`
       SELECT id, watchlist_id, std_code, base_status, base_title, base_impl_date, base_replaced_by,
              last_status, last_title, last_impl_date, last_replaced_by, last_checked_at,
-             change_flags, source_used
+             change_flags, source_used, new_version
       FROM check_items WHERE watchlist_id = ? ORDER BY id
     `).all(watchlistId) as Array<Record<string, unknown>>;
     return rows.map((r) => ({
@@ -179,6 +179,7 @@ export class CheckService {
       lastCheckedAt: (r.last_checked_at as string) ?? null,
       changeFlags: safeFlags(r.change_flags as string),
       sourceUsed: (r.source_used as string) ?? null,
+      newVersion: (r.new_version as string) ?? null,
     }));
   }
 

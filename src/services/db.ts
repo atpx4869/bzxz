@@ -268,7 +268,8 @@ function migrate(db: Database.Database): void {
       last_replaced_by TEXT,
       last_checked_at  TEXT,
       change_flags     TEXT,
-      source_used      TEXT
+      source_used      TEXT,
+      new_version      TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_check_items_wl ON check_items(watchlist_id);
   `);
@@ -290,6 +291,8 @@ function migrate(db: Database.Database): void {
   addColumnIfMissing(db, 'cnas_labs', 'org_address',     "TEXT DEFAULT ''");
   addColumnIfMissing(db, 'cnas_labs', 'validity_period', "TEXT DEFAULT ''");
   addColumnIfMissing(db, 'cnas_labs', 'cert_tasks',      "TEXT DEFAULT '[]'");
+  // 标准查新：new_version 列在中途版本可能缺（建表版先于本列），幂等补一下。
+  addColumnIfMissing(db, 'check_items', 'new_version',   'TEXT DEFAULT NULL');
 
   // 资质标准号归一化列（Step 2-3）：把脏空格/全角/无空格/ISO 冒号变体在写入时落成统一形态，
   // 让 queryByStdCodes / searchQualifications 用索引等值查询，不再需要 LIKE + LIMIT 兜底。

@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **refactor(check): 标准查新改 BZ 单源 + 精确状态比对** — 按用户反馈把查新从三源收敛到 **BZ 单源**（BZ 状态元数据最全：状态码 1-9 + 发布/实施/废止日期 + replacedStd，GBW/BY 字段不全且文案不一致）。省 2/3 请求、逻辑更聚焦。`check-service.ts` 默认 sources 改 `['bz']`；diff 的状态比对从"是否废止"布尔改**精确文案比对**（现行有效→即将废止 逐级预警）；新版本检出从布尔改为**记下具体版本号**（`check_items` 加 `new_version` 列），前端展示 "GB/T 1.1-2020（据 BZ 源）"。变动卡默认收起、文案贴近预览图（被代替写"本标准已被 X 代替"）。详见 `docs/CHECK-UPDATE-AND-STATS.md` §2
 - **feat(check): 标准查新 Phase 1 — 导入清单查三源 + 变动 diff（独立菜单）** — 全新功能，方案见 `docs/CHECK-UPDATE-AND-STATS.md`：
   - **地基核查**：确认 `StandardSummary` 统一契约含 `status`/`implementDate`/`abolishedDate`，BZ 另有 `meta.replacedStd`（被代替）；GBW 也填 status/implementDate。四维度有数据源支撑
   - **后端**：新增表 `check_watchlists`/`check_items`（含基线快照 + 最近查新结果 + change_flags）；`check-service.ts` 复用 `StandardResolver`（三源 + 并发限流）导入存基线 + `recheck` diff（状态按"是否废止"归一、实施日期、被代替、年版用 `extractBaseCode` 剥年比对）；`ResolvedItem` 补 `abolishedDate`/`replacedStd`；`check-routes.ts` 提供 watchlists CRUD + recheck（归属校验非本人 404），挂进 app.ts

@@ -99,15 +99,17 @@ function renderCheckChangedItem(i) {
     return `<span class="check-badge ${m[1]}">${m[0]}</span>`;
   }).join(' ');
   const sev = (i.changeFlags || []).includes('status') ? 'bad' : ((i.changeFlags || []).includes('newVersion') ? 'warn' : 'info');
+  const srcLabel = (i.sourceUsed || 'BZ').toUpperCase();
   const diffRows = [];
   if ((i.changeFlags || []).includes('status'))
     diffRows.push(diffRow('状态', statusText(i.baseStatus), statusText(i.lastStatus)));
+  if ((i.changeFlags || []).includes('newVersion'))
+    diffRows.push(`<dt>新版本</dt><dd><span class="diff-new">${escapeHtml(i.newVersion || '同基础号更新年版')}</span>（据 ${srcLabel} 源，同基础号最新年版）</dd>`);
   if ((i.changeFlags || []).includes('implDate'))
     diffRows.push(diffRow('实施日期', i.baseImplDate || '—', i.lastImplDate || '—'));
   if ((i.changeFlags || []).includes('replacedBy'))
-    diffRows.push(`<dt>被代替</dt><dd><span class="diff-new">${escapeHtml(i.lastReplacedBy || '')}</span></dd>`);
-  if ((i.changeFlags || []).includes('newVersion'))
-    diffRows.push(`<dt>新版本</dt><dd><span class="diff-new">检出同基础号更新年版</span>（据 ${escapeHtml(i.sourceUsed || '源')}）</dd>`);
+    diffRows.push(`<dt>被代替</dt><dd><span class="diff-new">本标准已被 ${escapeHtml(i.lastReplacedBy || '')} 代替</span></dd>`);
+  // 变动卡默认收起，点击展开看详情
   return `<div class="check-item ${sev}" onclick="this.classList.toggle('open')">
     <div class="check-item-head">
       <span class="check-caret">▸</span>
