@@ -246,11 +246,14 @@ function migrate(db: Database.Database): void {
 
     -- 标准查新（见 docs/CHECK-UPDATE-AND-STATS.md）
     CREATE TABLE IF NOT EXISTS check_watchlists (
-      id              INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id         INTEGER NOT NULL REFERENCES users(id),
-      name            TEXT NOT NULL,
-      created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-      last_checked_at TEXT
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id            INTEGER NOT NULL REFERENCES users(id),
+      name               TEXT NOT NULL,
+      created_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      last_checked_at    TEXT,
+      auto_enabled       INTEGER NOT NULL DEFAULT 0,   -- 自动查新开关（0/1）
+      auto_interval_days INTEGER NOT NULL DEFAULT 15,  -- 周期天数，硬下限 15
+      next_run_at        TEXT                          -- 下次自动查新时间（ISO）
     );
     CREATE TABLE IF NOT EXISTS check_items (
       id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -293,6 +296,10 @@ function migrate(db: Database.Database): void {
   addColumnIfMissing(db, 'cnas_labs', 'cert_tasks',      "TEXT DEFAULT '[]'");
   // 标准查新：new_version 列在中途版本可能缺（建表版先于本列），幂等补一下。
   addColumnIfMissing(db, 'check_items', 'new_version',   'TEXT DEFAULT NULL');
+  // 自动查新（Step 2）：旧库补列。
+  addColumnIfMissing(db, 'check_watchlists', 'auto_enabled',       'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing(db, 'check_watchlists', 'auto_interval_days', 'INTEGER NOT NULL DEFAULT 15');
+  addColumnIfMissing(db, 'check_watchlists', 'next_run_at',        'TEXT DEFAULT NULL');
 
   // 资质标准号归一化列（Step 2-3）：把脏空格/全角/无空格/ISO 冒号变体在写入时落成统一形态，
   // 让 queryByStdCodes / searchQualifications 用索引等值查询，不再需要 LIKE + LIMIT 兜底。

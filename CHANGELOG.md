@@ -3,6 +3,19 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat(check): 标准查新 Step 2 — 每清单自动查新（默认/下限 15 天）** —
+  - `check_watchlists` 加 `auto_enabled`/`auto_interval_days`(默认 15)/`next_run_at`（建表 + 幂等迁移）
+  - `check-service`：`setAuto(id, enabled, days)`（周期硬下限 15，开启时算 next_run_at）+ `runDueAutoChecks()`（找到期清单串行 recheck、跳过手动防抖、跑完重排下次时间、返回有变动清单摘要）；`getWatchlists` 带出 auto 字段
+  - `check-routes`：`PUT /api/check/watchlists/:id/auto`（zod 校验 intervalDays ≥15）
+  - `app.ts`：启动 30s 后补跑一次到期清单 + 每 6 小时扫一次（定时器进程存活时跑，应用关着错过的靠启动补跑兜底）；有变动的清单 `console.warn` 一条 → 被 log-buffer 截获、运行日志页可见
+  - 前端：清单结果区工具条加「自动查新」开关 + "每 N 天"输入（默认 15、下限 15），开关状态从 `getWatchlists` 回填；`check.css` 双文件镜像
+  - README API 表补 `PUT /:id/auto`
+- **fix(check): 修构建（req.params.id 类型断言）+ 查新限流 Step 1** —
+  - **修构建**：`check-routes.ts` 三处 `parseInt(req.params.id)` 报 `string|string[]`，加 `as string`（同 standards-routes 写法）
+  - **限流硬上限**（用户改不了，安全第一）：单清单/单次查新最多 **200** 标准（导入超出截断 + 提示 truncated）；分批 **50/批 + 批间 sleep 2s**；全局**串行锁**（同一时刻只 1 个清单在查，其余清单导入时只登记不立即查、标 `pending`，待手动查新）；出站并发由 BZ source-semaphore(=2) 收口
+  - **手动防抖**：同清单两次「重新查新」最小间隔 **20 分钟**，违反返回 429 + "请 X 分钟后再试"，前端 toast 提示；自动查新（Step 2）传 `manual=false` 跳过防抖
+  - 前端：导入提示分批查询、截断提示；`pending`/`not_found` 单独分组展示
+  - 自动查新（每清单可配、默认/硬下限 **15 天**）是 **Step 2**，本次未做
 - **refactor(check): 标准查新改 BZ 单源 + 精确状态比对** — 按用户反馈把查新从三源收敛到 **BZ 单源**（BZ 状态元数据最全：状态码 1-9 + 发布/实施/废止日期 + replacedStd，GBW/BY 字段不全且文案不一致）。省 2/3 请求、逻辑更聚焦。`check-service.ts` 默认 sources 改 `['bz']`；diff 的状态比对从"是否废止"布尔改**精确文案比对**（现行有效→即将废止 逐级预警）；新版本检出从布尔改为**记下具体版本号**（`check_items` 加 `new_version` 列），前端展示 "GB/T 1.1-2020（据 BZ 源）"。变动卡默认收起、文案贴近预览图（被代替写"本标准已被 X 代替"）。详见 `docs/CHECK-UPDATE-AND-STATS.md` §2
 - **feat(check): 标准查新 Phase 1 — 导入清单查三源 + 变动 diff（独立菜单）** — 全新功能，方案见 `docs/CHECK-UPDATE-AND-STATS.md`：
   - **地基核查**：确认 `StandardSummary` 统一契约含 `status`/`implementDate`/`abolishedDate`，BZ 另有 `meta.replacedStd`（被代替）；GBW 也填 status/implementDate。四维度有数据源支撑

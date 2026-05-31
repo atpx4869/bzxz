@@ -1010,7 +1010,12 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
 
 /* ── 标准查新页（Phase 1）—— 镜像 web/src/styles/pages/check.css ── */
 .check-empty { padding: 40px; text-align: center; color: var(--text-3); font-size: 13px; }
-.check-toolbar { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+.check-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-bottom: 12px; }
+.check-auto { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); cursor: pointer; user-select: none; }
+.check-auto input { accent-color: var(--accent); }
+.check-auto-interval { font-size: 13px; color: var(--text-2); display: inline-flex; align-items: center; gap: 4px; }
+.check-auto-interval input { padding: 4px 6px; background: var(--surface-h); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); outline: none; font: 500 12px 'DM Mono', monospace; }
+.check-auto-interval input:focus { border-color: var(--accent); }
 .check-group-title { font: 700 11px 'DM Mono', monospace; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin: 18px 0 8px; }
 .check-item { border: 1px solid var(--border); border-left: 3px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); margin-bottom: 8px; }
 .check-item.bad { border-left-color: var(--danger); }

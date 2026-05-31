@@ -14,6 +14,7 @@ import { createStatsRoutes } from './stats-routes';
 import { createQualificationRoutes } from './cnas-routes';
 import { createStandardsRoutes } from './standards-routes';
 import { createCheckRoutes } from './check-routes';
+import { CheckService } from '../services/check-service';
 import { createPreviewRoutes } from './preview-routes';
 import { createLabrRoutes } from './labr-routes';
 import { scanLibrary, startLibraryWatcher, parseLibraryFilename } from '../services/library-index';
@@ -298,6 +299,22 @@ export function createApp() {
     startLibraryWatcher(db).catch((e) => {
       console.error('[library] startup watcher failed:', e);
     });
+  }
+
+  // 标准查新：自动查新调度。启动补跑一次到期的，之后每 6 小时扫一次（周期是天级，
+  // 6h 粒度足够；定时器在进程存活时才跑，应用关着错过的靠启动补跑兜底）。
+  // 有变动的清单写一条运行日志（console 被 log-buffer 截获 → 运行日志页可见）。
+  {
+    const checkSvc = new CheckService(db, sourceRegistry);
+    const runAuto = () => {
+      checkSvc.runDueAutoChecks()
+        .then((changed) => {
+          for (const c of changed) console.warn(`[check-auto] 清单「${c.name}」检出 ${c.changedCount} 项标准变动`);
+        })
+        .catch((e) => console.error('[check-auto] 自动查新调度失败:', e instanceof Error ? e.message : String(e)));
+    };
+    setTimeout(runAuto, 30_000);                 // 启动 30s 后补跑（避开启动高峰）
+    setInterval(runAuto, 6 * 60 * 60 * 1000);    // 每 6 小时扫一次到期清单
   }
 
   app.use(createStandardsRoutes({ db, sourceRegistry, exportTaskStore, requireAuth, baseDir }));

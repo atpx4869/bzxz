@@ -17,7 +17,7 @@ async function doCheckImport() {
   if (!lines.length) { showToast('请粘贴标准号', 'fail'); return; }
   const btn = document.getElementById('checkRunBtn');
   btn.disabled = true; btn.textContent = '查新中…';
-  document.getElementById('checkResults').innerHTML = '<div class="check-empty">正在按三源逐个查新，请稍候…</div>';
+  document.getElementById('checkResults').innerHTML = '<div class="check-empty">正在查 BZ 源，请稍候…（每批 50、分批查询）</div>';
   try {
     const res = await apiFetch('/api/check/watchlists', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -27,12 +27,15 @@ async function doCheckImport() {
     if (!res.ok) throw new Error(data.message || '查新失败');
     checkCurrentWatchlistId = data.id;
     await loadCheckItems(data.id);
-    showToast(`已导入 ${data.itemCount} 项并完成查新`);
+    let msg = `已导入 ${data.itemCount} 项并完成查新`;
+    if (data.truncated) msg += `（超过 200 上限，已截断）`;
+    showToast(msg);
   } catch (e) {
     document.getElementById('checkResults').innerHTML = `<div class="check-empty">查新失败：${escapeHtml(e.message)}</div>`;
     showToast(`查新失败：${e.message}`, 'fail');
+  } finally {
+    btn.disabled = false; btn.textContent = '导入并查新';
   }
-  btn.disabled = false; btn.textContent = '导入并查新';
 }
 
 async function doRecheck() {
@@ -42,10 +45,12 @@ async function doRecheck() {
   try {
     const res = await apiFetch(`/api/check/watchlists/${checkCurrentWatchlistId}/recheck`, { method: 'POST' });
     const data = await readApiResponse(res);
+    if (res.status === 429) { showToast(data.message || '查新过于频繁，请稍后再试', 'fail'); return; }
     if (!res.ok) throw new Error(data.message || '查新失败');
     renderCheckItems(data.items || []);
     showToast('已重新查新');
   } catch (e) { showToast(`查新失败：${e.message}`, 'fail'); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = '重新查新'; } }
   if (btn) { btn.disabled = false; btn.textContent = '重新查新'; }
 }
 
@@ -60,7 +65,8 @@ function renderCheckItems(items) {
   if (!items.length) { host.innerHTML = '<div class="check-empty">清单为空</div>'; return; }
   const changed = items.filter(i => (i.changeFlags || []).length > 0);
   const notFound = items.filter(i => i.sourceUsed === 'not_found');
-  const noChange = items.filter(i => (i.changeFlags || []).length === 0 && i.sourceUsed !== 'not_found');
+  const pending = items.filter(i => i.sourceUsed === 'pending');  // 建清单时有其它清单在查，尚未查基线
+  const noChange = items.filter(i => (i.changeFlags || []).length === 0 && i.sourceUsed !== 'not_found' && i.sourceUsed !== 'pending');
 
   const stats = `<div class="set-stats" style="margin-bottom:16px">
     <div class="set-stat"><div class="set-stat-value">${items.length}</div><div class="set-stat-label">总计</div></div>
@@ -68,7 +74,12 @@ function renderCheckItems(items) {
     <div class="set-stat is-ok"><div class="set-stat-value">${noChange.length}</div><div class="set-stat-label">无变动</div></div>
     <div class="set-stat"><div class="set-stat-value">${notFound.length}</div><div class="set-stat-label">无法核验</div></div>
   </div>
-  <div class="check-toolbar"><button class="btn btn-sm btn-ghost" id="checkRecheckBtn" onclick="doRecheck()">重新查新</button></div>`;
+  <div class="check-toolbar">
+    <label class="check-auto"><input type="checkbox" id="checkAutoToggle" onchange="onCheckAutoToggle(this.checked)"> 自动查新</label>
+    <span class="check-auto-interval" id="checkAutoIntervalWrap" style="display:none">每
+      <input type="number" id="checkAutoInterval" min="15" max="365" value="15" onchange="onCheckAutoInterval(this.value)" style="width:56px"> 天</span>
+    <button class="btn btn-sm btn-ghost" id="checkRecheckBtn" onclick="doRecheck()">重新查新</button>
+  </div>`;
 
   let html = stats;
   if (changed.length) {
@@ -87,11 +98,54 @@ function renderCheckItems(items) {
   if (notFound.length) {
     html += `<div class="check-group-title">无法核验（${notFound.length}）</div>`;
     html += notFound.map(i =>
-      `<div class="check-item nf"><div class="check-item-head"><span class="check-code">${escapeHtml(i.stdCode)}</span><span class="check-title muted">三源均未命中</span></div></div>`
+      `<div class="check-item nf"><div class="check-item-head"><span class="check-code">${escapeHtml(i.stdCode)}</span><span class="check-title muted">BZ 源未命中</span></div></div>`
     ).join('');
   }
+  if (pending.length) {
+    html += `<div class="check-group-title">待查新（${pending.length}）</div>`;
+    html += `<div class="check-nochange" onclick="this.classList.toggle('open')">
+      <div class="check-nc-head"><span class="check-caret">▸</span>${pending.length} 项已登记、尚未查基线（导入时有其它清单在查），点「重新查新」即可查</div>
+      <div class="check-nc-body">${pending.map(i =>
+        `<div class="check-nc-row"><span class="check-code">${escapeHtml(i.stdCode)}</span><span class="check-title muted">待查新</span></div>`
+      ).join('')}</div>
+    </div>`;
+  }
   host.innerHTML = html;
+  loadCheckAutoState();
 }
+
+// 自动查新开关状态：从清单列表里取当前清单的 auto_enabled / interval 回填 UI。
+async function loadCheckAutoState() {
+  if (!checkCurrentWatchlistId) return;
+  try {
+    const res = await apiFetch('/api/check/watchlists');
+    const data = await readApiResponse(res);
+    const wl = (data.items || []).find(w => w.id === checkCurrentWatchlistId);
+    if (!wl) return;
+    const tg = document.getElementById('checkAutoToggle');
+    const wrap = document.getElementById('checkAutoIntervalWrap');
+    const inp = document.getElementById('checkAutoInterval');
+    if (tg) tg.checked = !!wl.autoEnabled;
+    if (inp) inp.value = wl.autoIntervalDays || 15;
+    if (wrap) wrap.style.display = wl.autoEnabled ? '' : 'none';
+  } catch { /* 静默 */ }
+}
+async function saveCheckAuto() {
+  if (!checkCurrentWatchlistId) return;
+  const enabled = document.getElementById('checkAutoToggle').checked;
+  const intervalDays = Math.max(15, parseInt(document.getElementById('checkAutoInterval').value, 10) || 15);
+  document.getElementById('checkAutoIntervalWrap').style.display = enabled ? '' : 'none';
+  try {
+    const res = await apiFetch(`/api/check/watchlists/${checkCurrentWatchlistId}/auto`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled, intervalDays }),
+    });
+    if (!res.ok) { const d = await readApiResponse(res); throw new Error(d.message || '设置失败'); }
+    showToast(enabled ? `已开启自动查新（每 ${intervalDays} 天）` : '已关闭自动查新');
+  } catch (e) { showToast(`设置失败：${e.message}`, 'fail'); }
+}
+function onCheckAutoToggle() { saveCheckAuto(); }
+function onCheckAutoInterval() { if (document.getElementById('checkAutoToggle').checked) saveCheckAuto(); }
 
 function renderCheckChangedItem(i) {
   const flags = (i.changeFlags || []).map(f => {

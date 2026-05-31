@@ -5,7 +5,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { respond, respondError } from '../shared/response';
 import { toCamelCase } from '../shared/case';
 import { normalizeError } from '../shared/errors';
-import { CheckService } from '../services/check-service';
+import { CheckService, CheckDebounceError } from '../services/check-service';
 import type { SourceRegistry } from '../services/source-registry';
 
 // 标准查新路由（见 docs/CHECK-UPDATE-AND-STATS.md）。挂载路径自带 /api/check 前缀。
@@ -62,6 +62,21 @@ export function createCheckRoutes(
       if (Number.isNaN(id) || !ensureOwner(req, res, id)) return;
       await svc.recheck(id);
       respond(res, { items: toCamelCase(svc.getItems(id)) });
+    } catch (e) {
+      if (e instanceof CheckDebounceError) { respondError(res, 429, 'TOO_FREQUENT', e.message); return; }
+      next(normalizeError(e));
+    }
+  });
+
+  // 设置自动查新（每清单：开关 + 周期天数，硬下限 15）
+  router.put('/api/check/watchlists/:id/auto', requireAuth, (req, res, next) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (Number.isNaN(id) || !ensureOwner(req, res, id)) return;
+      const schema = z.object({ enabled: z.boolean(), intervalDays: z.number().int().min(15).max(365).optional() });
+      const { enabled, intervalDays } = schema.parse(req.body);
+      svc.setAuto(id, enabled, intervalDays ?? 15);
+      respond(res, { ok: true });
     } catch (e) { next(normalizeError(e)); }
   });
 
