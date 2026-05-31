@@ -66,12 +66,17 @@ export interface CheckItemRow {
 }
 
 export class CheckService {
-  private bz: StandardService;
+  private bzService: StandardService | null = null;
   // 全局串行锁：同一时刻只允许一个清单在查（防多清单/多用户并发打爆 BZ）。
   private static querying = false;
 
-  constructor(private readonly db: Database.Database, registry: SourceRegistry) {
-    this.bz = new StandardService(registry.get('bz'));
+  // 不在构造里 registry.get('bz')：那会在 createApp() 时急切加载 BZ adapter
+  // （破坏懒加载约定、且测试环境 require 路径解析会失败）。改为查询时懒解析。
+  constructor(private readonly db: Database.Database, private readonly registry: SourceRegistry) {}
+
+  private bz(): StandardService {
+    if (!this.bzService) this.bzService = new StandardService(this.registry.get('bz'));
+    return this.bzService;
   }
 
   private static sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
@@ -81,7 +86,7 @@ export class CheckService {
     const q = input.trim();
     let results: StandardSummary[];
     try {
-      results = await this.bz.searchStandards({ query: q });
+      results = await this.bz().searchStandards({ query: q });
     } catch {
       return null; // BZ 查询失败 → 当作未命中（标 not_found）
     }
