@@ -116,7 +116,8 @@ export function createPreviewRoutes(
         }
         if (!result || !result.filePath) continue;
 
-        trackEvent(db, userId, 'download', src, match.id, { autoTriggeredBy: 'preview' });
+        // 后台自动下载（预览触发），无 req 上下文：ip/hostname 留空，client 标 system
+        trackEvent(db, userId, 'download', src, match.id, { autoTriggeredBy: 'preview' }, { result: 'success', client: 'system' });
 
         // 3) 入库
         const moved = await moveDownloadToLibrary(db, sourceRegistry, src, match.id, result);

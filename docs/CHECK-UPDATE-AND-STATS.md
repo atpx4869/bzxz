@@ -1,0 +1,226 @@
+# 标准查新 + 使用统计重构 —— 方案
+
+> 两个功能的设计方案（暂不写代码）。可点击预览：`docs/check-update-stats-prototype.html`
+> （顶部切三主题 + 两屏切换：标准查新 / 使用统计）。
+
+---
+
+## 功能一：标准查新
+
+### 1. 需求
+
+用户导入一批标准号（像批量下载那样，可粘贴多行 / 导入 Excel），系统逐个查新：
+**有变动**的标准 → 高亮提醒 + 展开变动详情；**无变动**的 → 折叠收起。变动维度（已确认）：
+
+1. **状态变化**：现行 → 作废 / 被代替（最核心）。
+2. **有新版本**：同基础号出现更新年版（如 GB/T 1.1-2009 → 2020）。
+3. **实施日期 / 被代替关系变化**：实施日期变了、代替了哪些旧标准、被哪个新标准代替。
+
+### 2. 数据来源（已确认）
+
+复用现有 **BW / BY / BZ 三源**检索通道实时查。导入时存一份"基线快照"，查新时重新拉取、与
+快照逐字段 diff。无需新数据源、无需自建权威标准目录。
+
+> labr 是下载补充源、不一定有完整状态元数据，查新默认走 BW/BY/BZ 三源；某标准三源都查不到
+> 时标记"未找到/无法核验"，不算"无变动"（避免漏报）。
+
+### 3. 数据模型（新增表）
+
+```sql
+-- 查新清单（用户导入的一批标准 = 一个 watchlist；支持多份）
+CREATE TABLE check_watchlists (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL REFERENCES users(id),
+  name        TEXT NOT NULL,                 -- 清单名（导入时取文件名 / 用户命名）
+  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  last_checked_at TEXT
+);
+
+-- 清单内的标准 + 基线快照 + 最近一次查新结果
+CREATE TABLE check_items (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  watchlist_id  INTEGER NOT NULL REFERENCES check_watchlists(id),
+  std_code      TEXT NOT NULL,               -- 导入的标准号（清洗后，复用 cleanStdCode）
+  std_code_norm TEXT,                        -- 归一化（复用 extractFullCode）
+  -- 基线快照（导入时拉到的状态）
+  base_status   TEXT,                        -- 现行/作废/被代替/即将实施
+  base_title    TEXT,
+  base_impl_date TEXT,                       -- 实施日期
+  base_replaced_by TEXT,                     -- 被哪个新标准代替
+  base_snapshot_at TEXT,
+  -- 最近查新结果
+  last_status   TEXT,
+  last_title    TEXT,
+  last_impl_date TEXT,
+  last_replaced_by TEXT,
+  last_checked_at TEXT,
+  change_flags  TEXT,                        -- JSON：本次检出的变动类型数组 ['status','newVersion',...]
+  source_used   TEXT                         -- 命中的源 / 'not_found'
+);
+CREATE INDEX idx_check_items_wl ON check_items(watchlist_id);
+```
+
+**为什么存快照**：查新的本质是"和上次相比变没变"。存导入时的基线，之后每次查新和基线（或上次结果）
+diff，才能判定"变动"。否则只能显示"当前状态"，给不出"变了"的信号。
+
+### 4. 比对逻辑（`diffStandard(base, fresh)`）
+
+逐字段比，产出 `change_flags`：
+
+- `status`：`base_status !== fresh.status`（现行→作废等）。
+- `newVersion`：fresh 里同基础号（`extractBaseCode`，**剥年份**）出现更高年版 → 标"有新版本：XXXX"。
+  复用现有 std-code 三层归一里的 `extractBaseCode`，与资质跨年匹配同源。
+- `implDate`：实施日期变化。
+- `replacedBy`：被代替关系变化。
+
+无任何 flag → 归"无变动"（折叠）。三源都未命中 → `source_used='not_found'`，单列"无法核验"。
+
+### 5. 信息架构（复用 `.set-*`）
+
+**已确认：独立菜单「标准查新」**，侧栏与标准检索同级（不是子 tab）。`switchTab('check')` +
+`#page-check` + `TAB_LABELS.check`，两个 index.html 同步；移动端进「我」页入口或底部 Tab（随移动端期）。
+
+| 区域 | 组件 | 内容 |
+|---|---|---|
+| 页头 | `.set-page-head` | h1「标准查新」+ 副说明 + 右侧「导入 / 全部查新」 |
+| 导入区 | `.set-card` + `.batch-textarea` | 粘贴多行标准号 / 上传 Excel（复用批量下载的解析）；显示"清单 N 项" |
+| 概览 | `.set-stats` | 总计 / 有变动 / 无变动 / 无法核验 |
+| 结果区 | 分组列表 | **有变动**默认展开（顶部、`is-bad`/`is-warn` 语义色 + 变动徽章）；**无变动**整组折叠成一行"N 项无变动 ▸"，点开才列出 |
+| 变动详情 | 行内展开 | 旧值 → 新值对照（状态/年版/实施日期/被代替），复用日志页 `.log-full` 风格的对照块 |
+
+变动徽章语义：状态变化=红（danger）、有新版本=橙（warning）、实施日期/被代替=蓝（accent）。
+
+### 6. API（新增）
+
+- `POST /api/check/watchlists`（建清单 + 导入标准号，存基线快照——首次查一遍三源）
+- `GET /api/check/watchlists` / `GET /api/check/watchlists/:id`（列清单 / 看明细）
+- `POST /api/check/watchlists/:id/recheck`（重新查新，逐项三源拉取 + diff，写 change_flags）
+- `DELETE /api/check/watchlists/:id`（删清单——不可逆，二次确认）
+
+查新走现有源 semaphore 限流（别打爆上游），大清单后台分批、前端轮询进度（复用批量下载的进度模式）。
+
+### 7. 分期
+
+- **Phase 1**：表 + 导入（存基线快照）+ 单清单查新 + 有变动/无变动分组折叠 + 变动详情。先放
+  **独立菜单**「标准查新」与标准检索同级（已确认）。
+- **Phase 2**：Excel 导入（复用批量下载解析）、清单管理（多份/重命名/删）、查新进度条。
+- **Phase 3**：定时自动查新（复用 scheduled-task 思路）+ 有变动时桌面通知 / 运行日志记一条。
+
+### 8. 风险
+
+- **批量查新慢 + 受源限流**：100 个标准 × 三源 = 300 次请求。必须走 semaphore + 后台分批 +
+  进度反馈，不能卡 UI。导入时的"首次基线快照"同理。
+- **"无变动"误判**：源临时查不到 ≠ 无变动。三源都未命中要单列"无法核验"，不能混进"无变动"。
+- **年版判定**：依赖源返回的同基础号最新年版，复用 `extractBaseCode`；源数据不全时年版提醒可能漏，
+  文案要诚实（"据 X 源"）。
+
+---
+
+## 功能二：使用统计重构
+
+### 1. 现状（已有，不是从零）
+
+`usage_events` 表 + `trackEvent()` + `stats-routes.ts`（summary / timeseries / by-source /
+by-user / recent）已存在，已记 `search` / `download` / `batch_resolve` / `complete`，字段
+`{user_id, event_type, source, standard_id, metadata, created_at}`。**所以这是增强，不是重写。**
+
+### 2. 需求差距 → 要补的字段
+
+需求要记：时间、**主机名、IP、客户端类型**、操作类型（打开/查询/预览/下载…）、
+**操作结果（成功/失败）+ 失败时的日志/原因**、同用户短时间折叠。
+现状缺：hostname / ip / client / result / error。补五列：
+
+```sql
+ALTER TABLE usage_events ADD COLUMN ip        TEXT;   -- req.ip / X-Forwarded-For
+ALTER TABLE usage_events ADD COLUMN hostname  TEXT;   -- 见下"主机名约束"
+ALTER TABLE usage_events ADD COLUMN client    TEXT;   -- 'web' | 'desktop' | 'mobile'
+ALTER TABLE usage_events ADD COLUMN result    TEXT;   -- 'success' | 'fail'（NULL=旧数据/未标）
+ALTER TABLE usage_events ADD COLUMN error     TEXT;   -- 失败原因 / 日志摘要（result='fail' 时）
+```
+
+`trackEvent` 签名加可选 `ctx { ip, hostname, client }` + `result`/`error`，从请求注入
+（middleware 统一塞 ctx；result/error 由各业务调用点按成功/异常分支传）。旧调用不传也能跑（列可空）。
+
+**记录结果的口径**：
+- **成功**：操作正常完成（搜索有结果返回、下载落地、预览生成、补全产出）→ `result='success'`。
+- **失败**：业务异常分支（搜索源全部超时、下载四源未命中 / HTTP 错误、预览失败、补全报错）→
+  `result='fail'`，`error` 写**简明原因 + 关键日志摘要**（如 `BW/BY/BZ 全部超时(15s)`、
+  `DB44/T 1234 四源均未匹配`、`by 源 downloadPdf HTTP 500`）。错误文本与运行日志同源，避免两套说法。
+- 各 `trackEvent` 调用点本就分布在 try/catch 里（见 `standards-routes.ts` 的 search/download/
+  complete），把 catch 分支也补一条 `result='fail'` 的事件即可——**失败操作以前根本没进统计，这次一并补齐**。
+
+**已确认记录维度**：IP + 主机名都记 + 操作结果（成功/失败）+ 失败日志。
+
+> **主机名约束（重要、要在 UI 说明）**：浏览器（web / 手机端）受隐私限制**拿不到客户机主机名**，
+> 只有 **Electron 桌面端**能 `os.hostname()` 拿到并随请求带上（如 `X-Client-Host` 头，主进程注入）。
+> 所以 hostname 是"桌面端有值、web/手机端为空"。client 类型可由 UA + 自定义头判定：
+> Electron 桌面 → `desktop`、移动 UA → `mobile`、其余 → `web`。IP 后端 `req.ip` 都能拿到。
+
+### 3. 操作类型（event_type 扩充）
+
+现有 `search` / `download` / `batch_resolve` / `complete`，按需求补：
+- `open`（打开某页 / 启动客户端）
+- `preview`（预览，preview-routes 已有触发点可加）
+- `qual_search`（资质查询）、`check`（标准查新）
+统一在 `EVENT_TYPES` 常量里登记，前端筛选/展示用同一份中文映射。
+
+### 4. 同用户短时间折叠（已确认：同用户 + 同类型 + 5 分钟内）
+
+- **数据层不丢**：`usage_events` 仍每条单记（审计完整性，永久删除/篡改都不可取）。
+- **展示层折叠**：统计页"操作明细"渲染时，把 `同 user + 同 event_type + 相邻且间隔 ≤5min` 的连续
+  记录合并成一条："张三 5 分钟内下载了 12 个标准 ▸"，点开列出明细。后端可加一个
+  `GET /api/stats/activity?collapse=5m` 直接返回折叠后的分组，减轻前端。
+
+### 5. 信息架构（统计页重构）
+
+页头 `.set-page-head` + 日期区间（现有）+ 新增"操作明细"主体：
+
+| 区域 | 组件 | 内容 |
+|---|---|---|
+| 概览 | `.set-stats` | 总操作 / 活跃用户 / 下载数 / **失败数**（现有 summary 增强；失败数用 danger 色突出） |
+| 图表 | `.set-card` + Chart.js | 趋势 / 操作类型分布（现有 timeseries / by-source 复用） |
+| **操作明细** | `.set-table` | 列：时间 / 用户 / 主机名 / IP / 客户端 / 操作类型 / **结果** / 对象（标准号）。结果用成功/失败徽章；**失败行左侧 danger 色条**，行可展开看 `error`（失败原因/日志摘要）。同用户5分钟同类折叠成一行，展开看明细 |
+| 筛选 | `.set-toolbar` + `.set-chip` | 按用户 / 操作类型 / 客户端 / **结果（全部/成功/失败）** / 时间筛（管理员可跨用户，普通用户只看自己） |
+
+客户端类型用小徽章（`.set-badge`）：web=蓝、桌面=绿、手机=橙；结果徽章：成功=绿、失败=红。
+**折叠组里只要含失败项就标红 + 显示 "N 成功 / M 失败"**，展开能定位到具体失败那条 + 其 error。
+权限沿用现有：非管理员只看自己。
+
+### 6. API（增强现有 stats-routes）
+
+- 现有 `/summary` `/timeseries` `/by-source` `/by-user` `/recent` 不动接口、SELECT 补回新列；
+  `/summary` 增 `failCount`（`result='fail'` 计数）。
+- 新增 `GET /api/stats/activity`：操作明细，支持 `collapse=5m`（同用户同类型5分钟折叠，
+  折叠组带 `successCount`/`failCount`）+ 按 user/eventType/client/**result**/时间筛 + 分页。
+  返回每条的 `result` / `error`。
+- `trackEvent` 注入 `ip/hostname/client`：在 auth middleware 后加一个轻量 middleware 解析这三项
+  挂到 `req`，各 trackEvent 调用点透传（或 trackEvent 直接读 `req`——但 usage-tracker 现在不接 req，
+  改成接一个 ctx 对象更干净）。
+
+### 7. 分期
+
+- **Phase 1 ✅ 后端采集层已落地**：
+  - `usage_events` 加五列（ip/hostname/client/result/error），走 `addColumnIfMissing` 幂等迁移。
+  - `usage-tracker.ts`：`trackEvent` 加第 7 参 `ctx`（ip/hostname/client/result/error）；新增
+    `extractUsageCtx(req)`（hostname 取 `X-Client-Host` 头、client 取 `X-Client-Type` 头或 UA 粗判、
+    ip 取 `req.ip` 并剥 `::ffff:`）。
+  - 各调用点透传 ctx + result：search / batch_resolve / download(×4) / complete / qual_search 的
+    **成功路径标 `result:'success'`，catch 分支补记 `result:'fail'`+error**（以前失败操作完全没进统计）。
+    multi-download 全源失败时记一条 fail，error 汇总各源原因。新增 `qual_search` 事件类型。
+  - **待办（Phase 1 收尾）**：① 桌面端 Electron 主进程给请求注入 `X-Client-Host`(os.hostname()) +
+    `X-Client-Type: desktop`（否则桌面端 hostname/client 仍靠 UA 粗判）；② `open` 事件（启动/切页）。
+- **Phase 2**：统计页重构——操作明细表（含结果列 + 失败展开 error）+ 折叠（组内成功/失败计数）+
+  客户端/结果徽章 + 筛选。`/api/stats/activity`。
+- **Phase 3**：导出明细 csv（含结果/error 列）；失败率趋势图；异常访问提示（如非常规 IP）。
+
+### 8. 风险
+
+- **隐私 / 权限**：IP + 主机名属敏感信息，**仅管理员可见跨用户明细**，普通用户只看自己；不写入
+  auto-memory / 日志导出默认脱敏（或仅管理员导出）。
+- **主机名拿不到**：web/手机端 hostname 必为空，UI 要显示"—"而非误导成空白，并在列头 tooltip 说明
+  "仅桌面端可获取"。
+- **X-Forwarded-For 可伪造**：局域网内可信；若将来公网部署，IP 取值要走可信代理链，不能裸信
+  XFF 头。
+- **表增列迁移**：`ALTER TABLE ADD COLUMN` 对既有行新列为 NULL，安全；但要在 db.ts 启动迁移里加
+  幂等判断（列已存在不重复加），与现有 std_code 列回填同样的"检测列缺失再加"模式。
+- **折叠不能丢数据**：只在展示/接口层折叠，DB 永远每条单记（审计需要）。

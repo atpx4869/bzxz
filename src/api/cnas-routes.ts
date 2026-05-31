@@ -6,6 +6,7 @@ import { PRESET_CNAS_LABS } from '../services/preset-cnas-labs';
 import { normalizeError } from '../shared/errors';
 import { respond, respondError } from '../shared/response';
 import { toCamelCase, toSnakeCase } from '../shared/case';
+import { trackEvent, extractUsageCtx } from '../services/usage-tracker';
 
 export function createQualificationRoutes(db: Database.Database, requireAuth: express.RequestHandler):
   express.Router & { qualificationService: QualificationService } {
@@ -32,8 +33,12 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
       });
       const { q, source, limit } = schema.parse(req.query);
       const items = svc.searchQualifications(q, source, limit);
+      trackEvent(db, req.user!.id, 'qual_search', source, undefined, { query: q, resultCount: items.length }, { ...extractUsageCtx(req), result: 'success' });
       respond(res, { items: toCamelCase(items), total: items.length });
-    } catch (e) { next(normalizeError(e)); }
+    } catch (e) {
+      try { trackEvent(db, req.user!.id, 'qual_search', undefined, undefined, undefined, { ...extractUsageCtx(req), result: 'fail', error: e instanceof Error ? e.message : String(e) }); } catch { /* ignore */ }
+      next(normalizeError(e));
+    }
   });
 
   router.post('/api/qualifications/visual', requireAuth, (req, res, next) => {

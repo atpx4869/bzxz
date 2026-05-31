@@ -10,7 +10,7 @@ import { StandardResolver } from '../services/standard-resolver';
 import { ExportTaskService } from '../services/export-task-service';
 import type { ExportTaskStore } from '../services/export-task-store';
 import type { SourceRegistry } from '../services/source-registry';
-import { trackEvent } from '../services/usage-tracker';
+import { trackEvent, extractUsageCtx } from '../services/usage-tracker';
 import { BadRequestError, NotFoundError, normalizeError } from '../shared/errors';
 import { parseStandardId, VALID_SOURCES } from '../shared/id';
 import type { SourceName } from '../domain/standard';
@@ -115,7 +115,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       if (cached && cached.expires > Date.now()) {
         searchCache.delete(cacheKey);
         searchCache.set(cacheKey, cached); // bump to most-recent position
-        trackEvent(db, req.user!.id, 'search', selectedSource, undefined, { query: q, resultCount: cached.items.length, cached: true });
+        trackEvent(db, req.user!.id, 'search', selectedSource, undefined, { query: q, resultCount: cached.items.length, cached: true }, { ...extractUsageCtx(req), result: 'success' });
         respond(res, { items: cached.items, total: cached.items.length, sourceSummary: { requested: 1, succeeded: 1, failed: 0, source: selectedSource } });
         return;
       }
@@ -129,7 +129,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         if (oldestKey !== undefined) searchCache.delete(oldestKey);
       }
       searchCache.set(cacheKey, { items: results, expires: Date.now() + CACHE_TTL_MS });
-      trackEvent(db, req.user!.id, 'search', selectedSource, undefined, { query: q, resultCount: results.length });
+      trackEvent(db, req.user!.id, 'search', selectedSource, undefined, { query: q, resultCount: results.length }, { ...extractUsageCtx(req), result: 'success' });
 
       respond(res, {
         items: results,
@@ -142,6 +142,11 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         },
       });
     } catch (error) {
+      // 失败也进统计（以前 catch 分支不记，失败操作完全不可见）
+      try {
+        const err = error instanceof Error ? error.message : String(error);
+        trackEvent(db, req.user!.id, 'search', undefined, undefined, { query: (req.query.q as string) || '' }, { ...extractUsageCtx(req), result: 'fail', error: err });
+      } catch { /* 记录失败不影响主流程 */ }
       next(normalizeError(error));
     }
   });
@@ -166,9 +171,12 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       const result = await resolver.resolve(lines, selectedSources);
       trackEvent(db, req.user!.id, 'batch_resolve', selectedSources.join(','), undefined, {
         lineCount: lines.length, resolvedCount: result.resolved.length, unmatchedCount: result.unmatched.length,
-      });
+      }, { ...extractUsageCtx(req), result: 'success' });
       respond(res, toCamelCase(result));
     } catch (error) {
+      try {
+        trackEvent(db, req.user!.id, 'batch_resolve', undefined, undefined, undefined, { ...extractUsageCtx(req), result: 'fail', error: error instanceof Error ? error.message : String(error) });
+      } catch { /* ignore */ }
       next(normalizeError(error));
     }
   });
@@ -276,7 +284,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       const adapter = sourceRegistry.get(parsed.source);
       const exportTaskService = new ExportTaskService(adapter, exportTaskStore, db, sourceRegistry, parsed.source);
       const task = exportTaskService.createTask(id, req.user!.id);
-      trackEvent(db, req.user!.id, 'download', parsed.source, id);
+      trackEvent(db, req.user!.id, 'download', parsed.source, id, undefined, { ...extractUsageCtx(req), result: 'success' });
       respond(res, toCamelCase(task), 202);
     } catch (error) {
       next(normalizeError(error));
@@ -309,7 +317,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       }
 
       const result = await adapter.autoDownload(id, req.user!.id, 3);
-      trackEvent(db, req.user!.id, 'download', parsed.source, id);
+      trackEvent(db, req.user!.id, 'download', parsed.source, id, undefined, { ...extractUsageCtx(req), result: 'success' });
       // 成功落盘 → 立刻 move 到 library；失败也不影响响应。
       // DownloadSessionInfo 的 filePath/fileName/fileSize 落在 meta 里（gbw 适配器的约定）。
       const meta = (result.meta || {}) as { filePath?: string; fileName?: string; fileSize?: number };
@@ -350,7 +358,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
           if (adapter.autoDownload) {
             const result = await adapter.autoDownload(standardId, req.user!.id, 3);
             if (result.status === 'downloaded') {
-              trackEvent(db, req.user!.id, 'download', src, standardId);
+              trackEvent(db, req.user!.id, 'download', src, standardId, undefined, { ...extractUsageCtx(req), result: 'success' });
               const meta = (result.meta || {}) as { filePath?: string; fileName?: string; fileSize?: number };
               const moved = meta.filePath
                 ? await moveDownloadToLibrary(db, sourceRegistry, src as SourceName, standardId, {
@@ -371,7 +379,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
           } else if (adapter.exportStandard) {
             // Async adapter (bz, by) — use export and wait
             const exportResult = await adapter.exportStandard(standardId);
-            trackEvent(db, req.user!.id, 'download', src, standardId);
+            trackEvent(db, req.user!.id, 'download', src, standardId, undefined, { ...extractUsageCtx(req), result: 'success' });
             const moved = await moveDownloadToLibrary(db, sourceRegistry, src as SourceName, standardId, {
               filePath: exportResult.filePath, fileName: exportResult.fileName, fileSize: exportResult.fileSize,
             });
@@ -392,6 +400,9 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         }
       }
 
+      // 全部源失败：记一条 fail，error 写各源失败原因汇总
+      const errSummary = Object.entries(errors).map(([s, m]) => `${s}:${m}`).join('; ') || '所有源均下载失败';
+      trackEvent(db, req.user!.id, 'download', sources.join(','), undefined, { perSource: errors }, { ...extractUsageCtx(req), result: 'fail', error: errSummary });
       throw new NotFoundError('所有源均下载失败', { perSource: errors });
     } catch (error) {
       next(normalizeError(error));
@@ -598,7 +609,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
 
       trackEvent(db, req.user!.id, 'complete', undefined, undefined, {
         fileName: outFileName, totalLines: lines.length, resolved: resolved.length, unmatched: unmatched.length,
-      });
+      }, { ...extractUsageCtx(req), result: 'success' });
 
       respond(res, {
         fileName: outFileName,
@@ -610,6 +621,9 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         },
       });
     } catch (error) {
+      try {
+        trackEvent(db, req.user!.id, 'complete', undefined, undefined, undefined, { ...extractUsageCtx(req), result: 'fail', error: error instanceof Error ? error.message : String(error) });
+      } catch { /* ignore */ }
       next(normalizeError(error));
     }
   });

@@ -271,6 +271,15 @@ function migrate(db: Database.Database): void {
   addColumnIfMissing(db, 'cnas_qualifications', 'std_code_base', "TEXT DEFAULT ''");
   addColumnIfMissing(db, 'cma_qualifications',  'std_code_norm', "TEXT DEFAULT ''");
   addColumnIfMissing(db, 'cma_qualifications',  'std_code_base', "TEXT DEFAULT ''");
+
+  // 使用统计增强（见 docs/CHECK-UPDATE-AND-STATS.md）：补 5 列。旧行新列为 NULL，安全。
+  //   ip/hostname/client = 客户端上下文（hostname 仅桌面端有值）
+  //   result = 'success' | 'fail'（NULL=旧数据/未标）；error = 失败原因+日志摘要
+  addColumnIfMissing(db, 'usage_events', 'ip',       'TEXT DEFAULT NULL');
+  addColumnIfMissing(db, 'usage_events', 'hostname', 'TEXT DEFAULT NULL');
+  addColumnIfMissing(db, 'usage_events', 'client',   'TEXT DEFAULT NULL');
+  addColumnIfMissing(db, 'usage_events', 'result',   'TEXT DEFAULT NULL');
+  addColumnIfMissing(db, 'usage_events', 'error',    'TEXT DEFAULT NULL');
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_cnas_qual_norm ON cnas_qualifications(std_code_norm);
     CREATE INDEX IF NOT EXISTS idx_cnas_qual_base ON cnas_qualifications(std_code_base);
