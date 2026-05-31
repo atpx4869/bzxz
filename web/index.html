@@ -157,7 +157,7 @@
       <div class="set-page-head-main">
         <span class="set-kicker">CHECK FOR UPDATES</span>
         <h1>标准查新</h1>
-        <p>导入一批标准号，逐个比对 BW / BY / BZ 三源的当前状态。有变动的高亮展开，无变动的整组折叠。</p>
+        <p>导入一批标准号（须带年代号，如 3324-2017），比对 BZ 源的当前状态。有变动的高亮展开，无变动的整组折叠。</p>
       </div>
       <div class="set-page-head-actions">
         <button class="btn btn-sm btn-primary" id="checkRunBtn" onclick="doCheckImport()">导入并查新</button>
@@ -168,7 +168,7 @@
       <div class="set-card-body">
         <textarea class="batch-textarea" id="checkInput" placeholder="粘贴标准号，每行一个&#10;例如：&#10;GB/T 1.1-2009&#10;GB 5009.9-2016&#10;YY/T 0287-2017"></textarea>
         <div class="batch-actions">
-          <span class="batch-action-hint">查新会按三源逐个比对状态 / 年版 / 实施日期 / 被代替关系。</span>
+          <span class="batch-action-hint">查新按 BZ 源逐个比对状态 / 年版 / 实施日期 / 被代替关系。标准号须带年代号。</span>
         </div>
       </div>
     </div>

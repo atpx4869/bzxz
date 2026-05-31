@@ -11,10 +11,15 @@ const CHECK_FLAG_LABEL = {
   replacedBy: ['被代替', 'info'],
 };
 
+// 前端预校验：标准号需带 4 位年代号（如 3324-2017 / GB/T 3325-2020）
+function checkHasYear(code) { return /(?:^|[\s\-–—/])\d{4}\s*$/.test(code.trim()); }
+
 async function doCheckImport() {
   const ta = document.getElementById('checkInput');
   const lines = (ta.value || '').split(/[\n\r]+/).map(s => s.trim()).filter(Boolean);
   if (!lines.length) { showToast('请粘贴标准号', 'fail'); return; }
+  const withYear = lines.filter(checkHasYear);
+  if (!withYear.length) { showToast('标准号必须带年代号，如 3324-2017', 'fail'); return; }
   const btn = document.getElementById('checkRunBtn');
   btn.disabled = true; btn.textContent = '查新中…';
   document.getElementById('checkResults').innerHTML = '<div class="check-empty">正在查 BZ 源，请稍候…（每批 50、分批查询）</div>';
@@ -29,6 +34,7 @@ async function doCheckImport() {
     await loadCheckItems(data.id);
     let msg = `已导入 ${data.itemCount} 项并完成查新`;
     if (data.truncated) msg += `（超过 200 上限，已截断）`;
+    if (data.skippedNoYear) msg += `（${data.skippedNoYear} 项无年代号已跳过）`;
     showToast(msg);
   } catch (e) {
     document.getElementById('checkResults').innerHTML = `<div class="check-empty">查新失败：${escapeHtml(e.message)}</div>`;

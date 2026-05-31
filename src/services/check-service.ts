@@ -1,17 +1,34 @@
 import type Database from 'better-sqlite3';
-import type { SourceName } from '../domain/standard';
+import type { SourceName, StandardSummary } from '../domain/standard';
 import type { SourceRegistry } from './source-registry';
-import { StandardResolver, type ResolvedItem } from './standard-resolver';
+import { StandardService } from './standard-service';
 import { cleanStdCode, extractFullCode, extractBaseCode } from '../shared/std-code';
 
 /**
  * 标准查新（见 docs/CHECK-UPDATE-AND-STATS.md）。
  *
- * 流程：导入标准号 → 逐个走 StandardResolver 查三源 → 存"基线快照"；
+ * 流程：导入标准号（必须带年代号）→ 逐个直接查 BZ search（原文查询，不走 StandardResolver
+ * 的严格格式门槛，纯数字号如 "3324-2017" 也能查）→ 取最佳匹配 → 存"基线快照"；
  * 查新（recheck）= 再查一遍 + 与基线 diff，产出 change_flags。
  *
- * 复用 StandardResolver（已含并发限流 + 同基础号匹配 + status/implementDate）。
+ * 为什么不复用 StandardResolver：它要求 [A-Z]{2,4} 字母前缀，把 "3324-2017" 这类
+ * 纯数字号全卡成"无法识别"。查新改为像标准检索那样原文直查 BZ。
  */
+
+// 查新单条匹配结果（BZ 直查，替代原 ResolvedItem）
+interface CheckMatch {
+  input: string;
+  standardNumber: string;
+  title: string;
+  status?: string;
+  implementDate?: string | null;
+  replacedStd?: string | null;
+}
+
+// 标准号必须带 4 位年代号（导入校验用）。如 "3324-2017"、"GB/T 3325-2020"。
+export function hasYearCode(code: string): boolean {
+  return /(?:^|[\s\-–—/])\d{4}\s*$/.test(code.trim());
+}
 
 // ── 限流硬上限（用户改不了，见 docs/CHECK-UPDATE-AND-STATS.md）──
 const MAX_ITEMS = 200;            // 单清单最多标准数（导入超出截断）
@@ -49,38 +66,65 @@ export interface CheckItemRow {
 }
 
 export class CheckService {
-  private resolver: StandardResolver;
+  private bz: StandardService;
   // 全局串行锁：同一时刻只允许一个清单在查（防多清单/多用户并发打爆 BZ）。
   private static querying = false;
 
   constructor(private readonly db: Database.Database, registry: SourceRegistry) {
-    this.resolver = new StandardResolver(registry);
+    this.bz = new StandardService(registry.get('bz'));
   }
 
   private static sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
 
-  // 分批 resolve：每批 BATCH_SIZE 个，批间 sleep。实际出站并发由 BZ semaphore 收口。
-  private async resolveBatched(lines: string[], sources: SourceName[]): Promise<ResolvedItem[]> {
-    const out: ResolvedItem[] = [];
+  // 直查 BZ：原文 search → 取最佳匹配（同基础号 + 年版一致优先；带年号要求精确年版）。
+  private async queryOne(input: string): Promise<CheckMatch | null> {
+    const q = input.trim();
+    let results: StandardSummary[];
+    try {
+      results = await this.bz.searchStandards({ query: q });
+    } catch {
+      return null; // BZ 查询失败 → 当作未命中（标 not_found）
+    }
+    if (!results.length) return null;
+    const best = pickBzMatch(q, results);
+    if (!best) return null;
+    return {
+      input,
+      standardNumber: best.standardNumber,
+      title: best.title,
+      status: best.status,
+      implementDate: best.implementDate,
+      replacedStd: typeof best.meta?.replacedStd === 'string' ? (best.meta.replacedStd as string) : null,
+    };
+  }
+
+  // 分批查询：每批 BATCH_SIZE 个、批内串行（BZ semaphore=2 再收口出站并发）、批间 sleep。
+  private async queryBatched(lines: string[]): Promise<CheckMatch[]> {
+    const out: CheckMatch[] = [];
     for (let i = 0; i < lines.length; i += BATCH_SIZE) {
       const chunk = lines.slice(i, i + BATCH_SIZE);
-      const r = await this.resolver.resolve(chunk, sources);
-      out.push(...r.resolved);
+      for (const line of chunk) {
+        const m = await this.queryOne(line);
+        if (m) out.push(m);
+      }
       if (i + BATCH_SIZE < lines.length) await CheckService.sleep(BATCH_GAP_MS);
     }
     return out;
   }
 
-  // 创建清单并导入标准号（首查存基线）。单源 BZ；超 MAX_ITEMS 截断。
+  // 创建清单并导入标准号（首查存基线）。只查 BZ；超 MAX_ITEMS 截断；
+  // **导入必须带年代号**，无年号的行被丢弃并通过 skippedNoYear 计数回报。
   async createWatchlist(
     userId: number,
     name: string,
     lines: string[],
-    sources: SourceName[] = ['bz'],
-  ): Promise<{ id: number; itemCount: number; truncated: boolean }> {
+  ): Promise<{ id: number; itemCount: number; truncated: boolean; skippedNoYear: number }> {
     const dedupAll = [...new Set(lines.map((l) => l.trim()).filter(Boolean))];
-    const truncated = dedupAll.length > MAX_ITEMS;
-    const dedup = dedupAll.slice(0, MAX_ITEMS);
+    // 年代号校验：无年号的剔除
+    const withYear = dedupAll.filter((l) => hasYearCode(l));
+    const skippedNoYear = dedupAll.length - withYear.length;
+    const truncated = withYear.length > MAX_ITEMS;
+    const dedup = withYear.slice(0, MAX_ITEMS);
 
     const info = this.db
       .prepare('INSERT INTO check_watchlists (user_id, name) VALUES (?, ?)')
@@ -90,16 +134,16 @@ export class CheckService {
     if (CheckService.querying) {
       // 已有清单在查：本次只建清单 + 存号、不立即查（基线留空，用户稍后手动查新）
       this.insertItemsNoBaseline(watchlistId, dedup);
-      return { id: watchlistId, itemCount: dedup.length, truncated };
+      return { id: watchlistId, itemCount: dedup.length, truncated, skippedNoYear };
     }
     CheckService.querying = true;
-    let resolved: ResolvedItem[];
+    let matches: CheckMatch[];
     try {
-      resolved = await this.resolveBatched(dedup, sources);
+      matches = await this.queryBatched(dedup);
     } finally {
       CheckService.querying = false;
     }
-    const byInput = new Map(resolved.map((r) => [r.input, r]));
+    const byInput = new Map(matches.map((r) => [r.input, r]));
 
     const now = new Date().toISOString();
     const insert = this.db.prepare(`
@@ -113,8 +157,8 @@ export class CheckService {
       for (const raw of rawLines) {
         const code = cleanStdCode(raw);
         if (!code) continue;
-        const m: ResolvedItem | undefined = byInput.get(raw) ?? byInput.get(code);
-        const sourceUsed = m ? m.source : 'not_found';
+        const m = byInput.get(raw) ?? byInput.get(code);
+        const sourceUsed = m ? 'bz' : 'not_found';
         insert.run(
           watchlistId, code, extractFullCode(code),
           m?.status ?? null, m?.title ?? null, m?.implementDate ?? null, m?.replacedStd ?? null, now,
@@ -127,7 +171,7 @@ export class CheckService {
     this.db.prepare('UPDATE check_watchlists SET last_checked_at = ? WHERE id = ?').run(now, watchlistId);
 
     const itemCount = (this.db.prepare('SELECT COUNT(*) c FROM check_items WHERE watchlist_id = ?').get(watchlistId) as { c: number }).c;
-    return { id: watchlistId, itemCount, truncated };
+    return { id: watchlistId, itemCount, truncated, skippedNoYear };
   }
 
   // 已有清单在查时的兜底：只存标准号、不查基线（base_* 留空，change_flags='[]'，source_used='pending'）。
@@ -148,7 +192,8 @@ export class CheckService {
 
   // 重新查新：逐项再查 + 与基线 diff，更新 last_* 与 change_flags。
   // manual=true（用户点按钮）走 20 分钟防抖；自动查新传 manual=false 跳过防抖。
-  async recheck(watchlistId: number, sources: SourceName[] = ['bz'], manual = true): Promise<void> {
+  // sources 参数已废弃（固定查 BZ），保留签名兼容自动查新调用。
+  async recheck(watchlistId: number, _sources: SourceName[] = ['bz'], manual = true): Promise<void> {
     // 手动防抖：同清单 20 分钟内拒绝重复
     if (manual) {
       const row = this.db.prepare('SELECT last_checked_at FROM check_watchlists WHERE id = ?').get(watchlistId) as { last_checked_at: string | null } | undefined;
@@ -168,14 +213,14 @@ export class CheckService {
     if (!items.length) return;
 
     CheckService.querying = true;
-    let resolvedArr: ResolvedItem[];
+    let matches: CheckMatch[];
     try {
-      resolvedArr = await this.resolveBatched(items.map((i) => i.std_code), sources);
+      matches = await this.queryBatched(items.map((i) => i.std_code));
     } finally {
       CheckService.querying = false;
     }
-    const result = { resolved: resolvedArr };
-    const byInput = new Map(result.resolved.map((r) => [r.input, r]));
+    const allFresh = matches;
+    const byInput = new Map(matches.map((r) => [r.input, r]));
 
     const now = new Date().toISOString();
     const update = this.db.prepare(`
@@ -190,8 +235,8 @@ export class CheckService {
           'SELECT base_status, base_title, base_impl_date, base_replaced_by FROM check_items WHERE id = ?',
         ).get(it.id) as { base_status: string | null; base_title: string | null; base_impl_date: string | null; base_replaced_by: string | null };
         const fresh = byInput.get(it.std_code) ?? byInput.get(cleanStdCode(it.std_code));
-        const sourceUsed = fresh ? fresh.source : 'not_found';
-        const d = fresh ? this.diff(base, fresh, result.resolved) : { flags: [] as ChangeFlag[], newVersion: null };
+        const sourceUsed = fresh ? 'bz' : 'not_found';
+        const d = fresh ? this.diff(base, fresh, allFresh) : { flags: [] as ChangeFlag[], newVersion: null };
         update.run(
           fresh?.status ?? null, fresh?.title ?? null, fresh?.implementDate ?? null, fresh?.replacedStd ?? null,
           now, JSON.stringify(d.flags), sourceUsed, d.newVersion, it.id,
@@ -205,8 +250,8 @@ export class CheckService {
   // 逐字段 diff，产出变动标记 + 检出的具体新版本号（供 UI 展示 "GB/T 1.1-2020"）。
   private diff(
     base: { base_status: string | null; base_impl_date: string | null; base_replaced_by: string | null },
-    fresh: ResolvedItem,
-    allFresh: ResolvedItem[],
+    fresh: CheckMatch,
+    allFresh: CheckMatch[],
   ): { flags: ChangeFlag[]; newVersion: string | null } {
     const flags: ChangeFlag[] = [];
     // 状态：精确文案比对（现行有效→即将废止 逐级预警）
@@ -322,6 +367,30 @@ export class CheckService {
 function yearOf(stdNumber: string): number {
   const m = stdNumber.match(/(\d{4})\s*$/);
   return m ? parseInt(m[1], 10) : 0;
+}
+
+// 从 BZ search 结果里挑最匹配查询号的一条。查询带年号 → 优先精确年版命中；
+// 否则取同号最新年版。号比对用归一化后的基础号（剥年）+ 数字子串，宽松匹配纯数字号。
+function pickBzMatch(query: string, results: StandardSummary[]): StandardSummary | null {
+  if (!results.length) return null;
+  const qBase = extractBaseCode(query);                 // 剥年的基础号
+  const qNum = (query.match(/\d+(?:\.\d+)*/) || [''])[0]; // 主号数字
+  const qYear = yearOf(query);
+
+  // 同基础号的候选（基础号相等，或标准号里含主号数字子串兜底）
+  const sameBase = results.filter((r) => {
+    const rb = extractBaseCode(r.standardNumber);
+    return (qBase && rb === qBase) || (qNum && r.standardNumber.includes(qNum));
+  });
+  const pool = sameBase.length ? sameBase : results;
+
+  if (qYear) {
+    const exact = pool.find((r) => yearOf(r.standardNumber) === qYear);
+    if (exact) return exact;
+    // 带年号但没查到该年版：返回同号最新年版（让 diff 能标"有新版本"），没有就第一条
+  }
+  // 取最新年版
+  return pool.slice().sort((a, b) => yearOf(b.standardNumber) - yearOf(a.standardNumber))[0] ?? null;
 }
 function safeFlags(s: string | null): ChangeFlag[] {
   if (!s) return [];

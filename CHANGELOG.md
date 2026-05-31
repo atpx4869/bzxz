@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix(check): 查新改 BZ 原文直查（修纯数字号全部"无法核验"）+ 强制年代号** — 实测发现 `3324-2017`/`3325` 等纯数字标准号全部落到"无法核验"。根因：查新复用的 `StandardResolver` 正则要求 `[A-Z]{2,4}` 字母前缀，纯数字号被判"无法识别"、压根没查 BZ。改法（方案 B）：
+  - `check-service` 不再走 StandardResolver，改用 `StandardService(bz)` **原文直查 BZ search**（像标准检索那样，搜啥查啥）+ `pickBzMatch`（同基础号/数字子串匹配、带年号优先精确年版、否则取最新年版）。不动 resolver、不影响下载/补全
+  - **导入强制年代号**：`hasYearCode()` 校验，无年号的行剔除并回报 `skippedNoYear`；前端预校验 + 提示"标准号必须带年代号，如 3324-2017"
+  - 文案：页头/hint 从"三源"改"BZ 源"+ 年号要求；toast 增"N 项无年代号已跳过"
+  - 清理：删 `StandardResolver`/`ResolvedItem` 依赖，统一用 `CheckMatch`；`source_used` 固定 'bz'
 - **feat(check): 标准查新 Step 2 — 每清单自动查新（默认/下限 15 天）** —
   - `check_watchlists` 加 `auto_enabled`/`auto_interval_days`(默认 15)/`next_run_at`（建表 + 幂等迁移）
   - `check-service`：`setAuto(id, enabled, days)`（周期硬下限 15，开启时算 next_run_at）+ `runDueAutoChecks()`（找到期清单串行 recheck、跳过手动防抖、跑完重排下次时间、返回有变动清单摘要）；`getWatchlists` 带出 auto 字段
