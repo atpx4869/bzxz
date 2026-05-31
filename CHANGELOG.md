@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat(stats): 使用统计增强 Phase 2 — 操作明细表 + 折叠 + 结果/失败展开** — 把 Phase 1 采集的数据展示出来：
+  - 后端 `GET /api/stats/activity`：返回操作明细（含 ip/hostname/client/result/error + 用户名）；`collapse=5m` 时服务端把"同用户 + 同 event_type + 间隔≤5min"的连续记录折叠成组（带 successCount/failCount/children）；querySchema 加 `result`/`client` 过滤；`/summary` 增 `failCount`
+  - 前端统计页加「操作明细」区：工具条（操作类型 / 结果筛选 chip）+ 明细表。折叠组显示 `操作 ×N` + 成功/失败计数、点击展开子项；含失败的行/组左侧标红条，失败子项展开显示 error（与运行日志同源）；客户端徽章（web 蓝 / 桌面 绿 / 手机 橙）；主机名 / IP 列（桌面端有值、web/手机端显示 "—"）。summary 多一张「失败」卡（danger 色）
+  - CSS 双文件镜像（`pages/stats.css` + `public/styles.css`），纯 token
+  - 待办：`open` 事件埋点（启动/切页）；Phase 3 导出明细 csv / 失败率趋势
 - **feat(stats): 使用统计增强 Phase 1（后端采集层）— 记录 IP/主机名/客户端/结果/失败原因** — 在现有 `usage_events` 上增量，方案见 `docs/CHECK-UPDATE-AND-STATS.md`：
   - `usage_events` 加 5 列 `ip` / `hostname` / `client` / `result` / `error`，走 `addColumnIfMissing` 幂等迁移（旧行新列 NULL，安全）
   - `usage-tracker.ts`：`trackEvent` 加第 7 参 `ctx`；新增 `extractUsageCtx(req)` —— hostname 取 `X-Client-Host` 头（仅桌面端能给）、client 取 `X-Client-Type` 头或 UA 粗判（electron→desktop / 移动 UA→mobile / 其余→web）、ip 取 `req.ip` 并剥 `::ffff:`

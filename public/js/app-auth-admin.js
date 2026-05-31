@@ -354,9 +354,12 @@ async function loadStats() {
     ]);
 
     // Summary cards
-    const typeMap = { search: '搜索', download: '下载', batch_resolve: '批量解析', complete: '补全' };
+    const typeMap = { search: '搜索', download: '下载', batch_resolve: '批量解析', complete: '补全', qual_search: '资质查询', preview: '预览', open: '打开', check: '查新' };
     let html = `<div class="stat-card"><div class="stat-value">${summaryRes.total}</div><div class="stat-label">总操作数</div></div>`;
     html += `<div class="stat-card"><div class="stat-value">${summaryRes.uniqueUsers}</div><div class="stat-label">活跃用户</div></div>`;
+    if (typeof summaryRes.failCount === 'number') {
+      html += `<div class="stat-card stat-fail"><div class="stat-value">${summaryRes.failCount}</div><div class="stat-label">失败</div></div>`;
+    }
     for (const item of summaryRes.byType) {
       html += `<div class="stat-card"><div class="stat-value">${item.count}</div><div class="stat-label">${typeMap[item.eventType] || item.eventType}</div></div>`;
     }
@@ -390,8 +393,99 @@ async function loadStats() {
       data: { labels: srcLabels, datasets: [{ data: srcCounts, backgroundColor: srcColors }] },
       options: { responsive: true, plugins: { legend: { labels: { color: '#aaa', font: { size: 11 } } } } },
     });
+
+    // 操作明细（Phase 2）
+    loadStatsActivity();
   } catch (e) { console.error('Stats load error:', e); }
 }
+
+// 操作明细筛选态
+var statsActFilter = { eventType: '', result: '' };
+var STATS_ACT_TYPE_MAP = { search: '查询', download: '下载', batch_resolve: '批量解析', complete: '补全', qual_search: '资质查询', preview: '预览', open: '打开', check: '查新' };
+var STATS_CLIENT_MAP = { web: ['web', 'cl-web'], desktop: ['桌面', 'cl-desktop'], mobile: ['手机', 'cl-mobile'], system: ['系统', 'cl-web'] };
+
+async function loadStatsActivity() {
+  const host = document.getElementById('statsActivity');
+  if (!host) return;
+  const from = document.getElementById('statsFrom').value;
+  const to = document.getElementById('statsTo').value;
+  const params = new URLSearchParams();
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  params.set('collapse', '5m');
+  params.set('limit', '300');
+  if (statsActFilter.eventType) params.set('eventType', statsActFilter.eventType);
+  if (statsActFilter.result) params.set('result', statsActFilter.result);
+  try {
+    const data = await apiFetch(`/api/stats/activity?${params}`).then(r => readApiResponse(r));
+    const groups = data.groups || [];
+    if (!groups.length) { host.innerHTML = '<div class="sa-empty">暂无操作记录</div>'; return; }
+    host.innerHTML = groups.map((g, gi) => renderActivityGroup(g, gi)).join('');
+  } catch (e) { console.error('activity load error:', e); host.innerHTML = '<div class="sa-empty">加载失败</div>'; }
+}
+
+function fmtActTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso); const p = n => String(n).padStart(2, '0');
+  return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+function clientBadge(c) {
+  const m = STATS_CLIENT_MAP[c] || [c || '—', 'cl-web'];
+  return c ? `<span class="cl-badge ${m[1]}">${m[0]}</span>` : '<span class="muted">—</span>';
+}
+function renderActivityGroup(g, gi) {
+  const collapsed = g.count > 1;
+  const typeLabel = STATS_ACT_TYPE_MAP[g.eventType] || g.eventType;
+  const hasFail = g.failCount > 0;
+  const resultCell = collapsed
+    ? `${g.successCount ? `<span class="res-badge res-ok">${g.successCount} 成功</span>` : ''}${hasFail ? ` <span class="res-badge res-fail">${g.failCount} 失败</span>` : ''}`
+    : (g.children[0] && g.children[0].result === 'fail' ? '<span class="res-badge res-fail">失败</span>' : (g.children[0] && g.children[0].result === 'success' ? '<span class="res-badge res-ok">成功</span>' : '<span class="muted">—</span>'));
+  const opCell = collapsed ? `<span class="sa-caret">▸</span>${typeLabel} ×${g.count}` : typeLabel;
+  const objCell = collapsed
+    ? `<span class="muted">5 分钟内 ${g.count} 次</span>`
+    : escapeHtml((g.children[0] && (g.children[0].standardId || (g.children[0].source || ''))) || '—');
+  const childRows = collapsed ? `<div class="sa-children" style="display:none">${g.children.map(c => `
+    <div class="sa-child">
+      <span class="mono">${fmtActTime(c.createdAt)}</span>
+      ${c.result === 'fail' ? '<span class="res-badge res-fail">失败</span>' : (c.result === 'success' ? '<span class="res-badge res-ok">成功</span>' : '')}
+      <span>${escapeHtml(c.standardId || c.source || '—')}</span>
+      ${c.error ? `<div class="sa-err">${escapeHtml(c.error)}</div>` : ''}
+    </div>`).join('')}</div>` : (g.children[0] && g.children[0].error ? `<div class="sa-children" style="display:none"><div class="sa-err">${escapeHtml(g.children[0].error)}</div></div>` : '');
+  const expandable = collapsed || (g.children[0] && g.children[0].error);
+  return `<div class="sa-row${hasFail ? ' sa-fail' : ''}${expandable ? ' sa-expandable' : ''}"${expandable ? ` onclick="toggleActivityRow(this)"` : ''}>
+    <div class="sa-cells">
+      <span class="mono">${fmtActTime(g.endAt)}</span>
+      <span class="sa-user">${escapeHtml(g.displayName || g.username)}</span>
+      <span class="mono">${g.hostname ? escapeHtml(g.hostname) : '<span class="muted">—</span>'}</span>
+      <span class="mono">${g.ip ? escapeHtml(g.ip) : '<span class="muted">—</span>'}</span>
+      <span>${clientBadge(g.client)}</span>
+      <span class="sa-op">${opCell}</span>
+      <span class="sa-res">${resultCell}</span>
+      <span class="sa-obj">${objCell}</span>
+    </div>
+    ${childRows}
+  </div>`;
+}
+function toggleActivityRow(el) {
+  el.classList.toggle('open');
+  const kids = el.querySelector('.sa-children');
+  if (kids) kids.style.display = el.classList.contains('open') ? 'block' : 'none';
+}
+// 工具条筛选（事件委托，绑一次）
+(function initStatsActivityToolbar() {
+  document.addEventListener('click', function (e) {
+    const b = e.target.closest && e.target.closest('#statsActivityToolbar .sa-chip');
+    if (!b) return;
+    if (b.hasAttribute('data-act-type')) {
+      statsActFilter.eventType = b.getAttribute('data-act-type');
+      b.parentElement.querySelectorAll('[data-act-type]').forEach(x => x.classList.toggle('active', x === b));
+    } else if (b.hasAttribute('data-act-result')) {
+      statsActFilter.result = b.getAttribute('data-act-result');
+      b.parentElement.querySelectorAll('[data-act-result]').forEach(x => x.classList.toggle('active', x === b));
+    }
+    loadStatsActivity();
+  });
+})();
 
 // ── Users management ──
 var selectedUserIds = new Set();

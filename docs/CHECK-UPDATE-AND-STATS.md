@@ -211,8 +211,15 @@ ALTER TABLE usage_events ADD COLUMN error     TEXT;   -- 失败原因 / 日志�
     对 `localhost`/`127.0.0.1` 后端请求注入 `X-Client-Host`(os.hostname()) + `X-Client-Type: desktop`
     （只对本地后端、不污染外部源站请求）。桌面端 hostname 自此有真值、client 准确判为 desktop。
   - **待办**：`open` 事件（启动 / 切页埋点，前端做，归 Phase 2 一起）。
-- **Phase 2**：统计页重构——操作明细表（含结果列 + 失败展开 error）+ 折叠（组内成功/失败计数）+
-  客户端/结果徽章 + 筛选。`/api/stats/activity`。
+- **Phase 2 ✅ 已落地**：
+  - 后端 `GET /api/stats/activity`：返回明细（含 ip/hostname/client/result/error），`collapse=5m`
+    服务端把"同 user + 同 event_type + 间隔≤5min"折叠成组（带 successCount/failCount/children）；
+    querySchema 加 `result`/`client` 过滤；`/summary` 加 `failCount`。
+  - 前端统计页加"操作明细"区：工具条（操作类型 / 结果筛选 chip）+ 明细表。折叠组显示 `×N` +
+    成功/失败计数，可展开看子项；含失败的行 / 组标红左条，失败子项展开显示 error。客户端徽章
+    （web 蓝 / 桌面 绿 / 手机 橙）；主机名/IP 列，桌面端有值、其它端显示 "—"。`loadStats` 末尾调
+    `loadStatsActivity()`，summary 多一张失败卡。CSS 双文件镜像（`pages/stats.css` + `public`）。
+  - 待办：`open` 事件埋点（启动/切页）暂未做，可后续补。
 - **Phase 3**：导出明细 csv（含结果/error 列）；失败率趋势图；异常访问提示（如非常规 IP）。
 
 ### 8. 风险

@@ -471,6 +471,22 @@
         <canvas id="chartSource"></canvas>
       </div>
     </div>
+
+    <!-- 操作明细（Phase 2）。镜像 web/index.html 同段 -->
+    <div class="set-card-title" style="margin:22px 0 10px">操作明细</div>
+    <div class="stats-activity-toolbar" id="statsActivityToolbar">
+      <span class="sa-flabel">操作：</span>
+      <button class="sa-chip active" data-act-type="">全部</button>
+      <button class="sa-chip" data-act-type="search">查询</button>
+      <button class="sa-chip" data-act-type="download">下载</button>
+      <button class="sa-chip" data-act-type="qual_search">资质</button>
+      <button class="sa-chip" data-act-type="complete">补全</button>
+      <span class="sa-flabel">结果：</span>
+      <button class="sa-chip active" data-act-result="">全部</button>
+      <button class="sa-chip" data-act-result="success">成功</button>
+      <button class="sa-chip" data-act-result="fail">失败</button>
+    </div>
+    <div class="stats-activity" id="statsActivity"></div>
   </div>
 
   <!-- Page: Users -->
