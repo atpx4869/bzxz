@@ -38,6 +38,11 @@ git status                # 确认工作区干净（下面"运行时数据"那�
    - **收藏整合**：收藏标准 → 进内置「我的收藏」查新清单（is_saved）、自动关注更新；下载历史页已去掉收藏区块
    - BZ 接口字段备忘见 `docs/BZ-API.md`（含 replacedStd vs insteadStd 方向坑）
 
+6. **软件更新 GitHub 下载加速** —— 完成。设置→软件更新底部可编辑代理列表
+   （默认 `gh-proxy.org`[生效] / `v4.`/`cdn.`[备用]），保存即生效；「下载并安装」内置
+   路径自动套 `<proxy>/<github url>` 前缀（代理域也纳入 `assertTrustedUpdateHost` 可信校验）。
+   `electron/main.ts`（githubProxies + applyGithubProxy + IPC）/ `preload.ts` / `app-settings.js`。
+
 ## 2. 待提交 / 待确认（换机前在「本机」先处理）
 
 - **`docs/check-update-stats-prototype.html`** 是 untracked，没提交过。要留就 `git add` 它，不要就忽略。

@@ -40,7 +40,16 @@ interface DesktopSettings {
   webServiceEnabled: boolean;
   /** User-preferred HTTP port. null/0 = pick a random free port at startup. */
   preferredPort: number | null;
+  /** GitHub 下载加速代理前缀列表（更新下载用）。第一条为默认，其余备用。空数组 = 直连。 */
+  githubProxies: string[];
 }
+
+// 默认 GitHub 加速代理（用户可在设置里编辑）。下载更新时给 github 资源 URL 加前缀。
+const DEFAULT_GITHUB_PROXIES = [
+  'https://gh-proxy.org',
+  'https://v4.gh-proxy.org',
+  'https://cdn.gh-proxy.org',
+];
 
 // Reserved/well-known port floor — refuse anything below this so the user
 // doesn't accidentally collide with system services (and on non-admin Windows
@@ -74,6 +83,7 @@ function getDefaultSettings(): DesktopSettings {
     downloadPath: path.join(app.getPath('desktop'), 'bzxz'),
     webServiceEnabled: true,
     preferredPort: DEFAULT_PREFERRED_PORT,
+    githubProxies: [...DEFAULT_GITHUB_PROXIES],
   };
 }
 
@@ -268,6 +278,25 @@ const TRUSTED_UPDATE_HOSTS = new Set([
   'release-assets.githubusercontent.com',
 ]);
 
+// 取用户配置的有效代理前缀（去空格、去尾斜杠、必须 https）。空 = 直连。
+function activeGithubProxy(): string | null {
+  const list = (loadSettings().githubProxies || []).map((s) => String(s || '').trim().replace(/\/+$/, '')).filter(Boolean);
+  const first = list.find((p) => /^https:\/\//i.test(p));
+  return first || null;
+}
+
+// 给 github 资源 URL 套加速代理前缀：https://gh-proxy.org/https://github.com/...
+// 已是代理 URL 或非 github 资源则原样返回。
+function applyGithubProxy(rawUrl: string): string {
+  const proxy = activeGithubProxy();
+  if (!proxy) return rawUrl;
+  let host: string;
+  try { host = new URL(rawUrl).hostname; } catch { return rawUrl; }
+  // 只代理 github 自家资源域；其它（含已是代理域）不动
+  if (!TRUSTED_UPDATE_HOSTS.has(host)) return rawUrl;
+  return `${proxy}/${rawUrl}`;
+}
+
 function assertTrustedUpdateHost(rawUrl: string): URL {
   let parsed: URL;
   try {
@@ -275,7 +304,13 @@ function assertTrustedUpdateHost(rawUrl: string): URL {
   } catch {
     throw new Error('安装包下载地址无效');
   }
-  if (parsed.protocol !== 'https:' || !TRUSTED_UPDATE_HOSTS.has(parsed.hostname)) {
+  // 可信主机 = github 自家域 + 用户配置的代理域（代理 URL 形如 https://gh-proxy.org/https://github.com/...）
+  const proxyHosts = new Set(
+    (loadSettings().githubProxies || [])
+      .map((s) => { try { return new URL(String(s).trim()).hostname; } catch { return ''; } })
+      .filter(Boolean),
+  );
+  if (parsed.protocol !== 'https:' || (!TRUSTED_UPDATE_HOSTS.has(parsed.hostname) && !proxyHosts.has(parsed.hostname))) {
     throw new Error(`拒绝从非可信主机下载更新: ${parsed.hostname}`);
   }
   return parsed;
@@ -291,12 +326,15 @@ async function downloadAndInstallUpdate() {
     throw new Error('未找到可自动安装的 Setup 安装包，请打开下载页手动下载');
   }
   assertTrustedUpdateHost(asset.url);
+  // 套加速代理（用户配置，第一条生效）。代理 URL 的可信校验已含代理域。
+  const downloadUrl = applyGithubProxy(asset.url);
+  assertTrustedUpdateHost(downloadUrl);
 
   const updateDir = path.join(app.getPath('temp'), 'bzxz-updates');
   if (!existsSync(updateDir)) mkdirSync(updateDir, { recursive: true });
   const filePath = path.join(updateDir, safeDownloadFileName(asset.name));
 
-  const response = await fetch(asset.url, {
+  const response = await fetch(downloadUrl, {
     headers: {
       Accept: 'application/octet-stream',
       'User-Agent': `bzxz/${app.getVersion()}`,
@@ -636,6 +674,17 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('bzxz:open-download-folder', () => {
     void shell.openPath(loadSettings().downloadPath);
+  });
+  // IPC: GitHub 加速代理列表 get/set（保存即生效，下次下载更新用）
+  ipcMain.handle('bzxz:get-github-proxies', () => loadSettings().githubProxies || []);
+  ipcMain.handle('bzxz:set-github-proxies', (_event, proxies: unknown) => {
+    const clean = Array.isArray(proxies)
+      ? proxies.map((p) => String(p || '').trim().replace(/\/+$/, '')).filter((p) => /^https?:\/\//i.test(p)).slice(0, 10)
+      : [];
+    const s = loadSettings();
+    s.githubProxies = clean;
+    saveSettings(s);
+    return s.githubProxies;
   });
   ipcMain.handle('bzxz:get-open-at-login', () => getOpenAtLoginInfo());
   ipcMain.handle('bzxz:set-open-at-login', (_event, enabled: boolean) => setOpenAtLogin(Boolean(enabled)));

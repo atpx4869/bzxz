@@ -459,6 +459,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **feat(update): 软件更新加 GitHub 下载加速代理** — 设置→软件更新底部可编辑加速代理列表（默认 `gh-proxy.org` / `v4.` / `cdn.`，第一条生效，后两条备用），保存即生效。「下载并安装」内置路径自动套 `<proxy>/<github资产url>` 前缀（仅对 `TRUSTED_UPDATE_HOSTS` 命中的 GitHub 域，代理域也纳入可信校验）。IPC `bzxz:get/set-github-proxies`，`DesktopSettings.githubProxies` 落 `bzxz-settings.json`
 - **fix(theme): light/paper 50+ "灰灰"残留补丁 + 设计文档** — 项目历史上大量 CSS hardcode `oklch(20% ...)` 暗色没走 var(--surface),light/paper 切换无效。Phase 2 补丁段追加 ~610 行,light + paper 各覆盖 50+ 处(日志/按钮/卡片内部/批量/补全/ctx-menu/modal/源徽章/状态徽章/进度条 等)。新增 [`docs/THEME_DESIGN.md`](./docs/THEME_DESIGN.md) 完整设计文档(三主题哲学 / token 表 / 80+ 组件覆盖清单 / 改一处 workflow / 续作 AI 起手指南),方便换电脑无缝接手
 - **feat: 第三主题 Paper · Claude Linen 温暖印刷品** — 在 dark / light 之外新增 paper,模仿 Claude.ai 同色调:米白底 + 赤陶 accent(#c96342) + 暖墨字 + 1px 米褐边线,杂志内页质感。不用 frosted blur,不做 ambient gradient,btn-primary 纯色不用渐变 — 跟两套现有主题完全不同的"印刷品"美学。topbar 单按钮改成 3 选 1 picker(dark/light/paper),手机「我」页加第三个 `📜 Paper` chip
 - **redesign(theme/light): Arctic Blue 蓝调亮色重设计** — 替换旧"白底+蓝字+灰阴影"的 Bootstrap 模板感。新设计参考 Linear / Apple HIG / 蓝图纸,工程师工作台美学:不用纯白(`--bg` 极淡蓝白 / `--surface` 带蓝调) + Cold Shadow(所有阴影 hue=245 蓝调而非纯黑) + frosted glass 强制加 `saturate(180%)` + accent L=52 保 a11y + 同色系明暗蓝渐变。三层 ambient gradient(天蓝/薰衣草/青蓝)+ 蓝图纸网格 + 玻璃面板顶部 1px 高光 inset。覆盖全套 UI(topbar/sidebar/卡片/按钮/徽章/手机端/模态框/dropdown 30+ 处)

@@ -105,7 +105,57 @@ function renderUpdateCard() {
           </div>
         </div>
         ${assetRows}
+        ${supported ? renderGithubProxyRow() : ''}
       </div>`;
+}
+
+// GitHub 加速代理编辑（桌面端）。第一条默认生效，后两条备用；保存即生效。
+var githubProxiesState = { loaded: false, list: [] };
+function renderGithubProxyRow() {
+  var list = githubProxiesState.list.length ? githubProxiesState.list : ['', '', ''];
+  while (list.length < 3) list.push('');
+  var inputs = list.slice(0, 5).map(function(p, idx) {
+    var tag = idx === 0 ? '默认' : '备用';
+    return `<div class="set-row" style="padding-top:6px;padding-bottom:6px">
+        <div class="set-row-main"><span class="set-chip">${tag}</span></div>
+        <div class="set-row-control" style="flex:1">
+          <input class="gh-proxy-input" data-gh-proxy="${idx}" value="${escapeHtml(p)}" placeholder="https://gh-proxy.org"
+                 style="flex:1;min-width:220px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface-h);color:var(--text);font:500 12px 'DM Mono',monospace;outline:none">
+        </div>
+      </div>`;
+  }).join('');
+  return `<div class="set-section" style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+      <div class="set-row">
+        <div class="set-row-main">
+          <div class="set-row-title">GitHub 下载加速</div>
+          <div class="set-row-note">国内网络访问 GitHub 慢时，下载更新会自动套用第一条代理前缀；后两条为备用。留空则直连。</div>
+        </div>
+        <div class="set-row-control"><button class="btn btn-sm btn-primary" onclick="saveGithubProxies()">保存</button></div>
+      </div>
+      ${inputs}
+    </div>`;
+}
+async function loadGithubProxies() {
+  if (!window.bzxz?.getGithubProxies || githubProxiesState.loaded) return;
+  try {
+    var list = await window.bzxz.getGithubProxies();
+    githubProxiesState = { loaded: true, list: Array.isArray(list) ? list : [] };
+    if (document.getElementById('settingsBody')) renderSettings();
+  } catch { githubProxiesState.loaded = true; }
+}
+async function saveGithubProxies() {
+  if (!window.bzxz?.setGithubProxies) return;
+  var vals = [...document.querySelectorAll('.gh-proxy-input')]
+    .map(function(el) { return (el.value || '').trim(); })
+    .filter(Boolean);
+  try {
+    var saved = await window.bzxz.setGithubProxies(vals);
+    githubProxiesState = { loaded: true, list: Array.isArray(saved) ? saved : vals };
+    if (typeof showToast === 'function') showToast('GitHub 加速代理已保存', 'success');
+    renderSettings();
+  } catch (e) {
+    if (typeof showToast === 'function') showToast(e?.message || '保存失败', 'fail');
+  }
 }
 
 function ensureUpdateBadge() {
@@ -206,6 +256,7 @@ function initUpdateDownloadProgress() {
 
 function initAppUpdateCheck() {
   initUpdateDownloadProgress();
+  loadGithubProxies();
   if (!hasDesktopUpdateApi() || appUpdateState.loaded || appUpdateState.checking) {
     renderUpdateBadge();
     return;

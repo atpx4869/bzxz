@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat(update): 软件更新增加 GitHub 下载加速代理（设置→软件更新）** — 国内网络直连 GitHub Releases 慢，新增可编辑的加速代理列表（默认 3 条：`https://gh-proxy.org`[默认生效] / `https://v4.gh-proxy.org` / `https://cdn.gh-proxy.org`[备用]），保存即生效。
+  - `electron/main.ts`：`DesktopSettings.githubProxies` + `DEFAULT_GITHUB_PROXIES`；`activeGithubProxy()`（取第一条 https 代理）+ `applyGithubProxy(url)`（仅对 `TRUSTED_UPDATE_HOSTS` 命中的 GitHub 资产 URL 套 `<proxy>/<原url>` 前缀，其它原样）；`assertTrustedUpdateHost` 放行代理域；`downloadAndInstallUpdate` 在校验后改用 `applyGithubProxy(asset.url)` 再 fetch（仅作用于"下载并安装"内置路径，"打开下载页"仍跳浏览器原页）。IPC `bzxz:get-github-proxies`/`set-github-proxies`（trim+去尾斜杠+仅留 http(s)+最多 10 条）
+  - `electron/preload.ts`：暴露 `getGithubProxies`/`setGithubProxies`
+  - `public/js/app-settings.js`：更新卡片底部加「GitHub 下载加速」编辑区（3 条输入框，默认/备用 chip 标识），保存调 `setGithubProxies` + toast「保存即生效」；进设置时 `loadGithubProxies` 回填。legacy JS 两入口共用、无需镜像
 - **feat(check): 收藏整合进查新 + 已废止徽章按有无替代区分** —
   - **收藏即关注更新**：用户收藏标准 → 自动进入内置「我的收藏」查新清单（`check_watchlists.is_saved=1`，每用户一条、置顶、不可删）。`toggleSaved` 加入时查一次 BZ 存基线、再点取消。`POST /api/check/saved/toggle` + `GET /api/check/saved/codes`。`toggleSavedStandard` 在更新本地收藏态后 fire-and-forget 调后端（本地 star 仍即时、不卡 UI）
   - **下载历史去掉「收藏标准」区块**：收藏已并入查新，历史页只剩下载历史（`renderSavedLibrary` 元素缺失时早返回、安全）

@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('bzxz', {
   checkForUpdates: () => ipcRenderer.invoke('bzxz:check-for-updates'),
   downloadAndInstallUpdate: () => ipcRenderer.invoke('bzxz:download-and-install-update'),
   openUpdatePage: (url?: string) => ipcRenderer.invoke('bzxz:open-update-page', url),
+  getGithubProxies: () => ipcRenderer.invoke('bzxz:get-github-proxies'),
+  setGithubProxies: (proxies: string[]) => ipcRenderer.invoke('bzxz:set-github-proxies', proxies),
   onUpdateDownloadProgress: (callback: (progress: unknown) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, progress: unknown) => callback(progress);
     ipcRenderer.on('bzxz:update-download-progress', listener);
