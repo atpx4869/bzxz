@@ -49,7 +49,7 @@ export function createCheckRoutes(
   // 单清单明细
   router.get('/api/check/watchlists/:id', requireAuth, (req, res, next) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       if (Number.isNaN(id) || !ensureOwner(req, res, id)) return;
       respond(res, { items: toCamelCase(svc.getItems(id)) });
     } catch (e) { next(normalizeError(e)); }
@@ -58,7 +58,7 @@ export function createCheckRoutes(
   // 重新查新
   router.post('/api/check/watchlists/:id/recheck', requireAuth, async (req, res, next) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       if (Number.isNaN(id) || !ensureOwner(req, res, id)) return;
       await svc.recheck(id);
       respond(res, { items: toCamelCase(svc.getItems(id)) });
@@ -68,7 +68,7 @@ export function createCheckRoutes(
   // 删除清单（不可逆）
   router.delete('/api/check/watchlists/:id', requireAuth, (req, res, next) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       if (Number.isNaN(id) || !ensureOwner(req, res, id)) return;
       svc.deleteWatchlist(id);
       respond(res, { ok: true });
