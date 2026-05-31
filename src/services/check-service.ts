@@ -327,13 +327,63 @@ export class CheckService {
   getWatchlists(userId: number) {
     return this.db.prepare(`
       SELECT w.id, w.name, w.created_at, w.last_checked_at,
-             w.auto_enabled, w.auto_interval_days, w.next_run_at,
+             w.auto_enabled, w.auto_interval_days, w.next_run_at, w.is_saved,
              (SELECT COUNT(*) FROM check_items i WHERE i.watchlist_id = w.id) AS item_count,
              (SELECT COUNT(*) FROM check_items i WHERE i.watchlist_id = w.id AND i.change_flags != '[]') AS changed_count
       FROM check_watchlists w
       WHERE w.user_id = ?
-      ORDER BY w.created_at DESC
+      ORDER BY w.is_saved DESC, w.created_at DESC
     `).all(userId);
+  }
+
+  // 取（必要时创建）用户的内置"我的收藏"查新清单。每用户一条、is_saved=1、不可删。
+  getOrCreateSavedWatchlist(userId: number): number {
+    const row = this.db.prepare('SELECT id FROM check_watchlists WHERE user_id = ? AND is_saved = 1').get(userId) as { id: number } | undefined;
+    if (row) return row.id;
+    const info = this.db.prepare(
+      "INSERT INTO check_watchlists (user_id, name, is_saved) VALUES (?, '我的收藏', 1)",
+    ).run(userId);
+    return Number(info.lastInsertRowid);
+  }
+
+  // 收藏 toggle：标准号已在收藏清单 → 移除并返回 {saved:false}；否则加入 + 查一次基线 → {saved:true}。
+  // 标准号须带年代号（与导入一致）。
+  async toggleSaved(userId: number, rawCode: string): Promise<{ saved: boolean }> {
+    const code = cleanStdCode(rawCode);
+    if (!code) throw new Error('标准号无效');
+    const wlId = this.getOrCreateSavedWatchlist(userId);
+    const existing = this.db.prepare(
+      'SELECT id FROM check_items WHERE watchlist_id = ? AND std_code = ?',
+    ).get(wlId, code) as { id: number } | undefined;
+    if (existing) {
+      this.db.prepare('DELETE FROM check_items WHERE id = ?').run(existing.id);
+      return { saved: false };
+    }
+    // 新增：查一次 BZ 存基线（不抢全局串行锁——单条、轻量）
+    const m = await this.queryOne(code);
+    const now = new Date().toISOString();
+    const sourceUsed = m ? 'bz' : 'not_found';
+    this.db.prepare(`
+      INSERT INTO check_items
+        (watchlist_id, std_code, std_code_norm, base_status, base_title, base_impl_date,
+         base_replaced_by, base_snapshot_at, last_status, last_title, last_impl_date,
+         last_replaced_by, last_checked_at, change_flags, source_used, instead_std, abolish_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?)
+    `).run(
+      wlId, code, extractFullCode(code),
+      m?.status ?? null, m?.title ?? null, m?.implementDate ?? null, m?.replacedStd ?? null, now,
+      m?.status ?? null, m?.title ?? null, m?.implementDate ?? null, m?.replacedStd ?? null, now,
+      sourceUsed, m?.insteadStd ?? null, m?.abolishDate ?? null,
+    );
+    return { saved: true };
+  }
+
+  // 返回该用户收藏清单里的标准号集合（前端搜索结果点亮收藏态用）。
+  getSavedCodes(userId: number): string[] {
+    const row = this.db.prepare('SELECT id FROM check_watchlists WHERE user_id = ? AND is_saved = 1').get(userId) as { id: number } | undefined;
+    if (!row) return [];
+    const rows = this.db.prepare('SELECT std_code FROM check_items WHERE watchlist_id = ?').all(row.id) as Array<{ std_code: string }>;
+    return rows.map((r) => r.std_code);
   }
 
   // 设置自动查新：enabled + 周期天数（硬下限 15）。开启时算出 next_run_at。

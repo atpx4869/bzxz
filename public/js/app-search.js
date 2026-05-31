@@ -1494,9 +1494,17 @@ function toggleSavedStandard(id) {
       sources: r.sources || [r._source],
       savedAt: Date.now(),
     });
-    showToast('已加入收藏');
+    showToast('已加入收藏，将自动关注更新');
   }
   persistSavedStandards();
+  // 同步到后端"我的收藏"查新清单（点收藏 = 关注该标准更新）。fire-and-forget，不卡 UI。
+  // 标准号带年代号才能查新；不带的（极少）后端 cleanStdCode 容错，查不到标 not_found。
+  try {
+    apiFetch('/api/check/saved/toggle', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stdCode: r.standardNumber }),
+    }).catch(() => { /* 静默：本地收藏态已更新，查新同步失败不影响 */ });
+  } catch { /* ignore */ }
   renderResults();
   renderFilterBar();
   updateToolbar();

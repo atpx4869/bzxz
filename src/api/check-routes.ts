@@ -30,6 +30,22 @@ export function createCheckRoutes(
     return true;
   }
 
+  // 收藏 toggle（点收藏 = 加入"我的收藏"查新清单并查一次；再点取消）
+  router.post('/api/check/saved/toggle', requireAuth, async (req, res, next) => {
+    try {
+      const schema = z.object({ stdCode: z.string().trim().min(1).max(120) });
+      const { stdCode } = schema.parse(req.body);
+      const r = await svc.toggleSaved(req.user!.id, stdCode);
+      respond(res, r);
+    } catch (e) { next(normalizeError(e)); }
+  });
+
+  // 当前用户收藏的标准号集合（搜索结果点亮收藏态）
+  router.get('/api/check/saved/codes', requireAuth, (req, res, next) => {
+    try { respond(res, { codes: svc.getSavedCodes(req.user!.id) }); }
+    catch (e) { next(normalizeError(e)); }
+  });
+
   // 列出我的查新清单
   router.get('/api/check/watchlists', requireAuth, (req, res, next) => {
     try { respond(res, { items: toCamelCase(svc.getWatchlists(req.user!.id)) }); }

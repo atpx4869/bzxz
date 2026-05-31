@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat(check): 收藏整合进查新 + 已废止徽章按有无替代区分** —
+  - **收藏即关注更新**：用户收藏标准 → 自动进入内置「我的收藏」查新清单（`check_watchlists.is_saved=1`，每用户一条、置顶、不可删）。`toggleSaved` 加入时查一次 BZ 存基线、再点取消。`POST /api/check/saved/toggle` + `GET /api/check/saved/codes`。`toggleSavedStandard` 在更新本地收藏态后 fire-and-forget 调后端（本地 star 仍即时、不卡 UI）
+  - **下载历史去掉「收藏标准」区块**：收藏已并入查新，历史页只剩下载历史（`renderSavedLibrary` 元素缺失时早返回、安全）
+  - **徽章修正**：已废止/即将废止等非现行状态，**有 insteadStd（被代替）或新版本** → 标"…·有新版本"，无任何替代才"…·无变动"（之前一律"无变动"，已废止且被 3324-2024 代替也误标无变动）
+  - 决策：内置收藏清单(A)、收藏即查一次、手机端保持隐藏收藏入口、无历史数据迁移
 - **feat(check): 查新结果勾选导出 Excel** — 结果区加勾选导出条：分类快选（全部/有变动/需关注/现行·无变动/清空）+ 每条复选框（卡片勾选框 stopPropagation 不触发展开），导出按钮带选中计数。后端新增 `POST /api/check/watchlists/:id/export`（body.ids 选中子集，空=全部），按 id 过滤 getItems → 生成 .xlsx（列：标准号/名称/当前状态/变动类型/新版本/被代替/实施日期/废止日期）写 `data/exports/` 返回 downloadUrl，前端触发下载。复用补全页同款 XLSX 懒加载 + exports 目录。`createCheckRoutes` 加 `baseDir` 参数；`CHANGE_FLAG_LABELS` 提为导出复用
 - **fix(check): 修「被代替」方向反了 — 用 detail-dm 的 insteadStd（被谁取代）** — 实测发现 `3324-2017` 显示"被 3324-2008 代替"（2008 是更老的前身，方向反了）。根因：BZ 的 `replacedStd` 是"本标准代替的旧标准（前身）"，真正"被谁取代"是 `insteadStd`，且 `insteadStd` 只在 `detail-dm` 接口有（list/detail 没有）。修：
   - check-service 对**非现行状态**标准补查 `detail-dm`（`pooledFetch`，现行有效不补、省请求），取 `insteadStd`（被谁代替）+ `replacedStd`（前身）+ `endData`（废止日期）+ 中文 status（更准）

@@ -253,7 +253,8 @@ function migrate(db: Database.Database): void {
       last_checked_at    TEXT,
       auto_enabled       INTEGER NOT NULL DEFAULT 0,   -- 自动查新开关（0/1）
       auto_interval_days INTEGER NOT NULL DEFAULT 15,  -- 周期天数，硬下限 15
-      next_run_at        TEXT                          -- 下次自动查新时间（ISO）
+      next_run_at        TEXT,                         -- 下次自动查新时间（ISO）
+      is_saved           INTEGER NOT NULL DEFAULT 0    -- 是否"我的收藏"内置清单（每用户一条、不可删）
     );
     CREATE TABLE IF NOT EXISTS check_items (
       id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -304,6 +305,7 @@ function migrate(db: Database.Database): void {
   addColumnIfMissing(db, 'check_watchlists', 'auto_enabled',       'INTEGER NOT NULL DEFAULT 0');
   addColumnIfMissing(db, 'check_watchlists', 'auto_interval_days', 'INTEGER NOT NULL DEFAULT 15');
   addColumnIfMissing(db, 'check_watchlists', 'next_run_at',        'TEXT DEFAULT NULL');
+  addColumnIfMissing(db, 'check_watchlists', 'is_saved',           'INTEGER NOT NULL DEFAULT 0'); // 我的收藏内置清单
 
   // 资质标准号归一化列（Step 2-3）：把脏空格/全角/无空格/ISO 冒号变体在写入时落成统一形态，
   // 让 queryByStdCodes / searchQualifications 用索引等值查询，不再需要 LIKE + LIMIT 兜底。

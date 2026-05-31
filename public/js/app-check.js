@@ -212,6 +212,9 @@ function isAbolishedStatus(s) { return /废止|废除|作废/.test(s || ''); }
 function renderCheckAttentionItem(i) {
   const st = statusText(i.lastStatus);
   const sev = isAbolishedStatus(i.lastStatus) ? 'bad' : 'warn';
+  // 有被代替(insteadStd)或检出新版本 → 标"有新版本"，否则"无变动"
+  const hasSuccessor = !!(i.insteadStd || i.newVersion);
+  const tail = hasSuccessor ? '有新版本' : '无变动';
   const rows = [];
   rows.push(`<dt>当前状态</dt><dd><span class="diff-new">${escapeHtml(st)}</span></dd>`);
   if (i.lastImplDate) rows.push(`<dt>实施日期</dt><dd>${escapeHtml(i.lastImplDate)}</dd>`);
@@ -227,7 +230,7 @@ function renderCheckAttentionItem(i) {
       <span class="check-caret">▸</span>
       <span class="check-code">${escapeHtml(i.stdCode)}</span>
       <span class="check-title">${escapeHtml(i.lastTitle || '')}</span>
-      <span class="check-badges"><span class="check-badge ${sev}">${escapeHtml(st)} · 无变动</span></span>
+      <span class="check-badges"><span class="check-badge ${sev}">${escapeHtml(st)} · ${tail}</span></span>
     </div>
     <div class="check-detail"><dl class="check-diff">${rows.join('')}</dl></div>
   </div>`;
