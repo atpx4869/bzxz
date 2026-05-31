@@ -236,7 +236,7 @@ export function createApp() {
   // labr：独立 sidebar，与 SourceRegistry 解耦；路径自带 /api/labr 前缀
   app.use(createLabrRoutes(requireAuth));
   // 标准查新：路径自带 /api/check 前缀
-  app.use(createCheckRoutes(db, sourceRegistry, requireAuth));
+  app.use(createCheckRoutes(db, sourceRegistry, requireAuth, baseDir));
 
   app.get('/api/health', (_req, res) => {
     const version = process.env.npm_package_version || process.env.BZXZ_APP_VERSION || '';

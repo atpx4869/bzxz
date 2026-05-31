@@ -89,30 +89,39 @@ function renderCheckItems(items) {
     <span class="check-auto-interval" id="checkAutoIntervalWrap" style="display:none">每
       <input type="number" id="checkAutoInterval" min="15" max="365" value="15" onchange="onCheckAutoInterval(this.value)" style="width:56px"> 天</span>
     <button class="btn btn-sm btn-ghost" id="checkRecheckBtn" onclick="doRecheck()">重新查新</button>
+  </div>
+  <div class="check-export-bar">
+    <span class="check-export-label">勾选导出：</span>
+    <button class="sa-chip" onclick="checkSelectCat('all')">全部</button>
+    <button class="sa-chip" onclick="checkSelectCat('changed')">有变动</button>
+    <button class="sa-chip" onclick="checkSelectCat('attention')">需关注</button>
+    <button class="sa-chip" onclick="checkSelectCat('nochange')">现行·无变动</button>
+    <button class="sa-chip" onclick="checkSelectCat('none')">清空</button>
+    <button class="btn btn-sm btn-primary" style="margin-left:auto" onclick="doCheckExport()">导出 Excel（<span id="checkSelCount">0</span>）</button>
   </div>`;
 
   let html = stats;
   if (changed.length) {
     html += `<div class="check-group-title">⚠ 有变动（${changed.length}）</div>`;
-    html += changed.map(renderCheckChangedItem).join('');
+    html += changed.map(i => renderCheckChangedItem(i)).join('');
   }
   if (attention.length) {
     html += `<div class="check-group-title">需关注（${attention.length}）· 非现行状态</div>`;
-    html += attention.map(renderCheckAttentionItem).join('');
+    html += attention.map(i => renderCheckAttentionItem(i)).join('');
   }
   if (noChange.length) {
     html += `<div class="check-group-title">现行·无变动（${noChange.length}）</div>`;
-    html += `<div class="check-nochange" onclick="this.classList.toggle('open')">
-      <div class="check-nc-head"><span class="check-caret">▸</span>${noChange.length} 项与上次查新一致，点击展开</div>
+    html += `<div class="check-nochange">
+      <div class="check-nc-head" onclick="this.parentElement.classList.toggle('open')"><span class="check-caret">▸</span>${noChange.length} 项与上次查新一致，点击展开</div>
       <div class="check-nc-body">${noChange.map(i =>
-        `<div class="check-nc-row"><span class="check-code">${escapeHtml(i.stdCode)}</span><span class="check-title">${escapeHtml(i.lastTitle || '')}</span><span class="badge-ok">${escapeHtml(statusText(i.lastStatus))} · 无变动</span></div>`
+        `<div class="check-nc-row"><input type="checkbox" class="csel" data-cat="nochange" value="${i.id}" onchange="updateCheckSelCount()"><span class="check-code">${escapeHtml(i.stdCode)}</span><span class="check-title">${escapeHtml(i.lastTitle || '')}</span><span class="badge-ok">${escapeHtml(statusText(i.lastStatus))} · 无变动</span></div>`
       ).join('')}</div>
     </div>`;
   }
   if (notFound.length) {
     html += `<div class="check-group-title">无法核验（${notFound.length}）</div>`;
     html += notFound.map(i =>
-      `<div class="check-item nf"><div class="check-item-head"><span class="check-code">${escapeHtml(i.stdCode)}</span><span class="check-title muted">BZ 源未命中</span></div></div>`
+      `<div class="check-item nf"><div class="check-item-head"><input type="checkbox" class="csel" data-cat="notfound" value="${i.id}" onchange="updateCheckSelCount()"><span class="check-code">${escapeHtml(i.stdCode)}</span><span class="check-title muted">BZ 源未命中</span></div></div>`
     ).join('');
   }
   if (pending.length) {
@@ -177,9 +186,10 @@ function renderCheckChangedItem(i) {
     diffRows.push(diffRow('实施日期', i.baseImplDate || '—', i.lastImplDate || '—'));
   if ((i.changeFlags || []).includes('replacedBy'))
     diffRows.push(`<dt>被代替</dt><dd><span class="diff-new">本标准已被 ${escapeHtml(i.insteadStd || '')} 代替</span></dd>`);
-  // 变动卡默认收起，点击展开看详情
+  // 变动卡默认收起，点击展开看详情（勾选框 stopPropagation 不触发展开）
   return `<div class="check-item ${sev}" onclick="this.classList.toggle('open')">
     <div class="check-item-head">
+      <input type="checkbox" class="csel" data-cat="changed" value="${i.id}" onclick="event.stopPropagation()" onchange="updateCheckSelCount()">
       <span class="check-caret">▸</span>
       <span class="check-code">${escapeHtml(i.stdCode)}</span>
       <span class="check-title">${escapeHtml(i.lastTitle || i.baseTitle || '')}</span>
@@ -213,6 +223,7 @@ function renderCheckAttentionItem(i) {
   if (i.newVersion) rows.push(`<dt>新版本</dt><dd><span class="diff-new">${escapeHtml(i.newVersion)}</span></dd>`);
   return `<div class="check-item ${sev}" onclick="this.classList.toggle('open')">
     <div class="check-item-head">
+      <input type="checkbox" class="csel" data-cat="attention" value="${i.id}" onclick="event.stopPropagation()" onchange="updateCheckSelCount()">
       <span class="check-caret">▸</span>
       <span class="check-code">${escapeHtml(i.stdCode)}</span>
       <span class="check-title">${escapeHtml(i.lastTitle || '')}</span>
@@ -220,4 +231,39 @@ function renderCheckAttentionItem(i) {
     </div>
     <div class="check-detail"><dl class="check-diff">${rows.join('')}</dl></div>
   </div>`;
+}
+
+// ── 勾选导出 ──
+function allCheckSelBoxes() { return [...document.querySelectorAll('#checkResults .csel')]; }
+function updateCheckSelCount() {
+  const n = allCheckSelBoxes().filter(b => b.checked).length;
+  const el = document.getElementById('checkSelCount');
+  if (el) el.textContent = n;
+}
+// 按分类快速勾选：all/none/changed/attention/nochange（notfound 也可被"全部"选中）
+function checkSelectCat(cat) {
+  allCheckSelBoxes().forEach(b => {
+    if (cat === 'all') b.checked = true;
+    else if (cat === 'none') b.checked = false;
+    else b.checked = (b.dataset.cat === cat);
+  });
+  updateCheckSelCount();
+}
+async function doCheckExport() {
+  if (!checkCurrentWatchlistId) return;
+  const ids = allCheckSelBoxes().filter(b => b.checked).map(b => Number(b.value));
+  if (!ids.length) { showToast('请先勾选要导出的标准', 'fail'); return; }
+  try {
+    const res = await apiFetch(`/api/check/watchlists/${checkCurrentWatchlistId}/export`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    const data = await readApiResponse(res);
+    if (!res.ok) throw new Error(data.message || '导出失败');
+    // 触发下载
+    const a = document.createElement('a');
+    a.href = data.downloadUrl; a.download = data.fileName || '标准查新.xlsx';
+    document.body.appendChild(a); a.click(); a.remove();
+    showToast(`已导出 ${data.count} 项`);
+  } catch (e) { showToast(`导出失败：${e.message}`, 'fail'); }
 }

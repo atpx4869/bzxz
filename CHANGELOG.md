@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat(check): 查新结果勾选导出 Excel** — 结果区加勾选导出条：分类快选（全部/有变动/需关注/现行·无变动/清空）+ 每条复选框（卡片勾选框 stopPropagation 不触发展开），导出按钮带选中计数。后端新增 `POST /api/check/watchlists/:id/export`（body.ids 选中子集，空=全部），按 id 过滤 getItems → 生成 .xlsx（列：标准号/名称/当前状态/变动类型/新版本/被代替/实施日期/废止日期）写 `data/exports/` 返回 downloadUrl，前端触发下载。复用补全页同款 XLSX 懒加载 + exports 目录。`createCheckRoutes` 加 `baseDir` 参数；`CHANGE_FLAG_LABELS` 提为导出复用
 - **fix(check): 修「被代替」方向反了 — 用 detail-dm 的 insteadStd（被谁取代）** — 实测发现 `3324-2017` 显示"被 3324-2008 代替"（2008 是更老的前身，方向反了）。根因：BZ 的 `replacedStd` 是"本标准代替的旧标准（前身）"，真正"被谁取代"是 `insteadStd`，且 `insteadStd` 只在 `detail-dm` 接口有（list/detail 没有）。修：
   - check-service 对**非现行状态**标准补查 `detail-dm`（`pooledFetch`，现行有效不补、省请求），取 `insteadStd`（被谁代替）+ `replacedStd`（前身）+ `endData`（废止日期）+ 中文 status（更准）
   - `check_items` 加列 `instead_std`/`abolish_date`（建表 + 幂等迁移）；diff 的「被代替」改比 `insteadStd`（前身 replacedStd 是历史事实、不参与 diff）

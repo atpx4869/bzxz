@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import * as path from 'path';
+import { mkdir, writeFile } from 'fs/promises';
 import type Database from 'better-sqlite3';
 import type { Request, Response, NextFunction } from 'express';
 import { respond, respondError } from '../shared/response';
 import { toCamelCase } from '../shared/case';
 import { normalizeError } from '../shared/errors';
-import { CheckService, CheckDebounceError } from '../services/check-service';
+import { CheckService, CheckDebounceError, CHANGE_FLAG_LABELS } from '../services/check-service';
 import type { SourceRegistry } from '../services/source-registry';
 
 // 标准查新路由（见 docs/CHECK-UPDATE-AND-STATS.md）。挂载路径自带 /api/check 前缀。
@@ -13,6 +15,7 @@ export function createCheckRoutes(
   db: Database.Database,
   sourceRegistry: SourceRegistry,
   requireAuth: (req: Request, res: Response, next: NextFunction) => void,
+  baseDir: string,
 ): Router {
   const router = Router();
   const svc = new CheckService(db, sourceRegistry);
@@ -77,6 +80,48 @@ export function createCheckRoutes(
       const { enabled, intervalDays } = schema.parse(req.body);
       svc.setAuto(id, enabled, intervalDays ?? 15);
       respond(res, { ok: true });
+    } catch (e) { next(normalizeError(e)); }
+  });
+
+  // 导出查新结果为 Excel。body.ids = 选中的 item id（空/缺省 = 全部）。
+  router.post('/api/check/watchlists/:id/export', requireAuth, async (req, res, next) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (Number.isNaN(id) || !ensureOwner(req, res, id)) return;
+      const schema = z.object({ ids: z.array(z.number().int()).optional() });
+      const { ids } = schema.parse(req.body ?? {});
+
+      let items = svc.getItems(id);
+      if (ids && ids.length) {
+        const set = new Set(ids);
+        items = items.filter((it) => set.has(it.id));
+      }
+      if (!items.length) { respondError(res, 400, 'EMPTY', '没有可导出的条目'); return; }
+
+      const statusOf = (it: typeof items[number]) =>
+        it.sourceUsed === 'not_found' ? '无法核验' : (it.sourceUsed === 'pending' ? '待查新' : (it.lastStatus || '—'));
+      const flagsOf = (it: typeof items[number]) =>
+        (it.changeFlags || []).map((f) => CHANGE_FLAG_LABELS[f] || f).join('、') || '无变动';
+
+      const header = ['标准号', '名称', '当前状态', '变动类型', '新版本', '被代替', '实施日期', '废止日期'];
+      const rows = items.map((it) => [
+        it.stdCode, it.lastTitle || it.baseTitle || '', statusOf(it), flagsOf(it),
+        it.newVersion || '', it.insteadStd || '', it.lastImplDate || '', it.abolishDate || '',
+      ]);
+
+      const XLSX = (await import('xlsx')).default;
+      const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+      ws['!cols'] = [{ wch: 20 }, { wch: 34 }, { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 18 }, { wch: 13 }, { wch: 13 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '标准查新');
+
+      const exportsDir = path.resolve(baseDir, 'data', 'exports');
+      await mkdir(exportsDir, { recursive: true });
+      const outFileName = `标准查新_${Date.now()}.xlsx`;
+      const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      await writeFile(path.resolve(exportsDir, outFileName), buf);
+
+      respond(res, { fileName: outFileName, downloadUrl: `/api/downloads/${encodeURIComponent(outFileName)}`, count: items.length });
     } catch (e) { next(normalizeError(e)); }
   });
 

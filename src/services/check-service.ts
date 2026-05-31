@@ -56,6 +56,11 @@ export class CheckDebounceError extends Error {
 
 export type ChangeFlag = 'status' | 'newVersion' | 'implDate' | 'replacedBy';
 
+// 变动类型中文标签（导出表格 / 后端复用）
+export const CHANGE_FLAG_LABELS: Record<ChangeFlag, string> = {
+  status: '状态变化', newVersion: '有新版本', implDate: '实施日期变化', replacedBy: '被代替',
+};
+
 export interface CheckItemRow {
   id: number;
   watchlistId: number;
