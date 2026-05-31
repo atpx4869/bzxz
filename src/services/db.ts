@@ -272,7 +272,9 @@ function migrate(db: Database.Database): void {
       last_checked_at  TEXT,
       change_flags     TEXT,
       source_used      TEXT,
-      new_version      TEXT
+      new_version      TEXT,
+      instead_std      TEXT,   -- 代替本标准的新标准（detail-dm insteadStd）= 被谁取代
+      abolish_date     TEXT    -- 废止日期（detail-dm endData）
     );
     CREATE INDEX IF NOT EXISTS idx_check_items_wl ON check_items(watchlist_id);
   `);
@@ -296,6 +298,8 @@ function migrate(db: Database.Database): void {
   addColumnIfMissing(db, 'cnas_labs', 'cert_tasks',      "TEXT DEFAULT '[]'");
   // 标准查新：new_version 列在中途版本可能缺（建表版先于本列），幂等补一下。
   addColumnIfMissing(db, 'check_items', 'new_version',   'TEXT DEFAULT NULL');
+  addColumnIfMissing(db, 'check_items', 'instead_std',   'TEXT DEFAULT NULL'); // 被谁代替（detail-dm）
+  addColumnIfMissing(db, 'check_items', 'abolish_date',  'TEXT DEFAULT NULL'); // 废止日期
   // 自动查新（Step 2）：旧库补列。
   addColumnIfMissing(db, 'check_watchlists', 'auto_enabled',       'INTEGER NOT NULL DEFAULT 0');
   addColumnIfMissing(db, 'check_watchlists', 'auto_interval_days', 'INTEGER NOT NULL DEFAULT 15');

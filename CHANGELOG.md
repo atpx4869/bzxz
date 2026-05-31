@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix(check): 修「被代替」方向反了 — 用 detail-dm 的 insteadStd（被谁取代）** — 实测发现 `3324-2017` 显示"被 3324-2008 代替"（2008 是更老的前身，方向反了）。根因：BZ 的 `replacedStd` 是"本标准代替的旧标准（前身）"，真正"被谁取代"是 `insteadStd`，且 `insteadStd` 只在 `detail-dm` 接口有（list/detail 没有）。修：
+  - check-service 对**非现行状态**标准补查 `detail-dm`（`pooledFetch`，现行有效不补、省请求），取 `insteadStd`（被谁代替）+ `replacedStd`（前身）+ `endData`（废止日期）+ 中文 status（更准）
+  - `check_items` 加列 `instead_std`/`abolish_date`（建表 + 幂等迁移）；diff 的「被代替」改比 `insteadStd`（前身 replacedStd 是历史事实、不参与 diff）
+  - 前端"需关注"/"有变动"卡：被代替=`本标准已被 X 代替`（insteadStd）、代替前身=`本标准代替了 X`（replacedStd，灰）、加废止日期；insteadStd 空且已废止时显示"BZ 暂未登记代替标准"
+  - 新增 `docs/BZ-API.md` 沉淀实测字段（list/detail/detail-dm 字段表 + replacedStd vs insteadStd 方向、状态码 vs 中文差异）
 - **fix(check): 已废止等非现行状态单列「需关注」组、可展开看替换信息** — 旧归类只看有无变动，已废止但无变动的标准被埋进绿色「无变动」折叠组、看不到废止态也点不开替换信息。新增「需关注」组：本次无变动但状态非「现行有效」（已废止/即将废止/即将实施/部分有效）的单列出来、每条可展开看 当前状态 / 实施日期 / 被代替（`本标准已被 X 代替`，空则注明 BZ 未提供）/ 新版本；已废止=红、其它非现行=橙；真·现行有效才折叠进「现行·无变动」绿组。概览卡改「需关注/现行·无变动」。纯前端 `app-check.js`
 - **fix(check): 查新改 BZ 原文直查（修纯数字号全部"无法核验"）+ 强制年代号** — 实测发现 `3324-2017`/`3325` 等纯数字标准号全部落到"无法核验"。根因：查新复用的 `StandardResolver` 正则要求 `[A-Z]{2,4}` 字母前缀，纯数字号被判"无法识别"、压根没查 BZ。改法（方案 B）：
   - `check-service` 不再走 StandardResolver，改用 `StandardService(bz)` **原文直查 BZ search**（像标准检索那样，搜啥查啥）+ `pickBzMatch`（同基础号/数字子串匹配、带年号优先精确年版、否则取最新年版）。不动 resolver、不影响下载/补全

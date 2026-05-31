@@ -176,7 +176,7 @@ function renderCheckChangedItem(i) {
   if ((i.changeFlags || []).includes('implDate'))
     diffRows.push(diffRow('实施日期', i.baseImplDate || '—', i.lastImplDate || '—'));
   if ((i.changeFlags || []).includes('replacedBy'))
-    diffRows.push(`<dt>被代替</dt><dd><span class="diff-new">本标准已被 ${escapeHtml(i.lastReplacedBy || '')} 代替</span></dd>`);
+    diffRows.push(`<dt>被代替</dt><dd><span class="diff-new">本标准已被 ${escapeHtml(i.insteadStd || '')} 代替</span></dd>`);
   // 变动卡默认收起，点击展开看详情
   return `<div class="check-item ${sev}" onclick="this.classList.toggle('open')">
     <div class="check-item-head">
@@ -205,8 +205,11 @@ function renderCheckAttentionItem(i) {
   const rows = [];
   rows.push(`<dt>当前状态</dt><dd><span class="diff-new">${escapeHtml(st)}</span></dd>`);
   if (i.lastImplDate) rows.push(`<dt>实施日期</dt><dd>${escapeHtml(i.lastImplDate)}</dd>`);
-  if (i.lastReplacedBy) rows.push(`<dt>被代替</dt><dd><span class="diff-new">本标准已被 ${escapeHtml(i.lastReplacedBy)} 代替</span></dd>`);
-  else if (isAbolishedStatus(i.lastStatus)) rows.push(`<dt>替换信息</dt><dd class="muted">BZ 未提供代替标准</dd>`);
+  if (i.abolishDate) rows.push(`<dt>废止日期</dt><dd>${escapeHtml(i.abolishDate)}</dd>`);
+  // 被代替 = insteadStd（被谁取代）；代替前身 = replacedStd（取代了谁）
+  if (i.insteadStd) rows.push(`<dt>被代替</dt><dd><span class="diff-new">本标准已被 ${escapeHtml(i.insteadStd)} 代替</span></dd>`);
+  else if (isAbolishedStatus(i.lastStatus)) rows.push(`<dt>被代替</dt><dd class="muted">BZ 暂未登记代替标准</dd>`);
+  if (i.lastReplacedBy) rows.push(`<dt>代替前身</dt><dd class="muted">本标准代替了 ${escapeHtml(i.lastReplacedBy)}</dd>`);
   if (i.newVersion) rows.push(`<dt>新版本</dt><dd><span class="diff-new">${escapeHtml(i.newVersion)}</span></dd>`);
   return `<div class="check-item ${sev}" onclick="this.classList.toggle('open')">
     <div class="check-item-head">

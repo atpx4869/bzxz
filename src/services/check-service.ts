@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3';
 import type { SourceName, StandardSummary } from '../domain/standard';
 import type { SourceRegistry } from './source-registry';
 import { StandardService } from './standard-service';
+import { pooledFetch } from '../shared/http';
 import { cleanStdCode, extractFullCode, extractBaseCode } from '../shared/std-code';
 
 /**
@@ -22,7 +23,15 @@ interface CheckMatch {
   title: string;
   status?: string;
   implementDate?: string | null;
-  replacedStd?: string | null;
+  replacedStd?: string | null;   // 本标准代替的旧标准（前身）= "我取代了谁"
+  insteadStd?: string | null;    // 代替本标准的新标准 = "我被谁取代"（仅 detail-dm 有）
+  abolishDate?: string | null;   // 废止日期（endData）
+}
+
+const BZ_BASE = 'https://bz.gxzl.org.cn';
+// 需要补 detail-dm 拿替换信息的状态（非"现行有效"）。现行有效不补、省请求。
+function needsReplaceInfo(status: string | undefined | null): boolean {
+  return !!status && !/^现行有效$/.test(status.trim());
 }
 
 // 标准号必须带 4 位年代号（导入校验用）。如 "3324-2017"、"GB/T 3325-2020"。
@@ -63,6 +72,8 @@ export interface CheckItemRow {
   changeFlags: ChangeFlag[];
   sourceUsed: string | null;
   newVersion: string | null;
+  insteadStd: string | null;   // 被谁代替
+  abolishDate: string | null;  // 废止日期
 }
 
 export class CheckService {
@@ -93,14 +104,41 @@ export class CheckService {
     if (!results.length) return null;
     const best = pickBzMatch(q, results);
     if (!best) return null;
-    return {
+    const m: CheckMatch = {
       input,
       standardNumber: best.standardNumber,
       title: best.title,
       status: best.status,
       implementDate: best.implementDate,
       replacedStd: typeof best.meta?.replacedStd === 'string' ? (best.meta.replacedStd as string) : null,
+      insteadStd: null,
+      abolishDate: best.abolishedDate ?? null,
     };
+    // 非现行状态：补 detail-dm 拿 insteadStd（被谁代替）+ 更准的 status/废止日期。
+    // 现行有效不补，省请求。失败静默（保留 list 已有信息）。
+    if (needsReplaceInfo(best.status) && best.sourceId) {
+      const dm = await this.fetchDetailDm(best.sourceId);
+      if (dm) {
+        m.insteadStd = dm.insteadStd || null;
+        if (dm.replacedStd) m.replacedStd = dm.replacedStd;
+        if (dm.stdStatus) m.status = dm.stdStatus;       // detail-dm 状态是中文、更准
+        if (dm.endData) m.abolishDate = dm.endData;
+      }
+    }
+    return m;
+  }
+
+  // 取 detail-dm 的替换/废止字段。独立 fetch（不经 adapter，查新专用）。失败返回 null。
+  private async fetchDetailDm(sourceId: string): Promise<{ insteadStd?: string; replacedStd?: string; stdStatus?: string; endData?: string } | null> {
+    try {
+      const url = `${BZ_BASE}/api/gxist-standard/standardstd/detail-dm?id=${encodeURIComponent(sourceId)}&language=null`;
+      const res = await pooledFetch(url, { timeoutMs: 10_000, retries: 1 });
+      if (!res.ok) return null;
+      const json = await res.json() as { data?: { insteadStd?: string; replacedStd?: string; stdStatus?: string; endData?: string } };
+      return json.data ?? null;
+    } catch {
+      return null;
+    }
   }
 
   // 分批查询：每批 BATCH_SIZE 个、批内串行（BZ semaphore=2 再收口出站并发）、批间 sleep。
@@ -155,8 +193,8 @@ export class CheckService {
       INSERT INTO check_items
         (watchlist_id, std_code, std_code_norm, base_status, base_title, base_impl_date,
          base_replaced_by, base_snapshot_at, last_status, last_title, last_impl_date,
-         last_replaced_by, last_checked_at, change_flags, source_used)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?)
+         last_replaced_by, last_checked_at, change_flags, source_used, instead_std, abolish_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?)
     `);
     const txn = this.db.transaction((rawLines: string[]) => {
       for (const raw of rawLines) {
@@ -168,7 +206,7 @@ export class CheckService {
           watchlistId, code, extractFullCode(code),
           m?.status ?? null, m?.title ?? null, m?.implementDate ?? null, m?.replacedStd ?? null, now,
           m?.status ?? null, m?.title ?? null, m?.implementDate ?? null, m?.replacedStd ?? null, now,
-          sourceUsed,
+          sourceUsed, m?.insteadStd ?? null, m?.abolishDate ?? null,
         );
       }
     });
@@ -231,20 +269,22 @@ export class CheckService {
     const update = this.db.prepare(`
       UPDATE check_items
       SET last_status = ?, last_title = ?, last_impl_date = ?, last_replaced_by = ?,
-          last_checked_at = ?, change_flags = ?, source_used = ?, new_version = ?
+          last_checked_at = ?, change_flags = ?, source_used = ?, new_version = ?,
+          instead_std = ?, abolish_date = ?
       WHERE id = ?
     `);
     const txn = this.db.transaction(() => {
       for (const it of items) {
         const base = this.db.prepare(
-          'SELECT base_status, base_title, base_impl_date, base_replaced_by FROM check_items WHERE id = ?',
-        ).get(it.id) as { base_status: string | null; base_title: string | null; base_impl_date: string | null; base_replaced_by: string | null };
+          'SELECT base_status, base_title, base_impl_date, base_replaced_by, instead_std FROM check_items WHERE id = ?',
+        ).get(it.id) as { base_status: string | null; base_title: string | null; base_impl_date: string | null; base_replaced_by: string | null; instead_std: string | null };
         const fresh = byInput.get(it.std_code) ?? byInput.get(cleanStdCode(it.std_code));
         const sourceUsed = fresh ? 'bz' : 'not_found';
         const d = fresh ? this.diff(base, fresh, allFresh) : { flags: [] as ChangeFlag[], newVersion: null };
         update.run(
           fresh?.status ?? null, fresh?.title ?? null, fresh?.implementDate ?? null, fresh?.replacedStd ?? null,
-          now, JSON.stringify(d.flags), sourceUsed, d.newVersion, it.id,
+          now, JSON.stringify(d.flags), sourceUsed, d.newVersion,
+          fresh?.insteadStd ?? null, fresh?.abolishDate ?? null, it.id,
         );
       }
     });
@@ -254,7 +294,7 @@ export class CheckService {
 
   // 逐字段 diff，产出变动标记 + 检出的具体新版本号（供 UI 展示 "GB/T 1.1-2020"）。
   private diff(
-    base: { base_status: string | null; base_impl_date: string | null; base_replaced_by: string | null },
+    base: { base_status: string | null; base_impl_date: string | null; base_replaced_by: string | null; instead_std: string | null },
     fresh: CheckMatch,
     allFresh: CheckMatch[],
   ): { flags: ChangeFlag[]; newVersion: string | null } {
@@ -263,8 +303,9 @@ export class CheckService {
     if ((base.base_status ?? '') !== (fresh.status ?? '')) flags.push('status');
     // 实施日期
     if ((base.base_impl_date ?? '') !== (fresh.implementDate ?? '')) flags.push('implDate');
-    // 被代替关系（BZ 的 replacedStd；为空不算变化）
-    if ((base.base_replaced_by ?? '') !== (fresh.replacedStd ?? '') && (fresh.replacedStd ?? '')) flags.push('replacedBy');
+    // 被代替关系：比 insteadStd（被谁取代）——这才是用户关心的"被代替"变动。
+    // replacedStd（代替的前身）是历史事实、不变，不参与 diff。为空不算变化。
+    if ((base.instead_std ?? '') !== (fresh.insteadStd ?? '') && (fresh.insteadStd ?? '')) flags.push('replacedBy');
     // 新版本：同基础号（剥年份）出现更高年版 → 记下具体版本号
     const baseCode = extractBaseCode(fresh.standardNumber);
     const freshYear = yearOf(fresh.standardNumber);
@@ -332,7 +373,7 @@ export class CheckService {
     const rows = this.db.prepare(`
       SELECT id, watchlist_id, std_code, base_status, base_title, base_impl_date, base_replaced_by,
              last_status, last_title, last_impl_date, last_replaced_by, last_checked_at,
-             change_flags, source_used, new_version
+             change_flags, source_used, new_version, instead_std, abolish_date
       FROM check_items WHERE watchlist_id = ? ORDER BY id
     `).all(watchlistId) as Array<Record<string, unknown>>;
     return rows.map((r) => ({
@@ -351,6 +392,8 @@ export class CheckService {
       changeFlags: safeFlags(r.change_flags as string),
       sourceUsed: (r.source_used as string) ?? null,
       newVersion: (r.new_version as string) ?? null,
+      insteadStd: (r.instead_std as string) ?? null,
+      abolishDate: (r.abolish_date as string) ?? null,
     }));
   }
 
