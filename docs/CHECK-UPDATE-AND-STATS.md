@@ -24,6 +24,21 @@
 > labr 是下载补充源、不一定有完整状态元数据，查新默认走 BW/BY/BZ 三源；某标准三源都查不到
 > 时标记"未找到/无法核验"，不算"无变动"（避免漏报）。
 
+### 2.5 字段来源核查（实现前已确认，2026-05-31）
+
+所有源都返回统一的 `StandardSummary`（`src/domain/standard.ts`），查新四维度的数据来源：
+
+| 维度 | 字段 | BZ | GBW | 说明 |
+|---|---|---|---|---|
+| 状态 | `status` | ✅ `BZ_STATUS_MAP`（现行有效/部分有效/即将实施/即将废止/已经废止/调整转号） | ✅ `STATE`（含"废止"等） | 各源文案不同，diff 时按"是否含废止/作废"归一判断更稳，别死比字符串 |
+| 实施日期 | `implementDate` | ✅ `actDate` | ✅ `ACT_DATE` | |
+| 废止日期 | `abolishedDate` | ✅ `endData` | ⚠ 恒 null | GBW 不给废止日期 |
+| 被代替 | `meta.replacedStd` | ✅ | ❌ | **仅 BZ 有**，被代替关系优先信 BZ |
+| 新版本 | （派生） | 两源都靠 `standardNumber` 同基础号比年版 | 同左 | 用 `extractBaseCode` 剥年份比对 |
+
+**结论**：状态 + 实施日期 + 新版本三源都能做；被代替关系仅 BZ 可靠。diff 时按源能力降级，
+缺字段的维度标"该源未提供"而非误判无变动。
+
 ### 3. 数据模型（新增表）
 
 ```sql
@@ -101,8 +116,18 @@ diff，才能判定"变动"。否则只能显示"当前状态"，给不出"变�
 
 ### 7. 分期
 
-- **Phase 1**：表 + 导入（存基线快照）+ 单清单查新 + 有变动/无变动分组折叠 + 变动详情。先放
-  **独立菜单**「标准查新」与标准检索同级（已确认）。
+- **Phase 1 ✅ 已落地**：
+  - 表 `check_watchlists` / `check_items`（`db.ts`）。
+  - `check-service.ts`：导入存基线快照 + `recheck` diff（复用 `StandardResolver` 三源 + 限流；
+    `ResolvedItem` 补 `abolishedDate`/`replacedStd`）；diff 四维度（状态按"是否废止"归一、实施日期、
+    被代替、年版用 `extractBaseCode` 剥年比对）。
+  - `check-routes.ts`：`POST/GET /api/check/watchlists`、`GET /:id`、`POST /:id/recheck`、
+    `DELETE /:id`（归属校验，非本人 404）。挂进 `app.ts`。
+  - 前端：侧栏「标准查新」独立菜单 + `#page-check` + `app-check.js`（导入并查新 / 重新查新 /
+    有变动展开 + 无变动整组折叠 + 无法核验单列 + 变动详情旧→新对照）+ `pages/check.css`（双文件镜像）。
+    `TAB_LABELS.check`。两个 index.html 同步。
+  - **本期范围说明**：导入即建清单并首查（基线==最新→首查通常无变动，之后「重新查新」才出变动）。
+    单清单内存态展示，未做清单持久化列表 UI（Phase 2）。
 - **Phase 2**：Excel 导入（复用批量下载解析）、清单管理（多份/重命名/删）、查新进度条。
 - **Phase 3**：定时自动查新（复用 scheduled-task 思路）+ 有变动时桌面通知 / 运行日志记一条。
 

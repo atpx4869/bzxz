@@ -307,6 +307,11 @@ cp .env.example .env.local
 | GET | `/api/stats/by-source` | 来源分布 |
 | GET | `/api/stats/by-user` | 用户分布（仅 admin） |
 | GET | `/api/stats/recent` | 近期事件列表 |
+| GET | `/api/stats/activity` | 操作明细（含 ip/主机名/客户端/结果/error；`collapse=5m` 折叠同用户同类型 5 分钟内） |
+| GET/POST | `/api/check/watchlists` | 标准查新：列出 / 创建清单（导入标准号存基线） |
+| GET | `/api/check/watchlists/:id` | 清单明细（基线 + 最近查新 + 变动标记） |
+| POST | `/api/check/watchlists/:id/recheck` | 重新查新（三源 diff） |
+| DELETE | `/api/check/watchlists/:id` | 删除清单 |
 
 ## 前端功能
 

@@ -54,6 +54,10 @@
       <span class="sidebar-icon">📚</span>
       <span class="sidebar-text">Labr库检索<span class="sidebar-desc">标准库补给</span></span>
     </button>
+    <button class="sidebar-item" data-tab="check" onclick="switchTab('check')">
+      <span class="sidebar-icon">🔔</span>
+      <span class="sidebar-text">标准查新<span class="sidebar-desc">变动提醒</span></span>
+    </button>
     <button class="sidebar-item" data-tab="batch" onclick="switchTab('batch')">
       <span class="sidebar-icon">📦</span>
       <span class="sidebar-text">批量下载<span class="sidebar-desc">批量解析和下载</span></span>
@@ -145,6 +149,30 @@
     </div>
     <div class="filter-bar" id="filterBar"></div>
     <div id="results"></div>
+  </div>
+
+  <!-- Page: Check（标准查新，独立菜单。镜像 public/index.html 同段） -->
+  <div class="page" id="page-check">
+    <div class="set-page-head">
+      <div class="set-page-head-main">
+        <span class="set-kicker">CHECK FOR UPDATES</span>
+        <h1>标准查新</h1>
+        <p>导入一批标准号，逐个比对 BW / BY / BZ 三源的当前状态。有变动的高亮展开，无变动的整组折叠。</p>
+      </div>
+      <div class="set-page-head-actions">
+        <button class="btn btn-sm btn-primary" id="checkRunBtn" onclick="doCheckImport()">导入并查新</button>
+      </div>
+    </div>
+    <div class="set-card">
+      <div class="set-card-head"><div class="set-card-title">导入清单</div></div>
+      <div class="set-card-body">
+        <textarea class="batch-textarea" id="checkInput" placeholder="粘贴标准号，每行一个&#10;例如：&#10;GB/T 1.1-2009&#10;GB 5009.9-2016&#10;YY/T 0287-2017"></textarea>
+        <div class="batch-actions">
+          <span class="batch-action-hint">查新会按三源逐个比对状态 / 年版 / 实施日期 / 被代替关系。</span>
+        </div>
+      </div>
+    </div>
+    <div id="checkResults"></div>
   </div>
 
   <!-- Page: Batch -->
@@ -688,6 +716,7 @@
 <script src="/legacy/app-announcements.js"></script>
 <script src="/legacy/app-qual.js"></script>
 <script src="/legacy/app-labr.js"></script>
+<script src="/legacy/app-check.js"></script>
 <script src="/legacy/app-theme.js"></script>
 
 </body>

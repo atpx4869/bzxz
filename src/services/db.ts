@@ -243,6 +243,34 @@ function migrate(db: Database.Database): void {
       url         TEXT NOT NULL,
       fetched_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- 标准查新（见 docs/CHECK-UPDATE-AND-STATS.md）
+    CREATE TABLE IF NOT EXISTS check_watchlists (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id         INTEGER NOT NULL REFERENCES users(id),
+      name            TEXT NOT NULL,
+      created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      last_checked_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS check_items (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      watchlist_id     INTEGER NOT NULL REFERENCES check_watchlists(id),
+      std_code         TEXT NOT NULL,
+      std_code_norm    TEXT,
+      base_status      TEXT,
+      base_title       TEXT,
+      base_impl_date   TEXT,
+      base_replaced_by TEXT,
+      base_snapshot_at TEXT,
+      last_status      TEXT,
+      last_title       TEXT,
+      last_impl_date   TEXT,
+      last_replaced_by TEXT,
+      last_checked_at  TEXT,
+      change_flags     TEXT,
+      source_used      TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_check_items_wl ON check_items(watchlist_id);
   `);
 
   // Schema migrations: add columns that may be missing on older DBs.

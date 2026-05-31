@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat(check): 标准查新 Phase 1 — 导入清单查三源 + 变动 diff（独立菜单）** — 全新功能，方案见 `docs/CHECK-UPDATE-AND-STATS.md`：
+  - **地基核查**：确认 `StandardSummary` 统一契约含 `status`/`implementDate`/`abolishedDate`，BZ 另有 `meta.replacedStd`（被代替）；GBW 也填 status/implementDate。四维度有数据源支撑
+  - **后端**：新增表 `check_watchlists`/`check_items`（含基线快照 + 最近查新结果 + change_flags）；`check-service.ts` 复用 `StandardResolver`（三源 + 并发限流）导入存基线 + `recheck` diff（状态按"是否废止"归一、实施日期、被代替、年版用 `extractBaseCode` 剥年比对）；`ResolvedItem` 补 `abolishedDate`/`replacedStd`；`check-routes.ts` 提供 watchlists CRUD + recheck（归属校验非本人 404），挂进 app.ts
+  - **前端**：侧栏「标准查新」独立菜单（与标准检索同级）+ `#page-check` + `app-check.js`：导入并查新、重新查新、有变动高亮展开（旧→新对照）/ 无变动整组折叠 / 无法核验单列 / 概览统计。`pages/check.css` 双文件镜像，纯 token；`TAB_LABELS.check`；两个 index.html + 脚本引用同步
+  - **本期范围**：导入即建清单并首查；单清单展示。清单持久化列表 / Excel 导入 / 查新进度条 / 定时自动查新是 Phase 2-3
 - **feat(stats): 使用统计增强 Phase 2 — 操作明细表 + 折叠 + 结果/失败展开** — 把 Phase 1 采集的数据展示出来：
   - 后端 `GET /api/stats/activity`：返回操作明细（含 ip/hostname/client/result/error + 用户名）；`collapse=5m` 时服务端把"同用户 + 同 event_type + 间隔≤5min"的连续记录折叠成组（带 successCount/failCount/children）；querySchema 加 `result`/`client` 过滤；`/summary` 增 `failCount`
   - 前端统计页加「操作明细」区：工具条（操作类型 / 结果筛选 chip）+ 明细表。折叠组显示 `操作 ×N` + 成功/失败计数、点击展开子项；含失败的行/组左侧标红条，失败子项展开显示 error（与运行日志同源）；客户端徽章（web 蓝 / 桌面 绿 / 手机 橙）；主机名 / IP 列（桌面端有值、web/手机端显示 "—"）。summary 多一张「失败」卡（danger 色）

@@ -11,6 +11,8 @@ export interface ResolvedItem {
   status?: string;
   publishDate?: string | null;
   implementDate?: string | null;
+  abolishedDate?: string | null;   // 废止日期（BZ 有，GBW 恒 null）
+  replacedStd?: string | null;     // 被代替关系（仅 BZ meta.replacedStd 可靠）
 }
 
 export interface UnmatchedItem {
@@ -179,6 +181,7 @@ export class StandardResolver {
 }
 
 function toResolved(input: string, r: StandardSummary, source: SourceName): ResolvedItem {
+  const replaced = r.meta && typeof r.meta.replacedStd === 'string' ? (r.meta.replacedStd as string) : null;
   return {
     input,
     standardId: r.id,
@@ -188,6 +191,8 @@ function toResolved(input: string, r: StandardSummary, source: SourceName): Reso
     status: r.status,
     publishDate: r.publishDate,
     implementDate: r.implementDate,
+    abolishedDate: r.abolishedDate ?? null,
+    replacedStd: replaced || null,
   };
 }
 

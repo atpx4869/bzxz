@@ -13,6 +13,7 @@ import { createAnnouncementRoutes } from './announcement-routes';
 import { createStatsRoutes } from './stats-routes';
 import { createQualificationRoutes } from './cnas-routes';
 import { createStandardsRoutes } from './standards-routes';
+import { createCheckRoutes } from './check-routes';
 import { createPreviewRoutes } from './preview-routes';
 import { createLabrRoutes } from './labr-routes';
 import { scanLibrary, startLibraryWatcher, parseLibraryFilename } from '../services/library-index';
@@ -233,6 +234,8 @@ export function createApp() {
   app.use(createPreviewRoutes(db, requireAuth, sourceRegistry));
   // labr：独立 sidebar，与 SourceRegistry 解耦；路径自带 /api/labr 前缀
   app.use(createLabrRoutes(requireAuth));
+  // 标准查新：路径自带 /api/check 前缀
+  app.use(createCheckRoutes(db, sourceRegistry, requireAuth));
 
   app.get('/api/health', (_req, res) => {
     const version = process.env.npm_package_version || process.env.BZXZ_APP_VERSION || '';

@@ -1008,6 +1008,47 @@ body.sidebar-collapsed .user-dropdown { left: calc(var(--sidebar-collapsed-w) + 
   .sa-cells .sa-user, .sa-cells > span:nth-child(3), .sa-cells > span:nth-child(4), .sa-cells > span:nth-child(5), .sa-obj { display: none; }
 }
 
+/* ── 标准查新页（Phase 1）—— 镜像 web/src/styles/pages/check.css ── */
+.check-empty { padding: 40px; text-align: center; color: var(--text-3); font-size: 13px; }
+.check-toolbar { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+.check-group-title { font: 700 11px 'DM Mono', monospace; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin: 18px 0 8px; }
+.check-item { border: 1px solid var(--border); border-left: 3px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); margin-bottom: 8px; }
+.check-item.bad { border-left-color: var(--danger); }
+.check-item.warn { border-left-color: var(--warning); }
+.check-item.info { border-left-color: var(--accent); }
+.check-item.nf { border-left-color: var(--text-3); }
+.check-item-head { display: flex; align-items: center; gap: 10px; padding: 11px 14px; cursor: pointer; }
+.check-item.nf .check-item-head { cursor: default; }
+.check-code { font: 600 13px 'DM Mono', monospace; color: var(--accent); min-width: 150px; }
+.check-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 13px; }
+.check-title.muted, .muted { color: var(--text-3); }
+.check-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.check-badge { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.check-badge.bad { color: var(--danger); }
+.check-badge.warn { color: var(--warning); }
+.check-badge.info { color: var(--accent); }
+.check-caret { color: var(--text-3); font-size: 11px; transition: transform 0.12s var(--ease-out); }
+.check-item.open .check-caret { transform: rotate(90deg); }
+.check-detail { display: none; padding: 0 14px 14px; }
+.check-item.open .check-detail { display: block; }
+.check-diff { display: grid; grid-template-columns: 110px 1fr; gap: 6px 14px; padding: 12px 14px; background: var(--surface-h); border-radius: var(--radius-sm); font-size: 13px; }
+.check-diff dt { color: var(--text-3); }
+.check-diff dd { color: var(--text); }
+.diff-old { color: var(--text-3); text-decoration: line-through; margin-right: 8px; }
+.diff-new { color: var(--text); font-weight: 600; }
+.badge-ok { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--success); color: var(--success); white-space: nowrap; }
+.check-nochange { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.check-nc-head { display: flex; align-items: center; gap: 8px; padding: 11px 14px; cursor: pointer; color: var(--text-2); font-size: 13px; }
+.check-nc-body { display: none; padding: 0 14px 12px; }
+.check-nochange.open .check-nc-body { display: block; }
+.check-nochange.open .check-caret { transform: rotate(90deg); }
+.check-nc-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--border); font-size: 13px; }
+.check-nc-row .check-code { min-width: 150px; }
+@media (max-width: 640px) {
+  .check-code { min-width: 0; }
+  .check-item-head, .check-nc-row { flex-wrap: wrap; }
+}
+
 /* Users table */
 .users-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .users-table th { text-align: left; padding: 10px 12px; color: var(--text-3); font-weight: 500; border-bottom: 1px solid rgba(36, 41, 48, 0.4); border-bottom: 1px solid oklch(28% 0.014 255 / 0.4); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }

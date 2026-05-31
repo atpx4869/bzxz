@@ -67,6 +67,7 @@
 @import './pages/announcement.css';
 @import './pages/admin.css';
 @import './pages/labr.css';
+@import './pages/check.css';
 @import './pages/local-library.css';
 @import './pages/search-stage.css';
 /* settings.css —— 设置面板重设计组件系统（纯 token，三主题自适配，无需 glass override）。
