@@ -207,8 +207,10 @@ ALTER TABLE usage_events ADD COLUMN error     TEXT;   -- 失败原因 / 日志�
   - 各调用点透传 ctx + result：search / batch_resolve / download(×4) / complete / qual_search 的
     **成功路径标 `result:'success'`，catch 分支补记 `result:'fail'`+error**（以前失败操作完全没进统计）。
     multi-download 全源失败时记一条 fail，error 汇总各源原因。新增 `qual_search` 事件类型。
-  - **待办（Phase 1 收尾）**：① 桌面端 Electron 主进程给请求注入 `X-Client-Host`(os.hostname()) +
-    `X-Client-Type: desktop`（否则桌面端 hostname/client 仍靠 UA 粗判）；② `open` 事件（启动/切页）。
+  - ✅ **桌面端头注入已落地**：`electron/main.ts` 用 `session.defaultSession.webRequest.onBeforeSendHeaders`
+    对 `localhost`/`127.0.0.1` 后端请求注入 `X-Client-Host`(os.hostname()) + `X-Client-Type: desktop`
+    （只对本地后端、不污染外部源站请求）。桌面端 hostname 自此有真值、client 准确判为 desktop。
+  - **待办**：`open` 事件（启动 / 切页埋点，前端做，归 Phase 2 一起）。
 - **Phase 2**：统计页重构——操作明细表（含结果列 + 失败展开 error）+ 折叠（组内成功/失败计数）+
   客户端/结果徽章 + 筛选。`/api/stats/activity`。
 - **Phase 3**：导出明细 csv（含结果/error 列）；失败率趋势图；异常访问提示（如非常规 IP）。

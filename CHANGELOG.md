@@ -8,7 +8,8 @@
   - `usage-tracker.ts`：`trackEvent` 加第 7 参 `ctx`；新增 `extractUsageCtx(req)` —— hostname 取 `X-Client-Host` 头（仅桌面端能给）、client 取 `X-Client-Type` 头或 UA 粗判（electron→desktop / 移动 UA→mobile / 其余→web）、ip 取 `req.ip` 并剥 `::ffff:`
   - 各 trackEvent 调用点透传 ctx + result：search / batch_resolve / download(×4) / complete / qual_search 成功路径标 `result:'success'`，**catch 分支补记 `result:'fail'`+error**（关键：以前失败操作根本不进统计，这次补齐）；multi-download 全源失败记一条 fail 汇总各源原因
   - 新增 `qual_search` 事件类型（资质查询页此前未进统计）
-  - **待办（Phase 1 收尾）**：桌面端 Electron 主进程注入 `X-Client-Host`/`X-Client-Type` 头；`open` 事件。统计页 UI（明细表/折叠/结果列）是 Phase 2
+  - **桌面端头注入**：`electron/main.ts` 用 `onBeforeSendHeaders` 给本地后端请求（localhost/127.0.0.1）注入 `X-Client-Host`(os.hostname()) + `X-Client-Type: desktop`，只对本地后端、不污染外部源站。桌面端主机名自此有真值、客户端类型准确判为 desktop
+  - **待办**：`open` 事件（启动/切页埋点）；统计页 UI（明细表/折叠/结果列）是 Phase 2
 - **feat(logs): 运行日志系统 Phase 3 — 详情展开 + 后端日志按天落文件** —
   - **详情展开**：多行（堆栈）或长正文的日志行可点击展开完整内容（`.log-full` 等宽 pre 块、可滚动），解决后端 error 堆栈被单行 `nowrap` 截断看不全的问题。`logExpanded` 记展开态，行点击事件委托绑定一次（前端 id 与后端 `be_n` id 统一按字符串比对）。`app-detail-utils.js` + `log-panel.css`/`public` 镜像
   - **后端按天落文件**：`log-buffer.ts` 在内存环形 buffer 之外，按天追加 `<userData>/bzxz-logs/app-YYYYMMDD.log`（tab 分隔 ts/level/module/message），保留最近 14 天、超期自动清理。全程 best-effort、任何 I/O 失败静默不影响 console/业务；目录取 `BZXZ_USER_DATA_DIR`（与 db-backup/library-paths 同约定），非 Electron（开发/测试）无该变量时不落文件、避免往 cwd 乱写

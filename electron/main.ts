@@ -18,7 +18,7 @@ import path from 'node:path';
 import net from 'node:net';
 import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, cpSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
-import { networkInterfaces } from 'node:os';
+import { networkInterfaces, hostname as osHostname } from 'node:os';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import express, { type Request, type Response, type NextFunction } from 'express';
@@ -596,6 +596,21 @@ app.whenReady().then(async () => {
 
   // Force Chromium to bypass system proxy
   session.defaultSession.setProxy({ mode: 'direct' });
+
+  // 使用统计：给发往本地后端的请求注入客户端上下文头，让后端 extractUsageCtx 能拿到
+  //   X-Client-Host = 本机主机名（浏览器拿不到，只有桌面端能给）
+  //   X-Client-Type = desktop（区分 web / 手机端）
+  // 仅对 localhost 后端注入，不污染对外部源站（BW/BY/BZ/labr）的请求。
+  const clientHost = (() => { try { return osHostname(); } catch { return ''; } })();
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ['http://localhost:*/*', 'http://127.0.0.1:*/*'] },
+    (details, callback) => {
+      const headers = { ...details.requestHeaders };
+      if (clientHost) headers['X-Client-Host'] = clientHost;
+      headers['X-Client-Type'] = 'desktop';
+      callback({ requestHeaders: headers });
+    },
+  );
 
   // Download interception — auto-save to configured path, no dialog
   const settings = loadSettings();
