@@ -17,3 +17,7 @@ eng.traineddata
 *.bak
 .env.local
 out/
+
+# 运行时数据（不入库）
+data/.text-availability-cache.json
+data/backups/
