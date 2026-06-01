@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix(cma-diff): 导出文件名加时分，避免同名冲突** — 原文件名只到日期 `…-{YYYYMMDD}.xlsx`，
+  同一天多次导出同机构文件名完全相同，下载到同目录时第二次会覆盖/加(1)失败。改为带时分
+  `…-{YYYYMMDDHHmm}.xlsx`（如 `CMA一单一库比对-湖北省产品质量监督检验研究院-202606012326.xlsx`）。
 - **refactor(cma-diff): 删除「汇总」卡** — 该卡（订阅机构 × 5 档统计）实用价值低、与机构维度比对信息重复，整块移除：
   前端 `renderSummary` + `#capLibSummaryCard` HTML、后端 `GET /api/cma-diff/summary` 路由 + `summary()` 方法 +
   `DiffSummary` 接口、专用 CSS（`cap-lib-summary-head`/`stat-grid`/`stat-tile`/`stat-num`/`stat-lab`/`warn`，双文件镜像）全清。

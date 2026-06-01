@@ -276,11 +276,12 @@ function autoColWidths(aoa: Array<Array<string | number>>): Array<{ wch: number 
   return widths.map(w => ({ wch: Math.min(50, Math.max(8, w)) }));
 }
 
-/** 文件名：单机构 `CMA一单一库比对-{机构名}-{YYYYMMDD}.xlsx` / 全部 `…-全部-…`。机构名 sanitize。 */
+/** 文件名：单机构 `CMA一单一库比对-{机构名}-{YYYYMMDDHHmm}.xlsx` / 全部 `…-全部-…`。机构名 sanitize。
+ *  带时分（精确到分钟）避免同一天多次导出同机构文件名冲突（覆盖/加(1)失败）。 */
 function buildExportFilename(filter: ExportFilter, rows: ExportRow[]): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
-  const ymd = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+  const ts = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}`;
   const certs = (filter.certNumbers || []).filter(Boolean);
   let scope: string;
   if (certs.length === 0) {
@@ -290,7 +291,7 @@ function buildExportFilename(filter: ExportFilter, rows: ExportRow[]): string {
   } else {
     scope = `${certs.length}家机构`;
   }
-  return `CMA一单一库比对-${scope}-${ymd}.xlsx`;
+  return `CMA一单一库比对-${scope}-${ts}.xlsx`;
 }
 
 /** 去掉 Windows / 通用文件名非法字符 \ / : * ? " < > | 及控制符。 */
