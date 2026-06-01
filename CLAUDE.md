@@ -139,10 +139,11 @@ Chrome ≤109 上整条 declaration 解析失败，主题崩。
 ### 同步契约
 
 - 远端 `https://cma.caqit.org.cn/cma-admin/system/standardData/list` **只接 11 个顶层 `domain` 名**（实测 `domainId` / 子领域名都返回 0 行），按 11 个领域分桶同步。领域常量在 [`src/shared/cap-lib-domains.ts`](./src/shared/cap-lib-domains.ts) **硬编码**且与 `src/services/db.ts` 的 `CAP_LIB_DOMAIN_INIT` 数组**手动保持一致**（11 个名相同顺序无关）。新增/删除领域需两处同改
-- 单领域 `pageSize=60000` 一次拉全（实测最大领域产品质量检验 ~41k 行 41s）；不分页、不带任何 header（无鉴权）
+- **分页拉取**：单领域按 `pageSize=2000` **逐页拉**（`pageNum` 递增到拉满 `total` 或末页），不带任何 header（无鉴权）。**Why 不再一次拉 60000**：远端按行数线性变慢（~277 行/秒），产品质量检验 41k 行一次拉全要 5-7 分钟、超任何合理超时 → 卡 0%/失败（已踩坑）。分页后单页 ~36s（远低于 90s 单页超时）+ 能边拉边报「拉取中 X/total」进度。RuoYi `pageNum/pageSize` 实测生效。改 `REMOTE_PAGE_SIZE` 时注意单页耗时随行数线性涨
+- **同步串行化（防假死）**：所有 `runSync` 串到模块级 `syncChain`（并发 1），入库按 2000 行分块事务、批次间 `setImmediate` 让出事件循环。**Why**：better-sqlite3 事务同步阻塞主线程，旧版「全部更新」一次性启动全部领域 → 多个大事务连环锁死事件循环 → 进度轮询排队 → 页面假死（已踩坑）
 - **入库三层归一化必须落齐**：`cleanStdCode → extractFullCode (std_code_norm) → extractBaseCode (std_code_base)`，沿用现有契约。漏写任何一层徽章批量查询会漏命中
 - **hash diff**：每行 `sha1(domain|method|stdCode|remark|libStatus|rawStatus)`，与现存 `row_hash` 相同时只 `UPDATE last_seen_at`、不写主字段（索引压力 ↓）。`row_hash` 列的字段集合变化时（如新增 raw 字段）必须升级 hash 算法 + 强制全量重 hash —— 否则 diff 永远算"未变"
-- **soft delete**：远端本次没出现的行**不立即 DELETE**，仅 `last_seen_at` 不更新。`POST /api/cma-diff/cleanup` admin 手动按钮才真删（默认 30 天阈值）。**为什么**：远端 41s 长请求容易超时返回少 1k 行 / RuoYi 分页抽风局部丢数据，硬删会让订阅机构资质徽章瞬间全变 ⛔，30 天窗口够覆盖所有临时丢失再决策
+- **soft delete**：远端本次没出现的行**不立即 DELETE**，仅 `last_seen_at` 不更新。`POST /api/cma-diff/cleanup` admin 手动按钮才真删（默认 30 天阈值）。**为什么**：远端慢/单页超时/RuoYi 分页抽风可能局部丢数据，硬删会让订阅机构资质徽章瞬间全变 ⛔，30 天窗口够覆盖所有临时丢失再决策
 
 ### 5 档比对状态
 

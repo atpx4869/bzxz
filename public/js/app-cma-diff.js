@@ -213,7 +213,7 @@
               const pct = p.total ? Math.min(100, Math.round((p.current || 0) / p.total * 100)) : 0;
               if (progEl) {
                 progEl.innerHTML = '<div class="cap-lib-prog-bar"><div style="width:' + pct + '%"></div></div>'
-                  + '<span class="cap-lib-prog-text">' + escHtml(phaseLabel(p.phase)) + ' ' + pct + '%</span>';
+                  + '<span class="cap-lib-prog-text">' + escHtml(progressText(p, pct)) + '</span>';
               }
               if (p.phase === 'done') {
                 stop();
@@ -321,7 +321,7 @@
         const pct = p.total ? Math.min(100, Math.round((p.current || 0) / p.total * 100)) : 0;
         if (progEl) {
           progEl.innerHTML = '<div class="cap-lib-prog-bar"><div style="width:' + pct + '%"></div></div>'
-            + '<span class="cap-lib-prog-text">' + escHtml(phaseLabel(p.phase)) + ' ' + pct + '%</span>';
+            + '<span class="cap-lib-prog-text">' + escHtml(progressText(p, pct)) + '</span>';
         }
         if (p.phase === 'done') {
           showToast('「' + domain + '」同步完成 · 新增 ' + (p.stats?.added || 0) + ' / 变更 ' + (p.stats?.changed || 0));
@@ -357,6 +357,20 @@
       case 'error': return '失败';
       default: return phase || '';
     }
+  }
+
+  // 进度文案：拉取/入库阶段尽量显「X/Y 行 + 百分比」；拉取首页未拿到 total 时给明确的等待提示，
+  // 不再死显「拉取中 0%」让人误判卡死（产品质量检验 41k 行、远端慢，整个拉取要 10+ 分钟）。
+  function progressText(p, pct) {
+    const label = phaseLabel(p.phase);
+    if (p.phase === 'fetching') {
+      if (p.total > 0) return '拉取中 ' + (p.current || 0).toLocaleString() + '/' + p.total.toLocaleString() + ' (' + pct + '%)';
+      return '拉取中…（数据较大，首页约需半分钟）';
+    }
+    if (p.phase === 'upserting' && p.total > 0) {
+      return '入库中 ' + (p.current || 0).toLocaleString() + '/' + p.total.toLocaleString() + ' (' + pct + '%)';
+    }
+    return label + (p.total ? ' ' + pct + '%' : '');
   }
 
   // ── 摘要卡 ────────────────────────────────────────────────────────

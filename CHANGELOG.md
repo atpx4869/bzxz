@@ -3,6 +3,17 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix(cma-diff): 同步改分页拉取 + 实时进度（修「产品质量检验」拉取卡 0%）** —
+  - **根因**：远端「产品质量检验」领域已从 README 记录的 41s **劣化到一次拉 41k 行需 5-7 分钟**
+    （实测 curl 400s 截断仍未拿全，远端按 ~277 行/秒线性传输），超过后端 180s 超时 → 拉取失败；
+    且 `fetching` 阶段 `total=0`，前端 `pct=0` → **死显「拉取中 0%」长达数分钟** → 用户误判假死。
+  - **修复**：`runSync` 远端拉取从「一次 `pageSize=60000` 拉全」改为 **`pageSize=2000` 逐页拉**
+    （`pageNum` 递增到拉满 `total` 或末页，`REMOTE_MAX_PAGES=100` 防死循环）。单页 ~36s 远低于
+    新单页超时 90s；每页 `setProgress(fetching, current=已拉行数, total)` 实时报。RuoYi 分页实测有效。
+  - **进度文案**：前端新增 `progressText`，fetching 显示「拉取中 X/total (pct%)」，首页未拿到
+    total 时显「拉取中…（数据较大，首页约需半分钟）」，不再死显 0%；upserting 同样显行数进度。
+  - 文件：`src/services/cap-lib-service.ts`（分页循环 + 常量 `REMOTE_PAGE_SIZE=2000`/`REMOTE_TIMEOUT_MS=90s`/`REMOTE_MAX_PAGES`）/
+    `public/js/app-cma-diff.js`（`progressText` + 两处轮询渲染）。文档同步 README / ARCHITECTURE / CLAUDE.md 同步契约。
 - **fix(cma-diff): 修「全部更新」假死 + diffByLab 去重提速 + 黑名单 / 手动匹配 / 重试** —
   - **假死根因**：「全部更新」→ `/sync-all` 一次性 `startSync` 全部订阅领域，每个 `runSync`
     的入库是 **better-sqlite3 同步事务**（41k 行的产品质量检验单事务就锁主线程数秒~数十秒），

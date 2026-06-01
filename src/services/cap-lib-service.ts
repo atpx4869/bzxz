@@ -7,8 +7,10 @@
  * 3) **batchStatus**：给前端徽章用的轻量批量查询（搜索/资质查询页注入）
  *
  * 远端接口（实测无鉴权，详见 README 数据源章节）：
- *   GET https://cma.caqit.org.cn/cma-admin/system/standardData/list?pageNum=1&pageSize=60000&domain=<name>
- * 返回 RuoYi 标准 `{total, rows[], code, msg}`，单次最大 50000+ 行不分页，41s 一次拉全。
+ *   GET https://cma.caqit.org.cn/cma-admin/system/standardData/list?pageNum=N&pageSize=2000&domain=<name>
+ * 返回 RuoYi 标准 `{total, rows[], code, msg}`。**分页拉取**：远端按行数线性变慢
+ * （~277 行/秒），产品质量检验 41k 行一次拉全要 5-7 分钟会超时，故按 pageSize=2000 逐页拉、
+ * 边拉边报进度（单页 ~36s，远低于超时）。RuoYi 标准分页实测有效（pageNum/pageSize 生效）。
  *
  * 与 cma_qualifications 的关系：两表正交。本表是"政策范围内的合法标准号清单"，
  * cma_qualifications 是"机构持有的资质行"。diffByLab 按 std_code_norm 等值 JOIN，
@@ -22,10 +24,16 @@ import { CAP_LIB_DOMAIN_NAMES, isValidCapLibDomain } from '../shared/cap-lib-dom
 import { setSetting } from './db';
 
 const REMOTE_BASE = 'https://cma.caqit.org.cn/cma-admin/system/standardData/list';
-/** 单次拉取的 pageSize 上限。实测远端不分页，60000 足以容纳最大领域（产品质量检验 ~41k）。 */
-const REMOTE_PAGE_SIZE = 60000;
-/** 远端响应超时；最大领域实测 41s，留 3 倍余量。 */
-const REMOTE_TIMEOUT_MS = 180_000;
+/**
+ * 分页拉取的每页行数。远端按行数线性变慢（实测 ~277 行/秒）：单页 2000 行 ~36s，
+ * 远低于单页超时，且能边拉边报进度。不再一次拉 60000（产品质量检验 41k 行单请求要 5-7 分钟、
+ * 超过任何合理超时 → 整批失败 / 卡 0%）。
+ */
+const REMOTE_PAGE_SIZE = 2000;
+/** 单页响应超时。单页 2000 行实测 ~36s，留余量到 90s（覆盖远端抖动）。 */
+const REMOTE_TIMEOUT_MS = 90_000;
+/** 安全上限：最多拉多少页，防远端 total 异常导致死循环。41285/2000≈21 页，留到 100 页。 */
+const REMOTE_MAX_PAGES = 100;
 
 // ─── 类型定义 ─────────────────────────────────────────────────────────────
 
@@ -227,20 +235,36 @@ export class CapLibService {
     const startedAt = Date.now();
     setProgress(jobId, { phase: 'fetching', domain, current: 0, total: 0 });
 
-    // 1) 远端拉
-    const url = `${REMOTE_BASE}?pageNum=1&pageSize=${REMOTE_PAGE_SIZE}&domain=${encodeURIComponent(domain)}`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), REMOTE_TIMEOUT_MS);
-    let resp: Response;
-    try {
-      resp = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal });
-    } finally {
-      clearTimeout(timer);
+    // 1) 远端分页拉全。远端按行数线性变慢，单次拉 41k 行要 5-7 分钟会超时；改按页拉，
+    //    每页独立短请求 + 实时报「拉取中 X/total」进度。第一页拿到 total 后算总页数。
+    const rows: RemoteRow[] = [];
+    let remoteTotal = 0;
+    for (let pageNum = 1; pageNum <= REMOTE_MAX_PAGES; pageNum++) {
+      const url = `${REMOTE_BASE}?pageNum=${pageNum}&pageSize=${REMOTE_PAGE_SIZE}&domain=${encodeURIComponent(domain)}`;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), REMOTE_TIMEOUT_MS);
+      let resp: Response;
+      try {
+        resp = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal });
+      } catch (e) {
+        // 单页失败（超时/网络）：带页号抛出，便于排查；不静默吞掉
+        throw new Error(`远端第 ${pageNum} 页请求失败：${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        clearTimeout(timer);
+      }
+      if (!resp.ok) throw new Error(`远端第 ${pageNum} 页 HTTP ${resp.status}`);
+      const data = await resp.json() as RemoteListResp;
+      if (data.code !== 200) throw new Error(`远端返回 code=${data.code} msg=${data.msg}`);
+      const pageRows = Array.isArray(data.rows) ? data.rows : [];
+      if (pageNum === 1) remoteTotal = Number(data.total) || pageRows.length;
+      rows.push(...pageRows);
+      // 实时报拉取进度（current=已拉行数，total=远端总数）
+      setProgress(jobId, { phase: 'fetching', domain, current: rows.length, total: remoteTotal });
+      // 拉满或本页不足一页（最后一页）→ 结束
+      if (rows.length >= remoteTotal || pageRows.length < REMOTE_PAGE_SIZE) break;
+      // 让出事件循环，别把进度轮询/其它请求挤在两页之间
+      await new Promise<void>(resolve => setImmediate(resolve));
     }
-    if (!resp.ok) throw new Error(`远端 HTTP ${resp.status}`);
-    const data = await resp.json() as RemoteListResp;
-    if (data.code !== 200) throw new Error(`远端返回 code=${data.code} msg=${data.msg}`);
-    const rows = Array.isArray(data.rows) ? data.rows : [];
     const total = rows.length;
 
     // 2) 解析 + 入库

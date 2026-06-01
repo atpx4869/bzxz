@@ -370,7 +370,7 @@ standard_files
 
 ### 数据源 & 表
 
-- 远端：`https://cma.caqit.org.cn/cma-admin/system/standardData/list`，无鉴权 / 单接口拉 5w+ 行 / 按 11 个顶层 `domain` 名筛选
+- 远端：`https://cma.caqit.org.cn/cma-admin/system/standardData/list`，无鉴权 / 按 11 个顶层 `domain` 名筛选 / **分页拉取**（`pageSize=2000` 逐页，远端按行数线性变慢，一次拉 41k 行会超时）
 - 本地 `cma_capability_lib`：`source_id PK` + 11 列业务字段 + `row_hash / last_seen_at / fetched_at`；4 个索引（norm / base / domain / status）
 - 元数据 `cma_capability_lib_meta`：每领域 `subscribed / last_synced_at / remote_total / local_total / last_sync_stats(JSON)`，11 行硬初始化（与 `src/shared/cap-lib-domains.ts` 常量一致）
 - 黑名单 `cma_diff_blacklist`（`std_code / std_code_norm / reason`）：屏蔽非标准号脏内容，按 norm 命中不显示不匹配
@@ -408,6 +408,11 @@ public/js/
 最多一个领域入库事务在跑；入库按 **2000 行分块事务**，批次间 `await setImmediate` 让出事件循环。
 Why：better-sqlite3 事务同步阻塞主线程，旧版「全部更新」一次性启动全部领域 → 多个 41k 行大事务
 连环锁死事件循环 → 进度轮询/所有请求排队 → 页面假死。串行队列 + 分块让出根治。
+
+**远端分页拉取（防超时/卡 0%）**：`runSync` 按 `pageSize=2000` 逐页拉（`pageNum` 递增到拉满
+`total` 或末页），每页独立短请求（~36s，远低于 90s 单页超时）+ 实时 `setProgress(fetching, current=已拉行数, total)`。
+Why：远端「产品质量检验」已从 41s 劣化到一次拉 41k 行需 5-7 分钟（超 180s 旧超时）→ 整批失败 /
+前端死显「拉取中 0%」误判假死。前端 `progressText` 把 fetching 显示成「拉取中 X/total (pct%)」。
 
 ### 比对算法（5 档，按标准号去重）
 
