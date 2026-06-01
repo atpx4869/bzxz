@@ -24,6 +24,7 @@ function preNormalize(code: string): string {
     .replace(/[‐-―－]/g, '-') // U+2010..2015 (figure/en/em/horizontal bar) + U+FF0D (全角连字符) → '-'
     .replace(/[／]/g, '/')            // 全角斜杠 → '/'
     .replace(/[：]/g, ':')            // 全角冒号 → ':'（ISO 标准用冒号当年份分隔）
+    .replace(/[？?]/g, '')            // 全角/半角问号 → 删（抓取/OCR 噪声，非合法标准号字符，如 '？QB/T？4566-2025'）
     .replace(/[:](\d{4}\b)/, '-$1')       // ISO 'ISO 4287:1997' → 'ISO 4287-1997' 让后续年份剥离逻辑统一
     .replace(/\s+/g, ' ')                  // 折叠连续空白
     .trim()
@@ -41,9 +42,11 @@ function preNormalize(code: string): string {
  */
 export function extractFullCode(code: string): string {
   const pre = preNormalize(code);
-  // 拆出年份后缀（含可选的 'A'/'B'/'R' 修订标记，如 'GB/T 3836-2010A'）；
-  // 不要求一定有年份，老式标准号如 'JB 4730' 也接受
-  const yearMatch = pre.match(/\s*-\s*(\d{4}[A-Z]?)\s*$/);
+  // 抓年份后缀（含可选 'A'/'B'/'R' 修订标记，如 'GB/T 3836-2010A'）。
+  // 关键：年份不要求在末尾 —— 年份是标准号的天然终止符，**年份之后挂的任何内容都是引用修饰**
+  // （条款 '第8.3.1.3条' / '4.2条'、附录 '附录A'、章节、备注…）应整体丢弃。这样无需为每种
+  // 脏后缀写专用正则。匹配第一个 '-YYYY'，截断其后全部。不要求一定有年份（老式号如 'JB 4730' 保留）。
+  const yearMatch = pre.match(/-\s*(\d{4}[A-Z]?)/);
   const yearSuffix = yearMatch ? `-${yearMatch[1]}` : '';
   const withoutYear = yearMatch ? pre.slice(0, yearMatch.index!) : pre;
   // 剥 type designator：'GB/T 3325' / 'GB/T3325'（无空格）/ 'GBZ/T 188' 都归到 prefix + digits

@@ -394,6 +394,7 @@ function migrate(db: Database.Database): void {
   `);
   backfillNormalizedStdCodes(db);
   fixupDirtyStdCodes(db);
+  renormalizeOnAlgoBump(db);
 
   cleanupLegacyCmaData(db);
 
@@ -533,6 +534,42 @@ function fixupDirtyStdCodes(db: Database.Database): void {
     }
     console.log(`[db] cleaned ${dirty.length} ${table} rows with whitespace around year suffix (e.g. 'GB/T 3325 -2024' → 'GB/T 3325-2024')`);
   }
+}
+
+/**
+ * 归一化算法升级后，对已有行强制重算 std_code_norm / std_code_base（版本号 gate，幂等）。
+ *
+ * Why：backfillNormalizedStdCodes 只填空行，已落库的旧 norm（用旧算法算的）不会被刷新。
+ * 改 extractFullCode / preNormalize（如剥年份后条款/附录后缀、剥全角问号）后，旧行的 norm
+ * 仍是脏值 → 徽章/diff 漏命中。这里按 STD_CODE_ALGO_VERSION 触发一次性全量重算：版本不变不跑，
+ * 版本 bump 后跑一次并写回新版本号。覆盖 cnas/cma 资质 + cma_capability_lib（一单一库）三张表。
+ *
+ * 改 std-code 归一化逻辑后必须 +1 此版本号（CLAUDE.md 归一化契约：改算法须触发回填）。
+ */
+const STD_CODE_ALGO_VERSION = '2';
+function renormalizeOnAlgoBump(db: Database.Database): void {
+  if (getSetting(db, 'std_code_algo_version', '1') === STD_CODE_ALGO_VERSION) return;
+
+  const tables: Array<{ name: string; idCol: string; hasTable: boolean }> = [
+    { name: 'cnas_qualifications', idCol: 'id', hasTable: true },
+    { name: 'cma_qualifications', idCol: 'id', hasTable: true },
+    { name: 'cma_capability_lib', idCol: 'source_id', hasTable: !!db.prepare(
+      "SELECT 1 FROM sqlite_master WHERE type='table' AND name='cma_capability_lib'").get() },
+  ];
+  for (const t of tables) {
+    if (!t.hasTable) continue;
+    const rows = db.prepare(`SELECT ${t.idCol} AS id, std_code FROM ${t.name} WHERE COALESCE(std_code, '') <> ''`)
+      .all() as Array<{ id: number; std_code: string }>;
+    if (!rows.length) continue;
+    const update = db.prepare(`UPDATE ${t.name} SET std_code_norm = ?, std_code_base = ? WHERE ${t.idCol} = ?`);
+    const txn = db.transaction((chunk: typeof rows) => {
+      for (const r of chunk) update.run(extractFullCode(r.std_code), extractBaseCode(r.std_code), r.id);
+    });
+    const CHUNK = 2000;
+    for (let i = 0; i < rows.length; i += CHUNK) txn(rows.slice(i, i + CHUNK));
+    console.log(`[db] re-normalized ${rows.length} ${t.name} rows (algo v${STD_CODE_ALGO_VERSION})`);
+  }
+  setSetting(db, 'std_code_algo_version', STD_CODE_ALGO_VERSION);
 }
 
 function cleanupLegacyCmaData(db: Database.Database): void {

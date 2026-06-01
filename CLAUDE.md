@@ -110,7 +110,8 @@ Chrome ≤109 上整条 declaration 解析失败，主题崩。
 
 - 新增 INSERT 资质数据的位置：先 `import { cleanStdCode, extractFullCode, extractBaseCode } from '../shared/std-code'`，对原始 stdCode 先 `cleanStdCode`，再把清洗后的值传给 `extractFullCode` / `extractBaseCode`
 - 新增数据源（除 CNAS/CMA 外）想沾资质徽章 → schema 也加这两列 + 索引，沿用同样的三层防御
-- 改 `cleanStdCode` / `extractFullCode` / `extractBaseCode` 逻辑（覆盖新的脏数据变体）后必须删 DB 强制下次启动回填 —— 或者临时跑 `UPDATE cnas_qualifications SET std_code_norm=''` 触发 backfill + fixup。新加 case 的单测放 `qualification-service.test.ts` 防回归
+- 改 `cleanStdCode` / `extractFullCode` / `extractBaseCode` 逻辑（覆盖新的脏数据变体）后**必须 +1 `db.ts` 的 `STD_CODE_ALGO_VERSION` 常量** —— 启动时 `renormalizeOnAlgoBump` 会按版本号 gate 对 cnas/cma 资质 + cma_capability_lib 三张表已有行**全量重算 std_code_norm/std_code_base**（幂等，版本不变不跑）。不再需要手动删 DB / 跑 `UPDATE ... SET std_code_norm=''`。新加 case 的单测放 `qualification-service.test.ts` 防回归
+- **年份是天然终止符**：`extractFullCode` 匹配第一个 `-YYYY` 后**截断其后全部内容**——年份后挂的条款（`第8.3.1.3条`/`4.2条`）、附录（`附录A`）、章节等引用修饰一律丢弃，让同一标准的不同条款归一为同号（去重聚合前提）。新脏后缀形态无需再加专用正则。全角/半角问号 `？?` 在 `preNormalize` 当噪声删除
 
 ## 功能权限（tab）契约（**强制**）
 

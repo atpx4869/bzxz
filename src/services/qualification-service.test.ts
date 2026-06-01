@@ -87,6 +87,22 @@ describe('extractFullCode', () => {
   it('ISO colon variant becomes dash variant for storage', () => {
     expect(extractFullCode('ISO 4287:1997')).toBe('ISO4287-1997');
   });
+
+  it('strips clause/appendix/section suffixes after the year (year is the terminator)', () => {
+    // 年份是天然终止符，年份后挂的条款/附录/章节都是引用修饰，应整体丢弃 → 同标准的不同条款归同号
+    expect(extractFullCode('GB/T 24977-2024第8.3.1.3条')).toBe('GB24977-2024');
+    expect(extractFullCode('GB/T 24977-2024第8.6.3条')).toBe('GB24977-2024');
+    expect(extractFullCode('GB 26753-2011 4.2条')).toBe('GB26753-2011');
+    expect(extractFullCode('GB 20950-2020 附录A')).toBe('GB20950-2020');
+    expect(extractFullCode('GB 20950-2020 附录B')).toBe('GB20950-2020');
+    // 同一标准的多条款必须归一为同一个 full code（去重聚合的前提）
+    expect(extractFullCode('GB 26753-2011 4.2条')).toBe(extractFullCode('GB 26753-2011 4.9条'));
+  });
+
+  it('strips full/half-width question mark noise (OCR/scrape garbage)', () => {
+    expect(extractFullCode('？QB/T？4566-2025')).toBe('QB4566-2025');
+    expect(extractFullCode('？QB/T？4566-2025')).toBe(extractFullCode('QB/T 4566-2025'));
+  });
 });
 
 describe('cleanStdCode', () => {
