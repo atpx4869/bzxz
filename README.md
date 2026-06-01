@@ -128,6 +128,8 @@ cp .env.example .env.local
 
 数据源 `cma.caqit.org.cn` 实测无鉴权、单次拉 50000+ 行不分页。同步策略：按 11 个领域分桶手动同步（产品质量检验占库 80%、独立刷）。同步用 `row_hash` 比对，未变行只刷 `last_seen_at` 不写主字段，索引干净。**soft delete 防误删**：远端某次没返回的行不立删，30 天后由 admin 手动「清理 30 天未见」才真删 —— 防远端临时抽风把订阅机构资质徽章瞬间全变红。
 
+**页面交互**：领域订阅卡整卡可折叠（默认收起 + 标题栏摘要「已订阅 N 个 · 最近同步 时间」，记 localStorage），展开后两列布局并提供「更新勾选 / 全部更新」批量同步（admin，更新勾选串行化避免并发轰上游）。机构维度比对按 5 档状态二级折叠 + 每档 50 条/页分页，进机构自动展开第一个非空的最严重档。**三级导出**：状态档头「导出」(单机构单档) / 机构头「导出此机构」(单机构整表) / 顶部「导出全部机构」(全订阅合并表)，统一 `POST /api/cma-diff/export` 生成 Excel（状态列 emoji 前缀 + 首行 AutoFilter + 列宽自适应，流式下载不留临时文件）。
+
 徽章注入到标准检索结果 + 资质查询页（共享 `app-cap-lib-badge.js`），与现有 CNAS/CMA 资质徽章并排显示。
 
 ### 技术实现
@@ -283,6 +285,7 @@ cp .env.example .env.local
 | GET    | `/api/cma-diff/labs` | tab | 订阅 CMA 机构维度计数表 |
 | GET    | `/api/cma-diff/labs/:certNumber?status=&q=` | tab | 单机构资质行 diff 详情 |
 | POST   | `/api/cma-diff/batch-status` | `cma-diff` / `qual` / `search` 任一 | 批量徽章状态查询（搜索结果 / 资质查询页徽章用） |
+| POST   | `/api/cma-diff/export` | tab `cma-diff` | 三级导出比对结果为 Excel（body `{certNumbers:[], statuses?, keyword?}`；空 certNumbers=全部订阅机构；流式 `res.send(buffer)` 不落临时文件） |
 | POST   | `/api/cma-diff/cleanup` | admin + tab | 清理 30 天未见的孤儿行（body `{days:30}`） |
 
 ### 管理（需 admin）

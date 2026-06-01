@@ -105,6 +105,26 @@ export interface DiffSummary {
   unsyncedDomains: string[];   // 用户订阅但从未同步的领域名
 }
 
+export interface ExportFilter {
+  /** 空数组 = 所有订阅机构 */
+  certNumbers: string[];
+  /** 空/未传 = 所有状态 */
+  statuses?: DiffStatus[];
+  /** 可选关键词，与详情页筛选同款（stdCode/stdName/testItem 子串） */
+  keyword?: string;
+}
+
+/** exportDiff 返回的扁平行（每行带机构标识，供 Excel 单 sheet 渲染） */
+export type ExportRow = DiffRow & { certNumber: string; labName: string };
+
+/**
+ * worst→best 严重度顺序，与前端 GROUP_ORDER 对应。导出排序用：最差状态在前，
+ * 同状态按 labName + stdCode。抽成模块常量避免散落多份。
+ */
+const EXPORT_STATUS_ORDER: Record<DiffStatus, number> = {
+  not_in_lib: 0, series_only: 1, abolished: 2, cite_only: 3, in_lib: 4,
+};
+
 // ─── 同步进度内存 store ───────────────────────────────────────────────────
 
 const progressStore = new Map<string, SyncProgress>();
@@ -524,6 +544,59 @@ export class CapLibService {
         byStatus,
       };
     });
+  }
+
+  /**
+   * 导出比对结果（cma-diff 三级导出端点用）。返回扁平数组，每行带 certNumber/labName。
+   *
+   * - certNumbers 空 → 取所有订阅机构（cma_labs.subscribed_at IS NOT NULL）
+   * - statuses 过滤 → 只留指定档
+   * - keyword 过滤 → stdCode/stdName/testItem 子串（与详情页一致）
+   * - 排序：最差状态在前（EXPORT_STATUS_ORDER），同状态按 labName + stdCode
+   */
+  exportDiff(filter: ExportFilter): ExportRow[] {
+    // 1) 解析机构清单
+    let certNumbers = (filter.certNumbers || []).filter(Boolean);
+    if (certNumbers.length === 0) {
+      certNumbers = (this.db.prepare(
+        'SELECT cert_number FROM cma_labs WHERE subscribed_at IS NOT NULL ORDER BY lab_name',
+      ).all() as Array<{ cert_number: string }>).map(r => r.cert_number);
+    }
+    // 机构名映射
+    const nameMap = new Map<string, string>();
+    if (certNumbers.length > 0) {
+      const ph = certNumbers.map(() => '?').join(',');
+      const labs = this.db.prepare(
+        `SELECT cert_number, lab_name FROM cma_labs WHERE cert_number IN (${ph})`,
+      ).all(...certNumbers) as Array<{ cert_number: string; lab_name: string }>;
+      for (const l of labs) nameMap.set(l.cert_number, l.lab_name || l.cert_number);
+    }
+
+    const statusSet = filter.statuses && filter.statuses.length ? new Set(filter.statuses) : null;
+    const kw = (filter.keyword || '').trim().toLowerCase();
+
+    // 2) 逐机构 diff + 过滤 + 摊平
+    const out: ExportRow[] = [];
+    for (const cert of certNumbers) {
+      const labName = nameMap.get(cert) || cert;
+      let rows = this.diffByLab(cert);
+      if (statusSet) rows = rows.filter(r => statusSet.has(r.diffStatus));
+      if (kw) rows = rows.filter(r =>
+        r.stdCode.toLowerCase().includes(kw) ||
+        r.stdName.toLowerCase().includes(kw) ||
+        r.testItem.toLowerCase().includes(kw));
+      for (const r of rows) out.push({ ...r, certNumber: cert, labName });
+    }
+
+    // 3) 排序：最差状态在前，同状态按 labName + stdCode
+    out.sort((a, b) => {
+      const d = EXPORT_STATUS_ORDER[a.diffStatus] - EXPORT_STATUS_ORDER[b.diffStatus];
+      if (d !== 0) return d;
+      const n = a.labName.localeCompare(b.labName, 'zh');
+      if (n !== 0) return n;
+      return a.stdCode.localeCompare(b.stdCode);
+    });
+    return out;
   }
 }
 

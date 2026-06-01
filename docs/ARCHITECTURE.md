@@ -382,9 +382,9 @@ src/
 │   ├── cap-lib-domains.ts    # 11 个顶层领域常量
 │   └── cap-lib-status.ts     # parseLibStatus(remark) + LibStatus / DiffStatus 枚举
 ├── services/
-│   └── cap-lib-service.ts    # syncDomain / diffByLab / batchStatus / summary / cleanupStaleRows
+│   └── cap-lib-service.ts    # syncDomain / diffByLab / batchStatus / summary / cleanupStaleRows / exportDiff
 └── api/
-    └── cap-lib-routes.ts     # 10 个端点挂 /api/cma-diff/*
+    └── cap-lib-routes.ts     # 11 个端点挂 /api/cma-diff/*（含 POST /export 流式 xlsx）
 
 public/js/
 ├── app-cap-lib-badge.js      # 共用徽章（搜索 + 资质查询 + 比对页 三处复用）
@@ -426,3 +426,22 @@ series_new_code, series_domain
 - 大多数读端点：`requireTab('cma-diff')` per-route guard（router 挂在根上无 mount path）
 - `batch-status`（徽章注入用）：`requireTab('cma-diff','qual','search')` OR 语义 —— 徽章注入三处页面，权限路径要一致
 - 写操作（同步 / 订阅切换 / 清理）：叠加 `requireAdmin`
+- 导出 `POST /export`：`requireTab('cma-diff')`（仅比对页触发，不同于 batch-status 的三 tab OR）
+
+### 页面 UI（app-cma-diff.js）
+
+- **领域订阅卡整卡折叠**：默认收起、标题栏摘要「已订阅 N 个 · 最近同步 时间」，折叠态记 `localStorage('capLib.domCollapsed')`（默认值不为 `'0'` 即收起）。展开后两列 grid（窄屏 ≤900px 单列），长领域名 ellipsis、进度条弹性宽
+- **批量同步**（admin）：`capLibSyncChecked` 串行同步勾中领域（逐个 await `syncDomainAndWait`，避免并发长请求轰上游）；「全部更新」复用 `capLibSyncAll`
+- **机构内 5 档分类折叠 + 分页**：`capLibToggleLab` 拉行后按 `diffStatus` 分 5 组缓存到 `body._capLibGroups`，`renderStatusGroups` 按单一 `GROUP_ORDER`（worst→best）渲染折叠卡，默认展开首个非空最严重档；`renderPagedTable` 50 条/页 + `renderPager`/`compressPages`（≤7 页全列，否则 `1 … cur±1 … last`）。懒渲染：非默认展开档点开才生成表；收起机构清 `_capLibGroups` 引用
+- 配色/文案/排序复用 `DIFF_STATUS_META`（单一真相源）；新 CSS 全 token 化（`--surface-h/--border/--accent`）保证 light/paper 主题不"白上加白"
+
+### 导出（三级）
+
+`exportDiff(filter: { certNumbers, statuses?, keyword? })`：certNumbers 空 → 取全部订阅机构，逐机构 `diffByLab` + 状态/关键词过滤 + 摊平为 `ExportRow`（带 certNumber/labName），按 `EXPORT_STATUS_ORDER`（最差在前）+ labName + stdCode 排序。
+
+`POST /api/cma-diff/export` 生成 Excel（`xlsx@0.18.5`，与 check-routes 同库）：状态列 emoji 前缀（零依赖不走 cellStyles）+ 首行 `!autofilter` + `!cols` 列宽自适应（中文 2 宽估算）。**流式 `res.send(buffer)` 不落临时文件**（不抄 check-routes 写 data/exports 再回 downloadUrl 那套），文件名 `Content-Disposition: filename*=UTF-8''…`，机构名 sanitize 非法字符。
+
+三级入口（前端 `capLibExportDiff`，按钮 `onclick` 均 `event.stopPropagation()` 避免触发折叠）：
+- 状态档头「导出」→ `{certNumbers:[本机构], statuses:[该档]}`
+- 机构头「导出此机构」→ `{certNumbers:[本机构]}`
+- 顶部「导出全部机构」→ `{certNumbers:[]}`（空=全部订阅机构合并表）

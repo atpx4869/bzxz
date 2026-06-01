@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **refactor(cma-diff): 领域卡折叠+批量同步 / 机构 5 档分类折叠分页 / 三级导出** —
+  - **领域订阅卡整卡折叠**（默认收起）：标题栏点击折叠，收起态显示摘要「已订阅 N 个领域 · 最近同步 {最新一次}」，折叠态记 `localStorage('capLib.domCollapsed')`；展开后两列 grid 布局（窄屏 ≤900px 塌回单列），长领域名 `ellipsis + title` 兜底、进度条改弹性宽 `flex:1;max-width:90px`，高度砍半把空间还给下方机构对比
+  - **批量同步**（admin）：领域卡内加「更新勾选 / 全部更新」。更新勾选 = **串行**同步勾中领域（逐个 await 完成再发下一个，避免 N 个 `pageSize=60000` 长请求并发轰上游）；全部更新 = 复用现有 `capLibSyncAll`（sync-all 端点）
+  - **机构维度 5 档分类折叠 + 分页**：机构展开不再是一张几百行大表，按 `not_in_lib → series_only → abolished → cite_only → in_lib`（单一 `GROUP_ORDER` 常量，worst→best）二级折叠，每档 50 条/页分页（≤50 不出翻页器）；进机构自动展开第一个非空的最严重档，其余档懒渲染；翻页/收起只重渲表，收起机构清 `_capLibGroups` 引用让 GC 回收。删旧的状态筛选 chip（`capLibApplyFilter`）—— 折叠本身即筛选
+  - **三级导出**：状态档头「导出」(单机构单档) / 机构头「导出此机构」(单机构整表) / 顶部「导出全部机构」(全订阅合并表)，三处统一 `POST /api/cma-diff/export`（body `{certNumbers:[], statuses?, keyword?}`，空 certNumbers=全部）。档头/机构头是折叠触发区，导出按钮 `onclick` 必须 `event.stopPropagation()`。后端 `CapLibService.exportDiff()` 摊平 + 按最差状态在前排序（同状态 labName+stdCode），路由生成 Excel：状态列 emoji 前缀（⛔🔴🟠⚠✅，零依赖不走 cellStyles）+ 首行 AutoFilter + 列宽自适应（中文按 2 宽估算），**流式 `res.send(buffer)` 不落临时文件**；文件名 `CMA一单一库比对-{机构名|全部|N家机构}-{YYYYMMDD}.xlsx`，机构名 sanitize 非法字符
+  - 文件清单：修改 `public/js/app-cma-diff.js`（折叠/分页/导出全套）/ `public/index.html`（领域卡折叠头 + 顶部导出按钮）/ `src/services/cap-lib-service.ts`（`ExportFilter`/`ExportRow`/`exportDiff`）/ `src/api/cap-lib-routes.ts`（`POST /export` + xlsx 辅助）/ `public/styles.css` + `web/src/styles/pages/cap-lib.css`（两列 grid / 折叠头 / 状态分组 / 翻页器，全 token 化主题安全）
 - **feat(cma-diff): 新增「CMA 一单一库」tab — 订阅机构 CMA 资质 vs 国家能力项目库比对** —
   - **数据源**：市场监管总局《检验检测机构资质认定能力项目库》[cma.caqit.org.cn](https://cma.caqit.org.cn/)。实测：`GET /cma-admin/system/standardData/list?pageNum=1&pageSize=60000&domain=<顶层领域名>` 无鉴权、无 Referer/UA 校验、单接口可一次拉 5w+ 行；远端总量 51,910 条（2026-06）、按 11 个顶层领域分布（产品质量检验占 80%）；`domainId` / 子领域名传入返回 0 行，故只接顶层名（参考 [src/shared/cap-lib-domains.ts](./src/shared/cap-lib-domains.ts) 硬编码常量）
   - **新表**：`cma_capability_lib`（`source_id PK / domain / standard_method / std_code / std_code_norm / std_code_base / remark / lib_status / raw_status / row_hash / last_seen_at / fetched_at`，4 个索引）+ `cma_capability_lib_meta`（每领域 `subscribed / last_synced_at / remote_total / local_total / last_sync_stats(JSON)`）。归一化沿用现有 `cleanStdCode + extractFullCode + extractBaseCode` 三层契约，与 `cnas_qualifications` / `cma_qualifications` 完全正交

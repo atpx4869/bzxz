@@ -402,6 +402,7 @@
         <p>把你订阅的 CMA 机构持有的资质项与市场监管总局《检验检测机构资质认定能力项目库》比对，找出"已不在库"、"年版过期"、"仅限引用"等需要处理的项。</p>
       </div>
       <div class="set-page-head-actions">
+        <button class="btn btn-sm btn-ghost" id="capLibExportAllBtn" onclick="capLibExportDiff({ certNumbers: [] }, this)">导出全部机构</button>
         <button class="btn btn-sm btn-ghost" id="capLibCleanupBtn" onclick="capLibCleanup()" style="display:none">清理 30 天未见</button>
         <button class="btn btn-sm btn-primary" id="capLibSyncAllBtn" onclick="capLibSyncAll()">同步勾选领域</button>
       </div>
@@ -415,10 +416,14 @@
       </div>
     </div>
 
-    <!-- 领域订阅卡 -->
-    <div class="set-card">
-      <div class="set-card-head"><div class="set-card-title">领域订阅与同步</div></div>
-      <div class="set-card-body" id="capLibDomainsBody">
+    <!-- 领域订阅卡（整卡可折叠，默认收起，把视觉重心让给下方机构对比 — 折叠态记 localStorage） -->
+    <div class="set-card cap-lib-dom-card collapsed" id="capLibDomCard">
+      <div class="set-card-head cap-lib-dom-foldhead" onclick="capLibToggleDomCard()">
+        <span class="cap-lib-dom-foldarrow" id="capLibDomFoldArrow">▸</span>
+        <div class="set-card-title" style="margin:0">领域订阅与同步</div>
+        <span class="cap-lib-dom-foldsummary" id="capLibDomSummary"></span>
+      </div>
+      <div class="set-card-body cap-lib-dom-fold-body" id="capLibDomainsBody">
         <div style="color:var(--text-3)">加载中…</div>
       </div>
     </div>

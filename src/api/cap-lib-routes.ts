@@ -15,7 +15,9 @@ import { z } from 'zod';
 import type Database from 'better-sqlite3';
 import {
   CapLibService, getSyncProgress, CAP_LIB_DOMAIN_NAMES, isValidCapLibDomain,
+  type ExportFilter, type ExportRow,
 } from '../services/cap-lib-service';
+import { DIFF_STATUS_VALUES, type DiffStatus } from '../shared/cap-lib-status';
 import { normalizeError } from '../shared/errors';
 import { respond, respondError } from '../shared/response';
 import { toCamelCase } from '../shared/case';
@@ -103,6 +105,45 @@ export function createCapLibRoutes(
     } catch (e) { next(normalizeError(e)); }
   });
 
+  // ── 导出（三级：单档 / 单机构 / 全部，流式 xlsx 不落临时文件） ──────────
+  router.post('/api/cma-diff/export', requireCmaDiff, async (req, res, next) => {
+    try {
+      const schema = z.object({
+        certNumbers: z.array(z.string().trim()).max(200).default([]), // 0 个 = 全部订阅机构
+        statuses: z.array(z.enum(DIFF_STATUS_VALUES as unknown as [DiffStatus, ...DiffStatus[]])).optional(),
+        keyword: z.string().trim().max(200).optional(),
+      });
+      const filter = schema.parse(req.body || {});
+      const rows = svc.exportDiff(filter);
+      if (!rows.length) { respondError(res, 400, 'EMPTY', '没有可导出的数据'); return; }
+
+      const header = [
+        '机构名称', '证书编号', '标准号', '标准名称', '类别', '检测项目',
+        '比对状态', '库内备注', '库内领域', '建议替代年版', '替代年版领域',
+      ];
+      const aoa = [
+        header,
+        ...rows.map(r => [
+          r.labName, r.certNumber, r.stdCode, r.stdName, r.category, r.testItem,
+          statusCellText(r.diffStatus), r.libRemark, r.libDomain, r.seriesNewCode, r.seriesDomain,
+        ]),
+      ];
+
+      const XLSX = (await import('xlsx')).default;
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!autofilter'] = { ref: 'A1:K1' };
+      ws['!cols'] = autoColWidths(aoa);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'CMA一单一库比对');
+      const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+      const filename = buildExportFilename(filter, rows);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+      res.send(buf);
+    } catch (e) { next(normalizeError(e)); }
+  });
+
   // ── 徽章 batch-status（共用） ──────────────────────────────────────
 
   router.post('/api/cma-diff/batch-status', requireBadgeAccess, (req, res, next) => {
@@ -127,4 +168,59 @@ export function createCapLibRoutes(
   // 为兼容老调用方避免 unused 警告
   void requireAuth;
   return router;
+}
+
+// ─── 导出辅助 ───────────────────────────────────────────────────────────────
+
+/** 状态列 emoji 前缀（零依赖，不走 cellStyles）+ 中文档名。与前端 DIFF_STATUS_META 对齐。 */
+const STATUS_CELL: Record<DiffStatus, string> = {
+  in_lib:      '✅ 在库',
+  cite_only:   '⚠ 废止·可引用',
+  abolished:   '🟠 已废止',
+  series_only: '🔴 年版过期',
+  not_in_lib:  '⛔ 未入库',
+};
+function statusCellText(s: DiffStatus): string {
+  return STATUS_CELL[s] || s;
+}
+
+/** 列宽自适应：按每列内容最大「视觉宽度」估算（中文算 2，其它 1），夹在 [8, 50]。 */
+function autoColWidths(aoa: Array<Array<string | number>>): Array<{ wch: number }> {
+  const cols = aoa[0]?.length || 0;
+  const widths: number[] = new Array(cols).fill(8);
+  for (const row of aoa) {
+    for (let c = 0; c < cols; c++) {
+      const v = row[c] == null ? '' : String(row[c]);
+      let w = 0;
+      for (const ch of v) w += ch.charCodeAt(0) > 255 ? 2 : 1;
+      if (w + 2 > widths[c]) widths[c] = w + 2;
+    }
+  }
+  return widths.map(w => ({ wch: Math.min(50, Math.max(8, w)) }));
+}
+
+/** 文件名：单机构 `CMA一单一库比对-{机构名}-{YYYYMMDD}.xlsx` / 全部 `…-全部-…`。机构名 sanitize。 */
+function buildExportFilename(filter: ExportFilter, rows: ExportRow[]): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const ymd = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+  const certs = (filter.certNumbers || []).filter(Boolean);
+  let scope: string;
+  if (certs.length === 0) {
+    scope = '全部';
+  } else if (certs.length === 1) {
+    scope = sanitizeFilePart(rows[0]?.labName || certs[0]);
+  } else {
+    scope = `${certs.length}家机构`;
+  }
+  return `CMA一单一库比对-${scope}-${ymd}.xlsx`;
+}
+
+/** 去掉 Windows / 通用文件名非法字符 \ / : * ? " < > | 及控制符。 */
+function sanitizeFilePart(s: string): string {
+  return (s || '')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\\/:*?"<>|\x00-\x1f]/g, '_')
+    .trim()
+    .slice(0, 80) || '导出';
 }
