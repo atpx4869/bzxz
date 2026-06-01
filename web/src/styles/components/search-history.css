@@ -21,7 +21,7 @@
               0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   box-shadow: 0 20px 56px oklch(0% 0 0 / 0.55),
               0 0 0 1px oklch(100% 0 0 / 0.04) inset;
-  z-index: 350; overflow: hidden;
+  z-index: 380; overflow: hidden;
 }
 .search-history.open { display: block; animation: histIn 0.18s var(--ease-out); }
 @keyframes histIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }

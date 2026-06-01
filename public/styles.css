@@ -482,7 +482,7 @@ body.compact-results .results-table-head { padding-bottom: 6px; }
               0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   box-shadow: 0 20px 56px oklch(0% 0 0 / 0.55),
               0 0 0 1px oklch(100% 0 0 / 0.04) inset;
-  z-index: 350; overflow: hidden;
+  z-index: 380; overflow: hidden;
 }
 .search-history.open { display: block; animation: histIn 0.18s var(--ease-out); }
 @keyframes histIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
@@ -4440,14 +4440,6 @@ button.set-chip.active:hover { background: var(--accent-h); border-color: var(--
 .cap-lib-prog-bar     { flex: 1; max-width: 90px; height: 6px; border-radius: 999px; background: var(--surface-h); overflow: hidden; }
 .cap-lib-prog-bar > div { height: 100%; background: var(--accent); transition: width 0.3s ease; }
 .cap-lib-prog-text    { font-size: 11px; color: var(--text-3); white-space: nowrap; }
-
-.cap-lib-summary-head { font-size: 13px; color: var(--text-2); margin-bottom: 8px; }
-.cap-lib-summary-head b { color: var(--text); font-size: 15px; padding: 0 4px; }
-.cap-lib-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
-.cap-lib-stat-tile { padding: 10px 12px; border-radius: 8px; background: var(--surface-h, rgba(255,255,255,0.03)); }
-.cap-lib-stat-num { font-size: 18px; font-weight: 650; color: var(--text); line-height: 1.2; }
-.cap-lib-stat-lab { font-size: 11px; color: var(--text-3); margin-top: 2px; }
-.cap-lib-warn { margin-top: 10px; padding: 8px 10px; border-radius: 6px; background: rgba(234,179,8,0.1); color: #facc15; font-size: 12px; }
 
 .cap-lib-empty { padding: 24px; text-align: center; color: var(--text-3); font-size: 13px; }
 .cap-lib-lab-group { border-radius: 8px; margin-bottom: 6px; background: var(--surface-h); overflow: hidden; }
