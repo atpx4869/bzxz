@@ -612,7 +612,7 @@
     </div>`;
     const tableHtml = `
       <table class="cap-lib-diff-table cap-lib-diff-table-actions">
-        <thead><tr><th class="cap-lib-row-pick"></th><th>状态</th><th>标准号</th><th>标准名</th><th>类别/项目</th><th>替代/备注</th><th>操作</th></tr></thead>
+        <thead><tr><th class="cap-lib-row-pick"><input type="checkbox" class="cap-lib-row-checkall" onchange="capLibToggleCheckAll(this)" title="全选/取消本页"></th><th>状态</th><th>标准号</th><th>标准名</th><th>类别/项目</th><th>替代/备注</th><th>操作</th></tr></thead>
         <tbody>${slice.map(r => renderDiffRow(r, certNumber)).join('')}</tbody>
       </table>`;
     const pagerHtml = pages > 1
@@ -713,7 +713,7 @@
       + `</div>`;
     return `
       <tr class="cap-lib-diff-row" data-status="${r.diffStatus}" data-code="${codeAttr}">
-        <td class="cap-lib-row-pick"><input type="checkbox" class="cap-lib-row-check" data-code="${codeAttr}" title="勾选后可加入黑名单"></td>
+        <td class="cap-lib-row-pick"><input type="checkbox" class="cap-lib-row-check" data-code="${codeAttr}" onchange="capLibSyncCheckAll(this)" title="勾选后可加入黑名单"></td>
         <td><span class="cap-lib-row-status" style="color:${meta.color}">${meta.emoji} ${escHtml(meta.label)}</span></td>
         <td class="cap-lib-row-code">${escHtml(r.stdCode)}${mappedTag}</td>
         <td>${escHtml(r.stdName || '')}</td>
@@ -761,6 +761,24 @@
   // ── 黑名单 / 手动映射 / 重试（Part 3 + 4） ────────────────────────
 
   /** 收集当前状态档表内勾选行的标准号，批量加入黑名单（admin）。 */
+  /** 表头全选框：勾中/取消本页表格内全部行（筛选/分档后的当前页可见行）。 */
+  window.capLibToggleCheckAll = function (master) {
+    const table = master.closest('table');
+    if (!table) return;
+    table.querySelectorAll('tbody .cap-lib-row-check').forEach(cb => { cb.checked = master.checked; });
+  };
+
+  /** 行勾选变动时回写表头全选框状态（全勾=选中 / 部分=半选 / 全不勾=不选）。 */
+  window.capLibSyncCheckAll = function (row) {
+    const table = row.closest('table');
+    const master = table && table.querySelector('.cap-lib-row-checkall');
+    if (!master) return;
+    const all = [...table.querySelectorAll('tbody .cap-lib-row-check')];
+    const checked = all.filter(cb => cb.checked).length;
+    master.checked = checked > 0 && checked === all.length;
+    master.indeterminate = checked > 0 && checked < all.length;
+  };
+
   window.capLibAddCheckedToBlacklist = async function (btn) {
     if (!isAdminUser()) { showToast('仅管理员可操作', 'fail'); return; }
     const scope = btn.closest('.cap-lib-stgroup-body') || document;

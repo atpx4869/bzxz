@@ -162,7 +162,7 @@
 
 /* ---------- 行操作 / 黑名单多选 / 手动映射标记（Part 3 + 4） ---------- */
 .cap-lib-row-pick { width: 28px; text-align: center; }
-.cap-lib-row-check { accent-color: var(--accent); cursor: pointer; }
+.cap-lib-row-check, .cap-lib-row-checkall { accent-color: var(--accent); cursor: pointer; }
 .cap-lib-row-actcell { white-space: nowrap; }
 .cap-lib-row-actions { display: inline-flex; gap: 4px; }
 .cap-lib-row-act {
