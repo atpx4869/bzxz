@@ -366,7 +366,7 @@ export class CapLibService {
   cleanupStaleRows(daysThreshold = 30): number {
     const cutoff = new Date(Date.now() - daysThreshold * 86400_000).toISOString();
     const result = this.db.prepare(
-      'DELETE FROM cma_capability_lib WHERE last_seen_at != "" AND last_seen_at < ?',
+      "DELETE FROM cma_capability_lib WHERE last_seen_at != '' AND last_seen_at < ?",
     ).run(cutoff);
     // 同步重算各领域 local_total
     this.db.prepare(`
@@ -424,7 +424,7 @@ export class CapLibService {
       : undefined;
 
     const anySynced = (this.db.prepare(
-      'SELECT COUNT(*) AS c FROM cma_capability_lib_meta WHERE last_synced_at != ""',
+      "SELECT COUNT(*) AS c FROM cma_capability_lib_meta WHERE last_synced_at != ''",
     ).get() as { c: number }).c > 0;
 
     const domainSyncState = (this.db.prepare(`
@@ -478,7 +478,7 @@ export class CapLibService {
 
     // 任何领域是否已同步过 —— 全空则徽章全标 stale
     const anySynced = (this.db.prepare(
-      'SELECT COUNT(*) AS c FROM cma_capability_lib_meta WHERE last_synced_at != ""',
+      "SELECT COUNT(*) AS c FROM cma_capability_lib_meta WHERE last_synced_at != ''",
     ).get() as { c: number }).c > 0;
 
     // 输入归一化
