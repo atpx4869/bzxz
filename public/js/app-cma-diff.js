@@ -383,6 +383,20 @@
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await readApiResponse(res);
       const by = data.byStatus || {};
+      const labCount = data.labCount || 0;
+      const totalQuals = data.totalQuals || 0;
+      // 在库相关档（需要国家库已同步才会非零）
+      const matched = (by.in_lib || 0) + (by.cite_only || 0) + (by.abolished || 0) + (by.series_only || 0);
+
+      // 空态引导：区分「没订阅机构」与「订阅了但国家库没同步」两种全 0
+      if (labCount === 0) {
+        box.innerHTML = `<div class="cap-lib-empty">
+          尚未同步任何 CMA 机构的资质，汇总无数据。<br>
+          请先到「资质查询」页搜索并同步目标 CMA 机构（同步后其持有的资质会出现在这里参与比对）。
+        </div>`;
+        return;
+      }
+
       const tiles = STATUS_ORDER.map(k => {
         const meta = DIFF_STATUS_META[k];
         return `<div class="cap-lib-stat-tile" style="border-left:3px solid ${meta.color}">
@@ -393,9 +407,14 @@
       const unsynced = (data.unsyncedDomains && data.unsyncedDomains.length)
         ? `<div class="cap-lib-warn">⚠ 已订阅但从未同步的领域：${data.unsyncedDomains.map(escHtml).join('、')}</div>`
         : '';
+      // 有机构、有资质，但「在库类」档全 0 → 国家库还没同步，全判未入库
+      const libHint = (totalQuals > 0 && matched === 0)
+        ? `<div class="cap-lib-warn">⚠ 国家库尚未同步（或未拉全），${totalQuals.toLocaleString()} 行资质全部判为「未入库」。请到下方「领域订阅与同步」勾选领域并同步后再看。</div>`
+        : '';
       box.innerHTML = `
-        <div class="cap-lib-summary-head">订阅 CMA 机构 <b>${data.labCount || 0}</b> 家 · 总持有资质 <b>${(data.totalQuals || 0).toLocaleString()}</b> 行</div>
+        <div class="cap-lib-summary-head">订阅 CMA 机构 <b>${labCount}</b> 家 · 总持有资质 <b>${totalQuals.toLocaleString()}</b> 行</div>
         <div class="cap-lib-stat-grid">${tiles}</div>
+        ${libHint}
         ${unsynced}
       `;
     } catch (e) {
