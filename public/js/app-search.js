@@ -189,6 +189,11 @@ async function doSearch() {
       fetchQualBadges(stdNums).then(() => {
         if (results.length > 0) { renderFilterBar(); renderResults(); }
       });
+      // 同步触发一单一库徽章拉取（与 qual 徽章并行；occupant 已在 renderResults
+      // 渲染时给出占位 .cap-lib-badge-pending，回调里 DOM 直接替换不重渲）
+      if (typeof fetchCapLibBadges === 'function') {
+        fetchCapLibBadges(stdNums).catch(() => { /* silent */ });
+      }
     }
     // Poll GBW text availability in background (non-blocking)
     pollGbwTextAvailability();
@@ -595,6 +600,7 @@ function buildResultCardHtml(r, i) {
         <div class="card-number-row">
           <span class="card-number">${escapeHtml(r.standardNumber)}</span>
           ${qualBadgeHtml(r.standardNumber)}
+          ${typeof capLibBadgeHtml === 'function' ? capLibBadgeHtml(r.standardNumber) : ''}
         </div>
       </div>
       <div class="card-body">

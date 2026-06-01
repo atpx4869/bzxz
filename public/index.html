@@ -87,6 +87,10 @@
       <span class="sidebar-icon">🛡</span>
       <span class="sidebar-text">资质查询<span class="sidebar-desc">CNAS/CMA 资质</span></span>
     </button>
+    <button class="sidebar-item" data-tab="cma-diff" onclick="switchTab('cma-diff')">
+      <span class="sidebar-icon">📑</span>
+      <span class="sidebar-text">CMA 一单一库<span class="sidebar-desc">资质 vs 国家库比对</span></span>
+    </button>
     <div class="sidebar-sep"></div>
     <button class="sidebar-item" data-tab="logs" onclick="switchTab('logs')">
       <span class="sidebar-icon">📋</span>
@@ -385,6 +389,49 @@
         </section>
       </div>
       <div id="qualVisualResults"></div>
+    </div>
+  </div>
+
+  <!-- Page: CMA 一单一库（国家 CMA 能力项目库 vs 订阅机构资质 比对）。
+       骨架由 app-cma-diff.js 接管渲染；首次进入若无任何领域同步过会渲染空态引导。 -->
+  <div class="page" id="page-cma-diff">
+    <div class="set-page-head">
+      <div class="set-page-head-main">
+        <span class="set-kicker">CMA CAPABILITY LIB DIFF</span>
+        <h1>CMA 一单一库</h1>
+        <p>把你订阅的 CMA 机构持有的资质项与市场监管总局《检验检测机构资质认定能力项目库》比对，找出"已不在库"、"年版过期"、"仅限引用"等需要处理的项。</p>
+      </div>
+      <div class="set-page-head-actions">
+        <button class="btn btn-sm btn-ghost" id="capLibCleanupBtn" onclick="capLibCleanup()" style="display:none">清理 30 天未见</button>
+        <button class="btn btn-sm btn-primary" id="capLibSyncAllBtn" onclick="capLibSyncAll()">同步勾选领域</button>
+      </div>
+    </div>
+
+    <!-- 顶部摘要卡 -->
+    <div class="set-card" id="capLibSummaryCard">
+      <div class="set-card-head"><div class="set-card-title">汇总</div></div>
+      <div class="set-card-body" id="capLibSummaryBody">
+        <div style="color:var(--text-3)">加载中…</div>
+      </div>
+    </div>
+
+    <!-- 领域订阅卡 -->
+    <div class="set-card">
+      <div class="set-card-head"><div class="set-card-title">领域订阅与同步</div></div>
+      <div class="set-card-body" id="capLibDomainsBody">
+        <div style="color:var(--text-3)">加载中…</div>
+      </div>
+    </div>
+
+    <!-- 机构维度比对 -->
+    <div class="set-card">
+      <div class="set-card-head">
+        <div class="set-card-title">机构维度比对</div>
+        <div style="margin-left:auto;font-size:12px;color:var(--text-3)" id="capLibLabsHint">仅显示已订阅的 CMA 机构</div>
+      </div>
+      <div class="set-card-body" id="capLibLabsBody">
+        <div style="color:var(--text-3)">加载中…</div>
+      </div>
     </div>
   </div>
 
@@ -777,6 +824,8 @@
 <script src="/js/app-auth-admin.js"></script>
 <script src="/js/app-announcements.js"></script>
 <script src="/js/app-qual.js"></script>
+<script src="/js/app-cap-lib-badge.js"></script>
+<script src="/js/app-cma-diff.js"></script>
 <script src="/js/app-labr.js"></script>
 <script src="/js/app-check.js"></script>
 <script src="/js/app-mobile.js"></script>

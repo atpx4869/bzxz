@@ -128,9 +128,33 @@ Chrome ≤109 上整条 declaration 解析失败，主题崩。
 **How to apply：**
 
 - **路由挂载方式决定守卫写法**：`app.use('/api/stats', router)` 这种**带 mount path** 的可以 `router.use(requireTab('stats'))` 整 router 守卫；但 `check`/`labr`/`qual` 是 `app.use(router)` **挂在根上无 mount path** —— `router.use()` 会命中**全站每个请求**（router 的无 path 中间件对所有进入它的请求生效），必须改 **per-route guard**（`const requireX = requireTab('x')` 逐路由替换 `requireAuth`）。踩过这个坑，务必注意
-- **一端点多 tab 复用走 OR**：`POST /api/qualifications/batch-query` 既服务资质查询页、也给标准检索结果点资质徽章，用 `requireTab('qual','search')`，否则只有搜索权限的用户徽章全灭
+- **一端点多 tab 复用走 OR**：`POST /api/qualifications/batch-query` 既服务资质查询页、也给标准检索结果点资质徽章，用 `requireTab('qual','search')`，否则只有搜索权限的用户徽章全灭。同款套路：`POST /api/cma-diff/batch-status`（国家库徽章）走 `requireTab('cma-diff','qual','search')` —— 徽章注入到三个页面，权限路径要一致
 - `requireTab` 内部已含 `requireAuth`，替换后原 per-route `requireAuth` 可留作冗余兜底（不影响行为）或删除
 - `settings`/`logs` 的数据接口本身是 `requireAdmin`（admin-only），即便授予普通用户该 tab，页面数据仍 403 —— 这是有意的（与 `users` tab 同理），名单里保留它们只是为了权限 UI 完整
+
+## CMA 一单一库（cma-diff）契约（**重要**）
+
+`cma_capability_lib` 是市场监管总局《检验检测机构资质认定能力项目库》的本地镜像，给 `cma-diff` tab + 搜索/资质查询徽章用。数据语义**不同于** `cma_qualifications`（机构持有的资质行）—— **本表是"政策范围内的合法标准号清单"**，两表正交不重叠。
+
+### 同步契约
+
+- 远端 `https://cma.caqit.org.cn/cma-admin/system/standardData/list` **只接 11 个顶层 `domain` 名**（实测 `domainId` / 子领域名都返回 0 行），按 11 个领域分桶同步。领域常量在 [`src/shared/cap-lib-domains.ts`](./src/shared/cap-lib-domains.ts) **硬编码**且与 `src/services/db.ts` 的 `CAP_LIB_DOMAIN_INIT` 数组**手动保持一致**（11 个名相同顺序无关）。新增/删除领域需两处同改
+- 单领域 `pageSize=60000` 一次拉全（实测最大领域产品质量检验 ~41k 行 41s）；不分页、不带任何 header（无鉴权）
+- **入库三层归一化必须落齐**：`cleanStdCode → extractFullCode (std_code_norm) → extractBaseCode (std_code_base)`，沿用现有契约。漏写任何一层徽章批量查询会漏命中
+- **hash diff**：每行 `sha1(domain|method|stdCode|remark|libStatus|rawStatus)`，与现存 `row_hash` 相同时只 `UPDATE last_seen_at`、不写主字段（索引压力 ↓）。`row_hash` 列的字段集合变化时（如新增 raw 字段）必须升级 hash 算法 + 强制全量重 hash —— 否则 diff 永远算"未变"
+- **soft delete**：远端本次没出现的行**不立即 DELETE**，仅 `last_seen_at` 不更新。`POST /api/cma-diff/cleanup` admin 手动按钮才真删（默认 30 天阈值）。**为什么**：远端 41s 长请求容易超时返回少 1k 行 / RuoYi 分页抽风局部丢数据，硬删会让订阅机构资质徽章瞬间全变 ⛔，30 天窗口够覆盖所有临时丢失再决策
+
+### 5 档比对状态
+
+`parseLibStatus(remark)`（[`src/shared/cap-lib-status.ts`](./src/shared/cap-lib-status.ts)）解析远端 remark → `active / cite_only / abolished`。`diffByLab(certNumber)` 双子查询：
+- `std_code_norm` 等值（**保年命中**，唯一答案） → 给出 in_lib / cite_only / abolished
+- `std_code_base` 等值 + 只看 active 且 `std_code_norm <> q.std_code_norm` 排除已命中那条（**剥年兜底**） → 给出 series_only 时的 `seriesNewCode`
+
+**不要让 series_only 当作"等价替代"宣传**：算法只指认"标准号系列在库"，机构当前 `test_item` 是否在新年版里能继续做，要用户自行核查。文案口径要谨慎。
+
+### 徽章注入
+
+`app-cap-lib-badge.js` 是单一徽章源，由 `app-search.js`（搜索结果卡）+ `app-qual.js`（资质查询页）+ `app-cma-diff.js`（比对页）三处共用。同步完成后必须 `window.capLibInvalidateCache()` 失效一次否则徽章是旧数据。
 
 ## 凭据配置（**强制**）
 

@@ -70,6 +70,8 @@
 @import './pages/check.css';
 @import './pages/local-library.css';
 @import './pages/search-stage.css';
+/* CMA 一单一库比对页 + 国家 CMA 库徽章。两端同时存在期内与 styles.css 末尾段重复加载。 */
+@import './pages/cap-lib.css';
 /* settings.css —— 设置面板重设计组件系统（纯 token，三主题自适配，无需 glass override）。
  * 见 docs/SETTINGS-REDESIGN.md。Phase A 仅落样式，暂无 HTML 引用。 */
 @import './pages/settings.css';

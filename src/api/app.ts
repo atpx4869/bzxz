@@ -12,6 +12,7 @@ import { createAdminRoutes } from './admin-routes';
 import { createAnnouncementRoutes } from './announcement-routes';
 import { createStatsRoutes } from './stats-routes';
 import { createQualificationRoutes } from './cnas-routes';
+import { createCapLibRoutes } from './cap-lib-routes';
 import { createStandardsRoutes } from './standards-routes';
 import { createCheckRoutes } from './check-routes';
 import { CheckService } from '../services/check-service';
@@ -231,6 +232,8 @@ export function createApp() {
   app.use('/api/stats', createStatsRoutes(db, requireAuth, requireTab));
   const qualRouter = createQualificationRoutes(db, requireAuth, requireTab);
   app.use(qualRouter);
+  // CMA 一单一库比对：自带 /api/cma-diff 路径前缀
+  app.use(createCapLibRoutes(db, requireAuth, requireAdmin, requireTab));
   // 预览：requireAuth 在路由内部应用，挂在根上即可（端点路径里已带 /api/preview 前缀）。
   app.use(createPreviewRoutes(db, requireAuth, sourceRegistry));
   // labr：独立 sidebar，与 SourceRegistry 解耦；路径自带 /api/labr 前缀

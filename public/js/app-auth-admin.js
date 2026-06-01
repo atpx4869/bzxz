@@ -164,7 +164,7 @@ function onAuthReady() {
   if (typeof pollEnvironmentCheck === 'function') pollEnvironmentCheck();
 }
 
-var TAB_LABELS = {search:'标准检索',labr:'Labr库检索',check:'标准查新',batch:'批量下载',complete:'标准补全',local:'本地文件库',history:'下载历史',qual:'资质查询',logs:'运行日志',stats:'使用统计',users:'用户管理',settings:'系统设置',me:'我'};
+var TAB_LABELS = {search:'标准检索',labr:'Labr库检索',check:'标准查新',batch:'批量下载',complete:'标准补全',local:'本地文件库',history:'下载历史',qual:'资质查询','cma-diff':'CMA 一单一库',logs:'运行日志',stats:'使用统计',users:'用户管理',settings:'系统设置',me:'我'};
 
 function applyTabPermissions() {
   var allowed = currentUser.allowedTabs; // null = all allowed
@@ -768,6 +768,7 @@ var TAB_ITEMS = [
   { key: 'local', label: '本地文件库', desc: '已下载标准管理' },
   { key: 'history', label: '下载历史', desc: '查看下载记录' },
   { key: 'qual', label: '资质查询', desc: 'CNAS/CMA 资质' },
+  { key: 'cma-diff', label: 'CMA 一单一库', desc: '资质 vs 国家库比对' },
   { key: 'logs', label: '运行日志', desc: '搜索/下载/同步记录' },
   { key: 'stats', label: '使用统计', desc: '查看使用数据' },
   { key: 'settings', label: '系统设置', desc: '下载参数和源' },

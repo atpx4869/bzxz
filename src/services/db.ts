@@ -278,6 +278,44 @@ function migrate(db: Database.Database): void {
       abolish_date     TEXT    -- 废止日期（detail-dm endData）
     );
     CREATE INDEX IF NOT EXISTS idx_check_items_wl ON check_items(watchlist_id);
+
+    -- 国家 CMA 一单一库（能力项目库）镜像。
+    -- 与 cma_qualifications 的区别：那张是"机构持有哪些标准的资质行"，这张是"哪些标准属于
+    -- CMA 能力项目库（即能合法申请资质的政策范围）"。两者正交，diffByLab 按 std_code_norm
+    -- JOIN 出 5 档比对状态（详见 src/shared/cap-lib-status.ts）。
+    --
+    -- source_id 当 PRIMARY KEY：远端 id 在 [1, 远端 total] 连续，直接 INSERT … ON CONFLICT 做 upsert。
+    -- last_seen_at + row_hash：soft delete + hash diff，远端临时抽风不会立刻把本地数据删光，
+    -- admin 手动触发"清理 30 天未见的孤儿行"才真删。
+    CREATE TABLE IF NOT EXISTS cma_capability_lib (
+      source_id       INTEGER PRIMARY KEY,
+      domain          TEXT NOT NULL DEFAULT '',
+      standard_method TEXT NOT NULL DEFAULT '',
+      std_code        TEXT NOT NULL,
+      std_code_norm   TEXT NOT NULL DEFAULT '',
+      std_code_base   TEXT NOT NULL DEFAULT '',
+      remark          TEXT DEFAULT '',
+      lib_status      TEXT NOT NULL DEFAULT 'active',   -- active / cite_only / abolished
+      raw_status      TEXT DEFAULT '',
+      row_hash        TEXT NOT NULL DEFAULT '',
+      last_seen_at    TEXT NOT NULL DEFAULT '',
+      fetched_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_cap_lib_norm   ON cma_capability_lib(std_code_norm);
+    CREATE INDEX IF NOT EXISTS idx_cap_lib_base   ON cma_capability_lib(std_code_base);
+    CREATE INDEX IF NOT EXISTS idx_cap_lib_domain ON cma_capability_lib(domain);
+    CREATE INDEX IF NOT EXISTS idx_cap_lib_status ON cma_capability_lib(lib_status);
+
+    -- 每领域同步元数据：用户勾选订阅 + 上次同步时间 + 上次远端 total + 上次同步统计（JSON）。
+    -- 取消订阅不删主表数据（重订阅时复用），只是 UI 不再让用户主动刷该领域。
+    CREATE TABLE IF NOT EXISTS cma_capability_lib_meta (
+      domain          TEXT PRIMARY KEY,
+      subscribed      INTEGER NOT NULL DEFAULT 0,
+      last_synced_at  TEXT DEFAULT '',
+      remote_total    INTEGER DEFAULT 0,
+      local_total     INTEGER DEFAULT 0,
+      last_sync_stats TEXT DEFAULT ''
+    );
   `);
 
   // Schema migrations: add columns that may be missing on older DBs.
@@ -376,6 +414,22 @@ function migrate(db: Database.Database): void {
   db.prepare(`
     UPDATE settings SET value = ? WHERE key = 'library_filename_pattern' AND value = ?
   `).run('{stdCode} {title} - {source}', '{stdCode} - {source}');
+
+  // 国家 CMA 一单一库：把 11 个顶层领域种到 meta 表，subscribed 默认 0 让用户进入页面后再勾。
+  // INSERT OR IGNORE 幂等，旧库升级不会覆盖用户已订阅的状态。领域名是固定常量
+  // （详见 src/shared/cap-lib-domains.ts），多年未变；远端新增领域时手动加常量 + 跑迁移即可。
+  {
+    // 注：这里硬写 11 个名，而不是 import CAP_LIB_DOMAINS —— db.ts 处于底层，
+    // shared/ 也底层，但避免循环依赖风险（cap-lib-domains 极轻，未来如要 import 也无害）。
+    // 与 cap-lib-domains.ts 必须同步。如增删领域，两处一起改。
+    const CAP_LIB_DOMAIN_INIT = [
+      '产品质量检验', '食品检验', '农产品质量检验', '医疗器械检验', '生态环境监测',
+      '司法鉴定检测', '进出口商品检验', '林业产品质量检验', '化妆品检验',
+      '机动车排放、安全技术检验', '林木种子、草种质量检验',
+    ];
+    const ins = db.prepare('INSERT OR IGNORE INTO cma_capability_lib_meta (domain) VALUES (?)');
+    for (const name of CAP_LIB_DOMAIN_INIT) ins.run(name);
+  }
 }
 
 function addColumnIfMissing(db: Database.Database, table: string, column: string, definition: string): void {

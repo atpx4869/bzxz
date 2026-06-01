@@ -334,6 +334,7 @@ function buildQualUnifiedList(items, opts) {
       + arrowHtml
       + sourceChip
       + '<span class="qual-std-code">' + escapeHtml(grp.stdCode || '') + '</span>'
+      + (typeof capLibBadgeHtml === 'function' ? capLibBadgeHtml(grp.stdCode || '') : '')
       + scopeChip
       + '<span class="qual-std-name">' + escapeHtml(cleanName) + '</span>'
       + '<span style="margin-left:auto;font-size:11px;color:var(--text-3)">' + grp.items.length + ' 项</span>'
@@ -357,6 +358,12 @@ function renderQualSearchResults(items) {
     + '</span></div>';
   const content = buildQualUnifiedList(items, { gidPrefix: 'qg_' });
   document.getElementById('qualResults').innerHTML = header + content;
+  // 异步把搜索结果里出现的 std_code 一次性 batch-status 拉一遍，
+  // 拿到后由 fetchCapLibBadges 走 DOM 替换占位，不重渲整页
+  if (typeof fetchCapLibBadges === 'function') {
+    const codes = [...new Set(items.map(it => it.stdCode).filter(Boolean))];
+    fetchCapLibBadges(codes).catch(() => { /* silent */ });
+  }
 }
 
 function toggleAllQualGroups(expand) {

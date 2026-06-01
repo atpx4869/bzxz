@@ -116,6 +116,20 @@ cp .env.example .env.local
 
 可将同一物理机构的 CNAS 和 CMA 资质关联，查询时自动合并显示名称。
 
+### CMA 一单一库比对（独立 tab `cma-diff`）
+
+把订阅机构的 CMA 资质行与市场监管总局《检验检测机构资质认定能力项目库》比对，5 档状态标记：
+
+- ✅ **在库** — 保年精确命中、库内 active
+- ⚠ **仅限引用** — 库内已废止但允许在能力项目库内引用
+- 🟠 **已废止** — 库内已废止且不允许引用
+- 🔴 **年版过期** — 持有的年版不在库，但系列新年版在库（提示「建议改用 X」）
+- ⛔ **完全不在库** — 整个标准号系列都不在能力项目库（按政策，**资质到期后不再延续**）
+
+数据源 `cma.caqit.org.cn` 实测无鉴权、单次拉 50000+ 行不分页。同步策略：按 11 个领域分桶手动同步（产品质量检验占库 80%、独立刷）。同步用 `row_hash` 比对，未变行只刷 `last_seen_at` 不写主字段，索引干净。**soft delete 防误删**：远端某次没返回的行不立删，30 天后由 admin 手动「清理 30 天未见」才真删 —— 防远端临时抽风把订阅机构资质徽章瞬间全变红。
+
+徽章注入到标准检索结果 + 资质查询页（共享 `app-cap-lib-badge.js`），与现有 CNAS/CMA 资质徽章并排显示。
+
 ### 技术实现
 
 - CNAS：Playwright 无头浏览器 + Stealth 反检测，分页抓取能力范围 API
@@ -170,7 +184,8 @@ cp .env.example .env.local
 │   ├── services/        # 业务逻辑 + SQLite 数据库 + 使用追踪
 │   │   ├── cnas-scraper.ts   # CNAS Playwright 采集器
 │   │   ├── cma-scraper.ts    # CMA 采集器
-│   │   └── qualification-service.ts  # 资质同步调度
+│   │   ├── qualification-service.ts  # 资质同步调度
+│   │   └── cap-lib-service.ts        # 国家 CMA 一单一库镜像 + 比对（含 hash diff / soft delete）
 │   ├── shared/          # 工具函数（ID解析/错误/路径）
 │   └── sources/         # 5 个数据源（4 个 SourceAdapter + labr 独立 service）
 │       ├── bz-zhenggui/ # BZ 标准在线
@@ -252,6 +267,23 @@ cp .env.example .env.local
 | GET | `/api/cma/sync-logs` | CMA 同步日志 |
 | POST | `/api/qualification-links` | 关联 CNAS/CMA 实验室 |
 | DELETE | `/api/qualification-links/:source/:id` | 取消关联 |
+
+### CMA 一单一库比对（需登录，tab `cma-diff`）
+
+数据源：市场监管总局《检验检测机构资质认定能力项目库》[cma.caqit.org.cn](https://cma.caqit.org.cn/)。无鉴权，按 11 个顶层领域分桶同步。
+
+| 方法 | 路径 | 权限 | 说明 |
+|------|------|------|------|
+| GET    | `/api/cma-diff/domains` | tab `cma-diff` | 11 个领域元数据（订阅状态 / 上次同步 / 本地&远端行数 / 上次同步统计） |
+| PUT    | `/api/cma-diff/domains/:name/subscribe` | admin + tab | 切换某领域订阅勾选状态（body `{subscribed: bool}`） |
+| POST   | `/api/cma-diff/sync/:name` | admin + tab | 触发单领域同步（fire-and-forget；返回 jobId） |
+| POST   | `/api/cma-diff/sync-all` | admin + tab | 触发所有已订阅领域同步（返回 jobs[] 列表） |
+| GET    | `/api/cma-diff/sync/progress/:jobId` | tab | 同步进度（phase/current/total/stats） |
+| GET    | `/api/cma-diff/summary` | tab | 订阅机构 × 5 档汇总统计 |
+| GET    | `/api/cma-diff/labs` | tab | 订阅 CMA 机构维度计数表 |
+| GET    | `/api/cma-diff/labs/:certNumber?status=&q=` | tab | 单机构资质行 diff 详情 |
+| POST   | `/api/cma-diff/batch-status` | `cma-diff` / `qual` / `search` 任一 | 批量徽章状态查询（搜索结果 / 资质查询页徽章用） |
+| POST   | `/api/cma-diff/cleanup` | admin + tab | 清理 30 天未见的孤儿行（body `{days:30}`） |
 
 ### 管理（需 admin）
 
@@ -460,6 +492,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **feat(cma-diff): 新增「CMA 一单一库」tab — 订阅机构 CMA 资质 vs 国家能力项目库比对** — 数据源 `cma.caqit.org.cn`（市场监管总局《检验检测机构资质认定能力项目库》，实测无鉴权 / 单接口 60000 一次拉全 / 41s 一个领域）。按 11 个顶层领域分桶订阅 + 手动同步（产品质量检验占库 80% 体量大、独立刷）；用户勾选订阅领域、admin 触发同步、1.5s 轮询进度。`cma_capability_lib` 主表 source_id 作 PK，行级 `row_hash` diff 决定 upsert 或仅刷 `last_seen_at`（hash diff 跳过未变行）；`cma_capability_lib_meta` 维护每领域 subscribed / last_synced_at / last_sync_stats（added/changed/unchanged/removedSoft）。**soft delete 防误删**：远端某次没返回的行不立即删，标 `last_seen_at` 不更新；admin 手动触发「清理 30 天未见」才真删 —— 防远端临时抽风把订阅机构资质徽章瞬间全变红的事故。状态 5 档（在库 / 仅限引用 / 已废止 / 年版过期 / 完全不在库）由 `parseLibStatus(remark)` + `diffByLab` 双 LEFT JOIN（保年 `std_code_norm` 命中 + 剥年 `std_code_base` 兜底）算出。**徽章注入**：搜索结果卡 + 资质查询页 + 比对页三处共享 `capLibBadgeHtml`，简洁字符 chip + tooltip 详情，搭载缓存 `window.__capLibStatusCache`，同步完成后失效一次。8 个 REST 端点挂 `/api/cma-diff/*`，`batch-status` 端点放行 `cma-diff / qual / search` 三 tab 任一
 - **feat(auth): 功能权限服务端强制 `requireTab` + 权限名单补齐 check/logs + 用户明细配色** — 三合一。(1)新增 `requireTab(...tabKeys)` 中间件（仿 `requireAdmin`：内部先跑 `requireAuth`，admin 放行，`allowed_tabs=null` 全放行，否则 tab 交集校验，无权限 403「没有访问该功能的权限」），落到 stats/check/labr/qual 路由；`/api/qualifications/batch-query`（搜索结果资质徽章用）特放行 `qual` 或 `search`。**注意：** check/labr/qual 路由 `app.use(router)` 挂在根上无 mount path，不能用 `router.use()` 整 router 守卫（会命中全站），改 per-route guard。修复了「`allowed_tabs` 只在前端隐藏入口、手敲 URL 仍可越权」的洞。(2)sidebar 早先加了「标准查新 check」「运行日志 logs」两个 tab，但权限名单没同步 → 补进 `ALL_TABS` + 三处 zod enum + 前端 `TAB_ITEMS`（11 项对齐）。(3)用户明细统计卡片去掉死板灰底 `oklch(25% 0.01 250)`，改主题变量（`--surface-h` 底 + 顶部 3px 主题色条 + 同色数字），三套主题自适应；顺带修 `typeColors` 里失效的 `var(--warn)` → `var(--warning)`
 - **feat(update): 软件更新加 GitHub 下载加速代理** — 设置→软件更新底部可编辑加速代理列表（默认 `gh-proxy.org` / `v4.` / `cdn.`，第一条生效，后两条备用），保存即生效。「下载并安装」内置路径自动套 `<proxy>/<github资产url>` 前缀（仅对 `TRUSTED_UPDATE_HOSTS` 命中的 GitHub 域，代理域也纳入可信校验）。IPC `bzxz:get/set-github-proxies`，`DesktopSettings.githubProxies` 落 `bzxz-settings.json`
 - **fix(theme): light/paper 50+ "灰灰"残留补丁 + 设计文档** — 项目历史上大量 CSS hardcode `oklch(20% ...)` 暗色没走 var(--surface),light/paper 切换无效。Phase 2 补丁段追加 ~610 行,light + paper 各覆盖 50+ 处(日志/按钮/卡片内部/批量/补全/ctx-menu/modal/源徽章/状态徽章/进度条 等)。新增 [`docs/THEME_DESIGN.md`](./docs/THEME_DESIGN.md) 完整设计文档(三主题哲学 / token 表 / 80+ 组件覆盖清单 / 改一处 workflow / 续作 AI 起手指南),方便换电脑无缝接手

@@ -365,3 +365,64 @@ standard_files
 **前端表格**（`public/js/app-detail-utils.js` `renderFileLibrary`）：
 
 `fileLibrarySelectedIds: Set<number>` 跨筛选词保留选中状态，但 `renderFileLibrary` 每次执行时按 `visibleIds` 清理掉已不在过滤集合内的 id（防"看不见的勾选"溜到批量删除里）。每行 5 个动作按 `kind === 'library'` 区分：库内文件全功能，`exports/` xlsx 只有「下载 / 删除」（走原 `/api/downloads/:filename` 路径）。删除 / 批量删除 / rename 全部走 `showConfirm` 二次确认。
+
+## 十二、CMA 一单一库比对（cma-diff）
+
+### 数据源 & 表
+
+- 远端：`https://cma.caqit.org.cn/cma-admin/system/standardData/list`，无鉴权 / 单接口拉 5w+ 行 / 按 11 个顶层 `domain` 名筛选
+- 本地 `cma_capability_lib`：`source_id PK` + 11 列业务字段 + `row_hash / last_seen_at / fetched_at`；4 个索引（norm / base / domain / status）
+- 元数据 `cma_capability_lib_meta`：每领域 `subscribed / last_synced_at / remote_total / local_total / last_sync_stats(JSON)`，11 行硬初始化（与 `src/shared/cap-lib-domains.ts` 常量一致）
+
+### 模块结构
+
+```
+src/
+├── shared/
+│   ├── cap-lib-domains.ts    # 11 个顶层领域常量
+│   └── cap-lib-status.ts     # parseLibStatus(remark) + LibStatus / DiffStatus 枚举
+├── services/
+│   └── cap-lib-service.ts    # syncDomain / diffByLab / batchStatus / summary / cleanupStaleRows
+└── api/
+    └── cap-lib-routes.ts     # 10 个端点挂 /api/cma-diff/*
+
+public/js/
+├── app-cap-lib-badge.js      # 共用徽章（搜索 + 资质查询 + 比对页 三处复用）
+└── app-cma-diff.js           # 比对页主交互（领域订阅 / 同步进度 / 机构表 / diff 详情）
+```
+
+### 同步算法（hash diff + soft delete）
+
+每行：算 `sha1(domain|method|stdCode|remark|libStatus|rawStatus)`：
+- 与现存 `row_hash` 相同 → 只 `UPDATE last_seen_at`，跳过主字段写入
+- 不同 / 不存在 → `INSERT ... ON CONFLICT(source_id) DO UPDATE` 全字段 upsert + 写新 hash
+
+同步完成后：
+- 本次远端没出现的本地行 `last_seen_at` 保留旧时间（**不 DELETE**）
+- `removedSoft` 统计写入 meta.last_sync_stats
+- admin 在 `cma-diff` 页点「清理 30 天未见」走 `POST /api/cma-diff/cleanup` 真删 + 重算 local_total
+
+### 比对算法（5 档）
+
+`diffByLab(certNumber)` 用一句 SQL 双子查询：
+
+```sql
+-- 保年命中（std_code_norm 等值，唯一答案）
+exact_status, exact_remark, exact_domain
+
+-- 剥年命中（std_code_base 等值，排除已命中那条，只看 active 最新年版）
+series_new_code, series_domain
+```
+
+5 档判定顺序：
+1. `exact_status='active'`    → in_lib
+2. `exact_status='cite_only'` → cite_only
+3. `exact_status='abolished'` → abolished
+4. `series_new_code != ''`    → series_only（提示"建议改用 X 年版"）
+5. 默认                        → not_in_lib（政策：资质到期不再延续）
+
+### 权限闸门
+
+- 大多数读端点：`requireTab('cma-diff')` per-route guard（router 挂在根上无 mount path）
+- `batch-status`（徽章注入用）：`requireTab('cma-diff','qual','search')` OR 语义 —— 徽章注入三处页面，权限路径要一致
+- 写操作（同步 / 订阅切换 / 清理）：叠加 `requireAdmin`
