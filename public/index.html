@@ -403,8 +403,20 @@
       </div>
       <div class="set-page-head-actions">
         <button class="btn btn-sm btn-ghost" id="capLibExportAllBtn" onclick="capLibExportDiff({ certNumbers: [] }, this)">导出全部机构</button>
+        <button class="btn btn-sm btn-ghost" id="capLibBlacklistBtn" onclick="capLibOpenBlacklist()">黑名单管理</button>
         <button class="btn btn-sm btn-ghost" id="capLibCleanupBtn" onclick="capLibCleanup()" style="display:none">清理 30 天未见</button>
         <button class="btn btn-sm btn-primary" id="capLibSyncAllBtn" onclick="capLibSyncAll()">同步勾选领域</button>
+      </div>
+    </div>
+
+    <!-- 黑名单管理卡（默认隐藏，点「黑名单管理」展开） -->
+    <div class="set-card" id="capLibBlacklistCard" style="display:none">
+      <div class="set-card-head">
+        <div class="set-card-title">标准号黑名单</div>
+        <button class="btn btn-sm btn-ghost" style="margin-left:auto" onclick="capLibCloseBlacklist()">收起</button>
+      </div>
+      <div class="set-card-body" id="capLibBlacklistBody">
+        <div style="color:var(--text-3)">加载中…</div>
       </div>
     </div>
 

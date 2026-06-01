@@ -4451,7 +4451,7 @@ button.set-chip.active:hover { background: var(--accent-h); border-color: var(--
 
 .cap-lib-empty { padding: 24px; text-align: center; color: var(--text-3); font-size: 13px; }
 .cap-lib-lab-group { border-radius: 8px; margin-bottom: 6px; background: var(--surface-h); overflow: hidden; }
-.cap-lib-lab-head { display: grid; grid-template-columns: auto minmax(160px, 1.3fr) minmax(110px, auto) 1fr auto auto; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer; }
+.cap-lib-lab-head { display: grid; grid-template-columns: auto minmax(160px, 1.3fr) minmax(110px, auto) 1fr auto auto auto; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer; }
 .cap-lib-lab-head:hover { background: var(--border); }
 .cap-lib-lab-arrow { color: var(--text-3); font-size: 12px; width: 12px; }
 .cap-lib-lab-name  { font-size: 13.5px; font-weight: 600; color: var(--text); }
@@ -4459,6 +4459,7 @@ button.set-chip.active:hover { background: var(--accent-h); border-color: var(--
 .cap-lib-lab-counts { display: flex; align-items: center; gap: 10px; font-size: 12px; }
 .cap-lib-lab-dot   { font-size: 12px; }
 .cap-lib-lab-total { font-size: 11px; color: var(--text-3); justify-self: end; }
+.cap-lib-lab-recompare { justify-self: end; margin-left: 6px; }
 .cap-lib-lab-export { justify-self: end; margin-left: 6px; }
 .cap-lib-lab-body  { padding: 8px 12px 14px; }
 
@@ -4487,3 +4488,20 @@ button.set-chip.active:hover { background: var(--accent-h); border-color: var(--
 .cap-lib-row-code   { font-family: var(--mono, ui-monospace, SFMono-Regular, monospace); white-space: nowrap; }
 .cap-lib-row-cat    { color: var(--text-2); }
 .cap-lib-row-item   { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+/* 行操作 / 黑名单多选 / 手动映射标记（Part 3 + 4） */
+.cap-lib-row-pick { width: 28px; text-align: center; }
+.cap-lib-row-check { accent-color: var(--accent); cursor: pointer; }
+.cap-lib-row-actcell { white-space: nowrap; }
+.cap-lib-row-actions { display: inline-flex; gap: 4px; }
+.cap-lib-row-act { padding: 2px 8px; border: 1px solid var(--border); background: transparent; color: var(--accent); border-radius: 4px; cursor: pointer; font-size: 11px; }
+.cap-lib-row-act:hover:not(:disabled) { background: var(--surface-h); }
+.cap-lib-row-act:disabled { opacity: 0.4; cursor: not-allowed; }
+.cap-lib-mapped-tag { color: var(--accent); font-size: 11px; margin-left: 4px; cursor: help; }
+.cap-lib-black-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.cap-lib-black-hint { font-size: 11px; color: var(--text-3); }
+.cap-lib-black-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.cap-lib-black-list { display: flex; flex-direction: column; gap: 4px; }
+.cap-lib-black-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; background: var(--surface-h); cursor: pointer; }
+.cap-lib-black-item input { accent-color: var(--accent); }
+.cap-lib-black-reason { font-size: 11px; color: var(--text-3); margin-left: auto; }

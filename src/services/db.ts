@@ -316,6 +316,30 @@ function migrate(db: Database.Database): void {
       local_total     INTEGER DEFAULT 0,
       last_sync_stats TEXT DEFAULT ''
     );
+
+    -- cma-diff 标准号黑名单：表格合并显示导致的非标准号脏内容，加入后既不显示也不参与匹配。
+    -- 按 std_code_norm 命中（跨年变体都中）；norm 为空时回退原始 std_code 精确匹配。
+    CREATE TABLE IF NOT EXISTS cma_diff_blacklist (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      std_code      TEXT NOT NULL,
+      std_code_norm TEXT NOT NULL DEFAULT '',
+      reason        TEXT DEFAULT '',
+      created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_cma_blacklist_norm ON cma_diff_blacklist(std_code_norm);
+
+    -- cma-diff 手动映射：用户把机构资质标准号(src_norm)人工指向库内标准号(lib_norm)，
+    -- 覆盖自动判定（解决未入库实为同号不同写法/库里换号的人工兜底）。
+    -- cert_number 空=全局映射；非空=仅该机构。UNIQUE(cert_number, src_norm) 一个号一条。
+    CREATE TABLE IF NOT EXISTS cma_diff_manual_map (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      cert_number   TEXT NOT NULL DEFAULT '',
+      src_norm      TEXT NOT NULL,
+      lib_norm      TEXT NOT NULL,
+      created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(cert_number, src_norm)
+    );
+    CREATE INDEX IF NOT EXISTS idx_cma_manualmap_src ON cma_diff_manual_map(src_norm);
   `);
 
   // Schema migrations: add columns that may be missing on older DBs.

@@ -373,6 +373,8 @@ standard_files
 - 远端：`https://cma.caqit.org.cn/cma-admin/system/standardData/list`，无鉴权 / 单接口拉 5w+ 行 / 按 11 个顶层 `domain` 名筛选
 - 本地 `cma_capability_lib`：`source_id PK` + 11 列业务字段 + `row_hash / last_seen_at / fetched_at`；4 个索引（norm / base / domain / status）
 - 元数据 `cma_capability_lib_meta`：每领域 `subscribed / last_synced_at / remote_total / local_total / last_sync_stats(JSON)`，11 行硬初始化（与 `src/shared/cap-lib-domains.ts` 常量一致）
+- 黑名单 `cma_diff_blacklist`（`std_code / std_code_norm / reason`）：屏蔽非标准号脏内容，按 norm 命中不显示不匹配
+- 手动映射 `cma_diff_manual_map`（`cert_number / src_norm / lib_norm`，UNIQUE(cert,src)）：人工把机构标准号指向库内标准号覆盖自动判定，cert 空=全局
 
 ### 模块结构
 
@@ -382,9 +384,9 @@ src/
 │   ├── cap-lib-domains.ts    # 11 个顶层领域常量
 │   └── cap-lib-status.ts     # parseLibStatus(remark) + LibStatus / DiffStatus 枚举
 ├── services/
-│   └── cap-lib-service.ts    # syncDomain / diffByLab / batchStatus / summary / cleanupStaleRows / exportDiff
+│   └── cap-lib-service.ts    # syncDomain / diffByLab / batchStatus / summary / cleanupStaleRows / exportDiff / 黑名单 / 手动映射 / rematch
 └── api/
-    └── cap-lib-routes.ts     # 11 个端点挂 /api/cma-diff/*（含 POST /export 流式 xlsx）
+    └── cap-lib-routes.ts     # 18 个端点挂 /api/cma-diff/*（含 export / blacklist / manual-map / rematch）
 
 public/js/
 ├── app-cap-lib-badge.js      # 共用徽章（搜索 + 资质查询 + 比对页 三处复用）
@@ -402,30 +404,36 @@ public/js/
 - `removedSoft` 统计写入 meta.last_sync_stats
 - admin 在 `cma-diff` 页点「清理 30 天未见」走 `POST /api/cma-diff/cleanup` 真删 + 重算 local_total
 
-### 比对算法（5 档）
+**并发与事件循环（防假死）**：所有 `runSync` 串到模块级 `syncChain`（**并发 1**），任意时刻
+最多一个领域入库事务在跑；入库按 **2000 行分块事务**，批次间 `await setImmediate` 让出事件循环。
+Why：better-sqlite3 事务同步阻塞主线程，旧版「全部更新」一次性启动全部领域 → 多个 41k 行大事务
+连环锁死事件循环 → 进度轮询/所有请求排队 → 页面假死。串行队列 + 分块让出根治。
 
-`diffByLab(certNumber)` 用一句 SQL 双子查询：
+### 比对算法（5 档，按标准号去重）
 
-```sql
--- 保年命中（std_code_norm 等值，唯一答案）
-exact_status, exact_remark, exact_domain
-
--- 剥年命中（std_code_base 等值，排除已命中那条，只看 active 最新年版）
-series_new_code, series_domain
-```
+`diffByLab(certNumber)`：先取机构资质行按 `std_code_norm` **去重**（同号多检测项目聚合到
+`testItems[]` 一行），过滤黑名单，再对去重集合用 `std_code_norm IN` + `std_code_base IN`
+两句**批量查库**（复用 `batchStatus` 的 `exactMap`/`seriesMap`/`priority` 写法）。
+取代旧「每条资质行 6 个相关子查询」的 O(N×6) 放大；`summary`/`labsCounts`/详情/导出全部受益。
 
 5 档判定顺序：
-1. `exact_status='active'`    → in_lib
-2. `exact_status='cite_only'` → cite_only
-3. `exact_status='abolished'` → abolished
-4. `series_new_code != ''`    → series_only（提示"建议改用 X 年版"）
+1. 保年 `exact='active'`    → in_lib
+2. 保年 `exact='cite_only'` → cite_only
+3. 保年 `exact='abolished'` → abolished
+4. 剥年命中 active 且不同 norm → series_only（提示"建议改用 X 年版"）
 5. 默认                        → not_in_lib（政策：资质到期不再延续）
+
+**人工兜底**：黑名单（`cma_diff_blacklist`，norm 命中 / norm 空回退原始 std_code）在去重后剔除，
+不显示不计数不匹配；手动映射（`cma_diff_manual_map`，机构级优先全局）在判定前把 `src_norm`
+换成 `lib_norm` 查库覆盖自动结果；`rematchOne` 复用 `diffByLab` 全量算后挑出单标准号行
+（单项重试，前端就地替换免整页重渲）。
 
 ### 权限闸门
 
 - 大多数读端点：`requireTab('cma-diff')` per-route guard（router 挂在根上无 mount path）
 - `batch-status`（徽章注入用）：`requireTab('cma-diff','qual','search')` OR 语义 —— 徽章注入三处页面，权限路径要一致
-- 写操作（同步 / 订阅切换 / 清理）：叠加 `requireAdmin`
+- 写操作（同步 / 订阅切换 / 清理 / 黑名单增删 / 手动映射增删）：叠加 `requireAdmin`；
+  导出 / rematch / 列表读取仅 `requireTab('cma-diff')`
 - 导出 `POST /export`：`requireTab('cma-diff')`（仅比对页触发，不同于 batch-status 的三 tab OR）
 
 ### 页面 UI（app-cma-diff.js）

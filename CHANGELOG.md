@@ -3,6 +3,31 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix(cma-diff): 修「全部更新」假死 + diffByLab 去重提速 + 黑名单 / 手动匹配 / 重试** —
+  - **假死根因**：「全部更新」→ `/sync-all` 一次性 `startSync` 全部订阅领域，每个 `runSync`
+    的入库是 **better-sqlite3 同步事务**（41k 行的产品质量检验单事务就锁主线程数秒~数十秒），
+    多领域并发返回后争抢主线程 → 所有 HTTP（含进度轮询）排队 → 页面假死。
+  - **修复**：① 同步走**全局串行队列**（模块级 `syncChain`，并发 1，任意时刻最多 1 个入库事务）；
+    ② `runSync` 入库改**分块事务**（每 2000 行一个 `transaction`，批次间 `await setImmediate` 让出
+    事件循环，进度轮询/其它请求可插入）；③ 前端「全部更新」用计数器**收敛重渲**（旧版每领域 done
+    各调一次 `loadCapLibPage` = 重渲风暴，改最后一个完成才刷一次）。
+  - **diffByLab 去重提速**：旧实现对机构**每条**资质行跑 6 个相关子查询且不去重。改为先按
+    `std_code_norm` **去重**（同号多检测项目聚合到 `testItems[]` 一行）→ 对去重集合用
+    `std_code_norm IN` + `std_code_base IN` 两句批量查库（复用 `batchStatus` 的 `exactMap`/
+    `seriesMap`/`priority` 写法）。`summary` / `labsCounts` / 详情 / 导出全部受益。UI 同号合并一行、
+    导出 testItem 列 `、` 连接。
+  - **标准号黑名单**（新表 `cma_diff_blacklist`）：屏蔽表格合并产生的非标准号脏行，按 `std_code_norm`
+    命中（norm 空回退原始 `std_code` 精确）—— **既不显示也不参与匹配**。机构对比表每行多选 +
+    「勾选项加入黑名单」；顶部「黑名单管理」卡多选移除。`GET/POST/DELETE /api/cma-diff/blacklist`。
+  - **手动映射 + 重试**（新表 `cma_diff_manual_map`）：未入库行「指定」库内标准号 →
+    写 `src_norm → lib_norm` 映射（机构级优先全局）覆盖自动判定；「重试」单标准号局部重匹配
+    （`POST /api/cma-diff/rematch` 返回最新行）；机构头「重新对比」清缓存整机构重拉。
+    `GET/POST/DELETE /api/cma-diff/manual-map`。
+  - 文件：`src/services/cap-lib-service.ts`（队列 + 分块 + diffByLab 去重 + 黑名单/映射/rematch）/
+    `src/api/cap-lib-routes.ts`（5 个新端点）/ `src/services/db.ts`（两张新表）/
+    `public/js/app-cma-diff.js`（收敛重渲 + 行多选/操作 + 黑名单面板）/ `public/index.html`
+    （黑名单卡 + 入口）/ `public/styles.css` + `web/src/styles/pages/cap-lib.css`（行操作/黑名单样式，
+    双文件镜像全 token 化）。
 - **refactor(cma-diff): 领域卡折叠+批量同步 / 机构 5 档分类折叠分页 / 三级导出** —
   - **领域订阅卡整卡折叠**（默认收起）：标题栏点击折叠，收起态显示摘要「已订阅 N 个领域 · 最近同步 {最新一次}」，折叠态记 `localStorage('capLib.domCollapsed')`；展开后两列 grid 布局（窄屏 ≤900px 塌回单列），长领域名 `ellipsis + title` 兜底、进度条改弹性宽 `flex:1;max-width:90px`，高度砍半把空间还给下方机构对比
   - **批量同步**（admin）：领域卡内加「更新勾选 / 全部更新」。更新勾选 = **串行**同步勾中领域（逐个 await 完成再发下一个，避免 N 个 `pageSize=60000` 长请求并发轰上游）；全部更新 = 复用现有 `capLibSyncAll`（sync-all 端点）

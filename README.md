@@ -128,6 +128,10 @@ cp .env.example .env.local
 
 数据源 `cma.caqit.org.cn` 实测无鉴权、单次拉 50000+ 行不分页。同步策略：按 11 个领域分桶手动同步（产品质量检验占库 80%、独立刷）。同步用 `row_hash` 比对，未变行只刷 `last_seen_at` 不写主字段，索引干净。**soft delete 防误删**：远端某次没返回的行不立删，30 天后由 admin 手动「清理 30 天未见」才真删 —— 防远端临时抽风把订阅机构资质徽章瞬间全变红。
 
+**性能（防假死）**：同步走**全局串行队列**（并发 1），`runSync` 入库按 2000 行分块事务、批次间 `setImmediate` 让出事件循环 —— 避免「全部更新」时多个 41k 行 better-sqlite3 同步事务连环锁死主线程导致页面假死。`diffByLab` 先按 `std_code_norm` **去重**机构标准号（同号多检测项目聚合一行）再用 `IN` 批量查库，取代旧「每行 6 个相关子查询」。
+
+**人工兜底**：标准号**黑名单**（屏蔽表格合并产生的非标准号脏行，按 norm 命中、不显示不匹配，可多选增删）；**手动映射**（未入库行人工指定库内标准号，覆盖自动判定）；**单项重试 / 机构重新对比**（同步后局部或整机构刷新匹配）。
+
 **页面交互**：领域订阅卡整卡可折叠（默认收起 + 标题栏摘要「已订阅 N 个 · 最近同步 时间」，记 localStorage），展开后两列布局并提供「更新勾选 / 全部更新」批量同步（admin，更新勾选串行化避免并发轰上游）。机构维度比对按 5 档状态二级折叠 + 每档 50 条/页分页，进机构自动展开第一个非空的最严重档。**三级导出**：状态档头「导出」(单机构单档) / 机构头「导出此机构」(单机构整表) / 顶部「导出全部机构」(全订阅合并表)，统一 `POST /api/cma-diff/export` 生成 Excel（状态列 emoji 前缀 + 首行 AutoFilter + 列宽自适应，流式下载不留临时文件）。
 
 徽章注入到标准检索结果 + 资质查询页（共享 `app-cap-lib-badge.js`），与现有 CNAS/CMA 资质徽章并排显示。
@@ -286,6 +290,13 @@ cp .env.example .env.local
 | GET    | `/api/cma-diff/labs/:certNumber?status=&q=` | tab | 单机构资质行 diff 详情 |
 | POST   | `/api/cma-diff/batch-status` | `cma-diff` / `qual` / `search` 任一 | 批量徽章状态查询（搜索结果 / 资质查询页徽章用） |
 | POST   | `/api/cma-diff/export` | tab `cma-diff` | 三级导出比对结果为 Excel（body `{certNumbers:[], statuses?, keyword?}`；空 certNumbers=全部订阅机构；流式 `res.send(buffer)` 不落临时文件） |
+| GET    | `/api/cma-diff/blacklist` | tab `cma-diff` | 标准号黑名单列表 |
+| POST   | `/api/cma-diff/blacklist` | admin + tab | 批量加入黑名单（body `{items:[{stdCode,reason?}]}`；多选） |
+| DELETE | `/api/cma-diff/blacklist` | admin + tab | 批量移除黑名单（body `{ids:[]}`） |
+| GET    | `/api/cma-diff/manual-map?certNumber=` | tab `cma-diff` | 手动映射列表（机构级 + 全局） |
+| POST   | `/api/cma-diff/manual-map` | admin + tab | 设手动映射（body `{certNumber, srcStdCode, libStdCode}`；覆盖自动判定） |
+| DELETE | `/api/cma-diff/manual-map` | admin + tab | 删手动映射（body `{id}`） |
+| POST   | `/api/cma-diff/rematch` | tab `cma-diff` | 单标准号重新匹配（body `{certNumber, stdCode}`；返回最新 diff 行，前端就地刷新） |
 | POST   | `/api/cma-diff/cleanup` | admin + tab | 清理 30 天未见的孤儿行（body `{days:30}`） |
 
 ### 管理（需 admin）

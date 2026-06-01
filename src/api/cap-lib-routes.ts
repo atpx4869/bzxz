@@ -124,7 +124,8 @@ export function createCapLibRoutes(
       const aoa = [
         header,
         ...rows.map(r => [
-          r.labName, r.certNumber, r.stdCode, r.stdName, r.category, r.testItem,
+          r.labName, r.certNumber, r.stdCode, r.stdName, r.category,
+          (r.testItems && r.testItems.length ? r.testItems.join('、') : r.testItem),
           statusCellText(r.diffStatus), r.libRemark, r.libDomain, r.seriesNewCode, r.seriesDomain,
         ]),
       ];
@@ -151,6 +152,77 @@ export function createCapLibRoutes(
       const schema = z.object({ stdCodes: z.array(z.string().trim()).min(1).max(500) });
       const { stdCodes } = schema.parse(req.body);
       respond(res, toCamelCase(svc.batchStatus(stdCodes)));
+    } catch (e) { next(normalizeError(e)); }
+  });
+
+  // ── 黑名单（屏蔽非标准号脏内容；读 tab / 写 admin） ────────────────
+  router.get('/api/cma-diff/blacklist', requireCmaDiff, (_req, res, next) => {
+    try { respond(res, { items: svc.listBlacklist() }); } catch (e) { next(normalizeError(e)); }
+  });
+
+  router.post('/api/cma-diff/blacklist', requireCmaDiff, requireAdmin, (req, res, next) => {
+    try {
+      const schema = z.object({
+        items: z.array(z.object({
+          stdCode: z.string().trim().min(1),
+          reason: z.string().trim().max(200).optional(),
+        })).min(1).max(500),
+      });
+      const { items } = schema.parse(req.body);
+      const added = svc.addBlacklist(items);
+      respond(res, { added });
+    } catch (e) { next(normalizeError(e)); }
+  });
+
+  router.delete('/api/cma-diff/blacklist', requireCmaDiff, requireAdmin, (req, res, next) => {
+    try {
+      const schema = z.object({ ids: z.array(z.number().int()).min(1).max(500) });
+      const { ids } = schema.parse(req.body);
+      const removed = svc.removeBlacklist(ids);
+      respond(res, { removed });
+    } catch (e) { next(normalizeError(e)); }
+  });
+
+  // ── 手动映射 + 重试（人工兜底；读 tab / 写 admin） ─────────────────
+  router.get('/api/cma-diff/manual-map', requireCmaDiff, (req, res, next) => {
+    try {
+      const certNumber = typeof req.query.certNumber === 'string' ? req.query.certNumber : undefined;
+      respond(res, { items: svc.listManualMap(certNumber) });
+    } catch (e) { next(normalizeError(e)); }
+  });
+
+  router.post('/api/cma-diff/manual-map', requireCmaDiff, requireAdmin, (req, res, next) => {
+    try {
+      const schema = z.object({
+        certNumber: z.string().trim().max(64).default(''),
+        srcStdCode: z.string().trim().min(1),
+        libStdCode: z.string().trim().min(1),
+      });
+      const { certNumber, srcStdCode, libStdCode } = schema.parse(req.body);
+      svc.setManualMap(certNumber, srcStdCode, libStdCode);
+      respond(res, { ok: true });
+    } catch (e) { next(normalizeError(e)); }
+  });
+
+  router.delete('/api/cma-diff/manual-map', requireCmaDiff, requireAdmin, (req, res, next) => {
+    try {
+      const schema = z.object({ id: z.number().int() });
+      const { id } = schema.parse(req.body);
+      respond(res, { removed: svc.removeManualMap(id) });
+    } catch (e) { next(normalizeError(e)); }
+  });
+
+  // 单项重新匹配：返回该标准号最新 diff 行（前端就地替换，免整页重渲）
+  router.post('/api/cma-diff/rematch', requireCmaDiff, (req, res, next) => {
+    try {
+      const schema = z.object({
+        certNumber: z.string().trim().min(1),
+        stdCode: z.string().trim().min(1),
+      });
+      const { certNumber, stdCode } = schema.parse(req.body);
+      const row = svc.rematchOne(certNumber, stdCode);
+      if (!row) { respondError(res, 404, 'NOT_FOUND', '未找到该标准号'); return; }
+      respond(res, toCamelCase({ row }));
     } catch (e) { next(normalizeError(e)); }
   });
 

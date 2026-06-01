@@ -177,6 +177,9 @@
         await syncDomainAndWait(domain, rowBtn);
       }
       showToast('勾选领域已全部同步完成');
+      // 串行循环结束后整页刷新一次（syncDomainAndWait 内只失效缓存、不重渲）
+      if (window.capLibInvalidateCache) window.capLibInvalidateCache();
+      window.loadCapLibPage();
     } finally {
       if (triggerBtn) { triggerBtn.disabled = false; triggerBtn.textContent = '更新勾选'; }
     }
@@ -289,7 +292,16 @@
         showToast('没有勾选领域可同步', 'fail');
         return;
       }
-      for (const j of jobs) pollSyncProgress(j.jobId, j.domain, null);
+      // 收敛重渲：每个领域 done 不各刷一次（旧版重渲风暴），最后一个完成才整页刷一次
+      let remaining = jobs.length;
+      const onSettled = function () {
+        remaining -= 1;
+        if (remaining <= 0) {
+          if (window.capLibInvalidateCache) window.capLibInvalidateCache();
+          window.loadCapLibPage();
+        }
+      };
+      for (const j of jobs) pollSyncProgress(j.jobId, j.domain, null, { onSettled });
     } catch (e) {
       showToast('启动同步失败：' + (e.message || e), 'fail');
     } finally {
@@ -297,13 +309,14 @@
     }
   };
 
-  function pollSyncProgress(jobId, domain, btn) {
+  function pollSyncProgress(jobId, domain, btn, opts) {
     if (progressTimers.has(jobId)) return; // 同 jobId 已在轮询
+    const onSettled = opts && opts.onSettled;   // 批量同步：完成/失败回调（收敛重渲），不每个领域各刷一次
     const progEl = document.getElementById('capLibDomProg-' + domain);
     const tick = async function () {
       try {
         const res = await fetch('/api/cma-diff/sync/progress/' + encodeURIComponent(jobId));
-        if (!res.ok) { stop(); return; }
+        if (!res.ok) { stop(); if (onSettled) onSettled(); return; }
         const p = await readApiResponse(res);
         const pct = p.total ? Math.min(100, Math.round((p.current || 0) / p.total * 100)) : 0;
         if (progEl) {
@@ -313,13 +326,17 @@
         if (p.phase === 'done') {
           showToast('「' + domain + '」同步完成 · 新增 ' + (p.stats?.added || 0) + ' / 变更 ' + (p.stats?.changed || 0));
           stop();
-          if (window.capLibInvalidateCache) window.capLibInvalidateCache();
-          window.loadCapLibPage();
+          if (onSettled) { onSettled(); }
+          else {
+            if (window.capLibInvalidateCache) window.capLibInvalidateCache();
+            window.loadCapLibPage();
+          }
         } else if (p.phase === 'error') {
           showToast('「' + domain + '」同步失败：' + (p.error || '未知错误'), 'fail');
           stop();
+          if (onSettled) onSettled();
         }
-      } catch (e) { stop(); }
+      } catch (e) { stop(); if (onSettled) onSettled(); }
     };
     const stop = function () {
       const h = progressTimers.get(jobId); if (h) clearInterval(h);
@@ -410,6 +427,9 @@
               <span class="cap-lib-lab-cert">${escHtml(lab.certNumber)}</span>
               <span class="cap-lib-lab-counts">${dots || '<span style="color:var(--text-3)">无数据</span>'}</span>
               <span class="cap-lib-lab-total">${(lab.total || 0).toLocaleString()} 行</span>
+              <button class="btn btn-sm btn-ghost cap-lib-lab-recompare"
+                onclick="event.stopPropagation();capLibRecompareLab('${escAttr(lab.certNumber)}')"
+                title="清缓存重新与国家库对比">重新对比</button>
               <button class="btn btn-sm btn-ghost cap-lib-lab-export"
                 onclick="event.stopPropagation();capLibExportDiff({ certNumbers: ['${escAttr(lab.certNumber)}'] }, this)"
                 title="导出「${labNameAttr}」整表">导出此机构</button>
@@ -487,28 +507,32 @@
           </div>
           <div class="cap-lib-stgroup-body" id="${gid}_body" data-page="1"
                data-rendered="${expanded ? '1' : ''}" style="display:${expanded ? '' : 'none'}">
-            ${expanded ? renderPagedTable(list, 1) : ''}
+            ${expanded ? renderPagedTable(list, 1, certNumber) : ''}
           </div>
         </div>`;
     }
     body.innerHTML = html;
   }
 
-  /** 按 PAGE_SIZE 切片 + 翻页器。pages≤1 只显示总数。 */
-  function renderPagedTable(list, page) {
+  /** 按 PAGE_SIZE 切片 + 翻页器 + 黑名单批量条。pages≤1 只显示总数。 */
+  function renderPagedTable(list, page, certNumber) {
     const total = list.length;
     const pages = Math.ceil(total / PAGE_SIZE) || 1;
     const p = Math.min(Math.max(1, page), pages);
     const slice = list.slice((p - 1) * PAGE_SIZE, p * PAGE_SIZE);
+    const blackBar = `<div class="cap-lib-black-bar">
+      <button class="cap-lib-row-act" onclick="capLibAddCheckedToBlacklist(this)">勾选项加入黑名单</button>
+      <span class="cap-lib-black-hint">黑名单内的标准号不显示也不参与匹配（用于屏蔽表格合并产生的非标准号脏行）</span>
+    </div>`;
     const tableHtml = `
-      <table class="cap-lib-diff-table">
-        <thead><tr><th>状态</th><th>标准号</th><th>标准名</th><th>类别/项目</th><th>替代/备注</th></tr></thead>
-        <tbody>${slice.map(renderDiffRow).join('')}</tbody>
+      <table class="cap-lib-diff-table cap-lib-diff-table-actions">
+        <thead><tr><th class="cap-lib-row-pick"></th><th>状态</th><th>标准号</th><th>标准名</th><th>类别/项目</th><th>替代/备注</th><th>操作</th></tr></thead>
+        <tbody>${slice.map(r => renderDiffRow(r, certNumber)).join('')}</tbody>
       </table>`;
     const pagerHtml = pages > 1
       ? renderPager(p, pages, total)
       : `<div class="cap-lib-pager">共 ${total} 条</div>`;
-    return tableHtml + pagerHtml;
+    return blackBar + tableHtml + pagerHtml;
   }
 
   /** 翻页器：≤7 页全列，否则压缩成「1 … cur-1 cur cur+1 … last」。 */
@@ -544,8 +568,9 @@
     if (!stbody || !group || !labBody) return;
     const status = group.getAttribute('data-status');
     const list = (labBody._capLibGroups || {})[status] || [];
+    const certNumber = labBody.dataset.cert || '';
     stbody.dataset.page = String(page);
-    stbody.innerHTML = renderPagedTable(list, page);
+    stbody.innerHTML = renderPagedTable(list, page, certNumber);
     stbody.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   };
 
@@ -560,7 +585,8 @@
         const labBody = stbody.closest('.cap-lib-lab-body');
         const status = group && group.getAttribute('data-status');
         const list = (labBody && labBody._capLibGroups || {})[status] || [];
-        stbody.innerHTML = renderPagedTable(list, Number(stbody.dataset.page) || 1);
+        const certNumber = (labBody && labBody.dataset.cert) || '';
+        stbody.innerHTML = renderPagedTable(list, Number(stbody.dataset.page) || 1, certNumber);
         stbody.dataset.rendered = '1';
       }
       stbody.style.display = '';
@@ -571,18 +597,34 @@
     }
   };
 
-  function renderDiffRow(r) {
+  function renderDiffRow(r, certNumber) {
     const meta = DIFF_STATUS_META[r.diffStatus] || { label: r.diffStatus, color: 'var(--text-3)', emoji: '·' };
     const note = r.diffStatus === 'series_only' && r.seriesNewCode
       ? `建议改用 <b>${escHtml(r.seriesNewCode)}</b>${r.seriesDomain ? ' · ' + escHtml(r.seriesDomain) : ''}`
       : (r.libRemark ? escHtml(r.libRemark) : '');
+    // 同号聚合的多个检测项目（去重显示）
+    const items = (r.testItems && r.testItems.length ? r.testItems : (r.testItem ? [r.testItem] : []));
+    const itemHtml = items.map(escHtml).join('、');
+    const codeAttr = escAttr(r.stdCode);
+    const certAttr = escAttr(certNumber || '');
+    const mappedTag = r.manualMapped ? ' <span class="cap-lib-mapped-tag" title="已手动映射">✎</span>' : '';
+    // 行操作：未入库提供「指定」库内标准号 + 「重试」；其它档可重试
+    const isNotInLib = r.diffStatus === 'not_in_lib';
+    const actions = `<div class="cap-lib-row-actions">`
+      + (isNotInLib
+          ? `<button class="cap-lib-row-act" onclick="capLibManualMap('${certAttr}','${codeAttr}')" title="手动指定库内标准号">指定</button>`
+          : '')
+      + `<button class="cap-lib-row-act" onclick="capLibRematchRow(this,'${certAttr}','${codeAttr}')" title="重新匹配此标准号">重试</button>`
+      + `</div>`;
     return `
-      <tr class="cap-lib-diff-row" data-status="${r.diffStatus}">
+      <tr class="cap-lib-diff-row" data-status="${r.diffStatus}" data-code="${codeAttr}">
+        <td class="cap-lib-row-pick"><input type="checkbox" class="cap-lib-row-check" data-code="${codeAttr}" title="勾选后可加入黑名单"></td>
         <td><span class="cap-lib-row-status" style="color:${meta.color}">${meta.emoji} ${escHtml(meta.label)}</span></td>
-        <td class="cap-lib-row-code">${escHtml(r.stdCode)}</td>
+        <td class="cap-lib-row-code">${escHtml(r.stdCode)}${mappedTag}</td>
         <td>${escHtml(r.stdName || '')}</td>
-        <td><div class="cap-lib-row-cat">${escHtml(r.category || '')}</div><div class="cap-lib-row-item">${escHtml(r.testItem || '')}</div></td>
+        <td><div class="cap-lib-row-cat">${escHtml(r.category || '')}</div><div class="cap-lib-row-item">${itemHtml}</div></td>
         <td>${note}</td>
+        <td class="cap-lib-row-actcell">${actions}</td>
       </tr>`;
   }
 
@@ -619,6 +661,155 @@
     } finally {
       if (btn) btn.disabled = false;
     }
+  };
+
+  // ── 黑名单 / 手动映射 / 重试（Part 3 + 4） ────────────────────────
+
+  /** 收集当前状态档表内勾选行的标准号，批量加入黑名单（admin）。 */
+  window.capLibAddCheckedToBlacklist = async function (btn) {
+    if (!isAdminUser()) { showToast('仅管理员可操作', 'fail'); return; }
+    const scope = btn.closest('.cap-lib-stgroup-body') || document;
+    const codes = [...scope.querySelectorAll('.cap-lib-row-check:checked')]
+      .map(cb => cb.getAttribute('data-code')).filter(Boolean);
+    if (!codes.length) { showToast('未勾选任何行', 'fail'); return; }
+    if (!confirm('确认把勾选的 ' + codes.length + ' 个标准号加入黑名单？加入后不再显示、不参与匹配。')) return;
+    btn.disabled = true;
+    try {
+      const res = await fetch('/api/cma-diff/blacklist', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: codes.map(c => ({ stdCode: c })) }),
+      });
+      if (!res.ok) { const t = await res.text(); showToast('加入失败：' + (t || res.status), 'fail'); return; }
+      const body = await readApiResponse(res);
+      showToast('已加入黑名单 ' + (body.added || 0) + ' 个');
+      reloadLabAfterChange(btn);
+    } catch (e) { showToast('加入失败：' + (e.message || e), 'fail'); }
+    finally { btn.disabled = false; }
+  };
+
+  /** 未入库行手动指定库内标准号（admin）→ 写映射 → 局部重匹配刷新该行。 */
+  window.capLibManualMap = async function (certNumber, srcStdCode) {
+    if (!isAdminUser()) { showToast('仅管理员可操作', 'fail'); return; }
+    const libStdCode = prompt('为「' + srcStdCode + '」指定库内标准号（填国家库里的标准号，如 GB/T 1234-2024）：', '');
+    if (libStdCode == null) return;
+    const v = libStdCode.trim();
+    if (!v) { showToast('未填写标准号', 'fail'); return; }
+    try {
+      const res = await fetch('/api/cma-diff/manual-map', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ certNumber, srcStdCode, libStdCode: v }),
+      });
+      if (!res.ok) { const t = await res.text(); showToast('指定失败：' + (t || res.status), 'fail'); return; }
+      showToast('已指定，正在重新匹配…');
+      await rematchAndReplaceRow(certNumber, srcStdCode);
+    } catch (e) { showToast('指定失败：' + (e.message || e), 'fail'); }
+  };
+
+  /** 单项重试：重新匹配该标准号并就地替换该行（不整页重渲）。 */
+  window.capLibRematchRow = async function (btn, certNumber, stdCode) {
+    if (btn) btn.disabled = true;
+    try { await rematchAndReplaceRow(certNumber, stdCode); }
+    finally { if (btn) btn.disabled = false; }
+  };
+
+  // 调 rematch 端点拿最新行 → 如果状态变了就整机构重渲（行可能要换档），否则就地更新该行内容
+  async function rematchAndReplaceRow(certNumber, stdCode) {
+    try {
+      const res = await fetch('/api/cma-diff/rematch', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ certNumber, stdCode }),
+      });
+      if (!res.ok) { const t = await res.text(); showToast('重试失败：' + (t || res.status), 'fail'); return; }
+      const body = await readApiResponse(res);
+      const row = body && body.row;
+      if (!row) { showToast('未找到该标准号'); return; }
+      // 状态可能跨档变化（如 not_in_lib → in_lib），最稳是整机构失效重拉
+      capLibRecompareLab(certNumber);
+      showToast('已重新匹配：' + (DIFF_STATUS_META[row.diffStatus]?.label || row.diffStatus));
+    } catch (e) { showToast('重试失败：' + (e.message || e), 'fail'); }
+  }
+
+  /** 机构维度手动触发重新对比：失效该机构缓存 + 重新拉取展开。 */
+  window.capLibRecompareLab = function (certNumber) {
+    const gid = 'capLibLab_' + certNumber;
+    const body = document.getElementById(gid + '_body');
+    if (!body) return;
+    body.dataset.loaded = '';
+    body._capLibGroups = null;
+    // 若当前已展开则立即重拉；否则下次展开自然重拉
+    if (body.style.display !== 'none') {
+      // 先收起再展开触发重新加载
+      body.style.display = 'none';
+      capLibToggleLab(certNumber);
+    }
+  };
+
+  // 黑名单/映射变更后，把所在机构重新对比（找按钮所在机构 cert）
+  function reloadLabAfterChange(el) {
+    const labBody = el.closest && el.closest('.cap-lib-lab-body');
+    const cert = labBody && labBody.dataset.cert;
+    if (cert) capLibRecompareLab(cert);
+  }
+
+  /** 打开黑名单管理：拉列表渲染到一个卡里（多选移除）。 */
+  window.capLibOpenBlacklist = async function () {
+    const card = document.getElementById('capLibBlacklistCard');
+    const bodyEl = document.getElementById('capLibBlacklistBody');
+    if (!card || !bodyEl) return;
+    card.style.display = '';
+    bodyEl.innerHTML = '<div style="color:var(--text-3)">加载中…</div>';
+    try {
+      const res = await fetch('/api/cma-diff/blacklist');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await readApiResponse(res);
+      const items = (data && data.items) || [];
+      if (!items.length) {
+        bodyEl.innerHTML = '<div style="color:var(--text-3)">黑名单为空。在机构对比表里勾选脏行点「勾选项加入黑名单」即可添加。</div>';
+        return;
+      }
+      const isAdmin = isAdminUser();
+      const rows = items.map(it => `
+        <label class="cap-lib-black-item">
+          <input type="checkbox" class="cap-lib-black-pick" data-id="${it.id}" ${isAdmin ? '' : 'disabled'}>
+          <span class="cap-lib-row-code">${escHtml(it.stdCode)}</span>
+          ${it.reason ? '<span class="cap-lib-black-reason">' + escHtml(it.reason) + '</span>' : ''}
+        </label>`).join('');
+      const removeBtn = isAdmin
+        ? '<button class="cap-lib-row-act" onclick="capLibRemoveBlacklist(this)">移除勾选</button>'
+        : '';
+      bodyEl.innerHTML = `<div class="cap-lib-black-toolbar">${removeBtn}
+        <span class="cap-lib-black-hint">共 ${items.length} 条</span></div>
+        <div class="cap-lib-black-list">${rows}</div>`;
+    } catch (e) {
+      bodyEl.innerHTML = `<div style="color:var(--danger)">加载失败：${escHtml(e.message || String(e))}</div>`;
+    }
+  };
+
+  window.capLibRemoveBlacklist = async function (btn) {
+    if (!isAdminUser()) return;
+    const ids = [...document.querySelectorAll('.cap-lib-black-pick:checked')]
+      .map(cb => Number(cb.getAttribute('data-id'))).filter(Boolean);
+    if (!ids.length) { showToast('未勾选任何条目', 'fail'); return; }
+    btn.disabled = true;
+    try {
+      const res = await fetch('/api/cma-diff/blacklist', {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) { const t = await res.text(); showToast('移除失败：' + (t || res.status), 'fail'); return; }
+      const body = await readApiResponse(res);
+      showToast('已移除 ' + (body.removed || 0) + ' 条');
+      capLibOpenBlacklist();   // 刷新列表
+      // 黑名单变更影响所有机构匹配 → 失效缓存 + 整页重渲
+      if (window.capLibInvalidateCache) window.capLibInvalidateCache();
+      window.loadCapLibPage();
+    } catch (e) { showToast('移除失败：' + (e.message || e), 'fail'); }
+    finally { btn.disabled = false; }
+  };
+
+  window.capLibCloseBlacklist = function () {
+    const card = document.getElementById('capLibBlacklistCard');
+    if (card) card.style.display = 'none';
   };
 
   // ── Cleanup（admin） ───────────────────────────────────────────────

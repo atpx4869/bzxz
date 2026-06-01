@@ -90,12 +90,16 @@ export interface DiffRow {
   stdName: string;
   category: string;
   testItem: string;
+  /** 同一标准号(std_code_norm)下聚合的全部检测项目（去重后展示用；单项时与 testItem 同） */
+  testItems: string[];
   diffStatus: DiffStatus;
   libStatus: LibStatus | '';
   libRemark: string;
   libDomain: string;
   seriesNewCode: string;
   seriesDomain: string;
+  /** 该行是否被手动映射覆盖（UI 标记，便于用户识别人工兜底项） */
+  manualMapped?: boolean;
 }
 
 export interface DiffSummary {
@@ -143,6 +147,16 @@ function pruneProgressStore(): void {
   const keys = [...progressStore.keys()];
   for (const k of keys.slice(0, keys.length - 50)) progressStore.delete(k);
 }
+
+/**
+ * 全局同步串行队列（并发 1）。所有 runSync 串到这条 chain 上，任意时刻最多一个领域
+ * 入库事务在跑 —— 配合 runSync 内分块让出，事件循环始终可响应。
+ *
+ * Why 串行而非并发 N：better-sqlite3 事务同步阻塞主线程，N 个大事务并发返回会连环锁死
+ * 事件循环（= 用户点「全部更新」假死的根因）。远端 fetch 是 IO 等待、不占主线程，
+ * 串行不显著拖慢总时长。
+ */
+let syncChain: Promise<void> = Promise.resolve();
 
 // ─── Service ─────────────────────────────────────────────────────────────
 
@@ -198,13 +212,14 @@ export class CapLibService {
     setProgress(jobId, { phase: 'pending', domain, current: 0, total: 0 });
     pruneProgressStore();
 
-    // fire-and-forget；内部错误存到 progressStore 而非抛出
-    void this.runSync(jobId, domain).catch(err => {
+    // 串到全局队列：前一个领域 settle 后才跑本领域，保证任意时刻最多 1 个入库事务。
+    // 内部错误存到 progressStore 而非抛出（chain 不能因单领域失败中断后续）。
+    syncChain = syncChain.then(() => this.runSync(jobId, domain).catch(err => {
       setProgress(jobId, {
         phase: 'error', domain, current: 0, total: 0,
         error: err instanceof Error ? err.message : String(err),
       });
-    });
+    }));
     return jobId;
   }
 
@@ -262,9 +277,12 @@ export class CapLibService {
       'UPDATE cma_capability_lib SET last_seen_at = ? WHERE source_id = ?',
     );
 
-    const tx = this.db.transaction(() => {
-      for (let i = 0; i < rows.length; i++) {
-        const r = rows[i];
+    // 分块事务：每批 CHUNK 行一个 transaction，批次之间 setImmediate 让出事件循环，
+    // 避免 41k 行单事务长时间锁死主线程（better-sqlite3 事务同步执行 → 期间所有 HTTP
+    // 请求含进度轮询全部排队 = 假死根因）。stats / seenIds 在批外累计。
+    const CHUNK = 2000;
+    const runChunk = this.db.transaction((batch: RemoteRow[]) => {
+      for (const r of batch) {
         if (typeof r.id !== 'number') continue;
         const sourceId = r.id;
         seenIds.add(sourceId);
@@ -290,13 +308,16 @@ export class CapLibService {
           );
           if (existing) stats.changed++; else stats.added++;
         }
-        // 千行一报进度
-        if ((i + 1) % 1000 === 0 || i + 1 === rows.length) {
-          setProgress(jobId, { phase: 'upserting', domain, current: i + 1, total });
-        }
       }
     });
-    tx();
+
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      runChunk(rows.slice(i, i + CHUNK));
+      const done = Math.min(i + CHUNK, rows.length);
+      setProgress(jobId, { phase: 'upserting', domain, current: done, total });
+      // 让出事件循环：进度轮询 / 其它请求能在批次间插进来
+      if (done < rows.length) await new Promise<void>(resolve => setImmediate(resolve));
+    }
 
     // soft delete 统计：之前有、本次没出现 = removedSoft
     for (const id of prevIds) if (!seenIds.has(id)) stats.removedSoft++;
@@ -441,63 +462,238 @@ export class CapLibService {
 
   /**
    * 单订阅机构的 diff 行表（cma-diff 详情页用）。
+   *
+   * 性能：先按 std_code_norm **去重**取机构的不同标准号（同号多检测项目聚合到一行），
+   * 再对去重集合用 std_code_norm IN / std_code_base IN 两句**批量查库**（复用 batchStatus
+   * 的 exactMap/seriesMap 聚合写法）。避免旧实现「每条资质行 6 个相关子查询」的 O(N×6) 放大。
+   *
+   * 黑名单：命中 std_code_norm（或原始 std_code）的标准号直接剔除、不显示不计数。
+   * 手动映射：src_norm 命中 manual_map 时，用 lib_norm 查库覆盖自动判定。
    */
   diffByLab(certNumber: string): DiffRow[] {
-    const rows = this.db.prepare(`
-      SELECT
-        q.id, q.std_code, q.std_code_norm, q.std_code_base,
-        q.std_name, q.category, q.test_item,
-        (SELECT lib_status FROM cma_capability_lib
-           WHERE std_code_norm = q.std_code_norm AND q.std_code_norm <> '' LIMIT 1) AS exact_status,
-        (SELECT remark FROM cma_capability_lib
-           WHERE std_code_norm = q.std_code_norm AND q.std_code_norm <> '' LIMIT 1) AS exact_remark,
-        (SELECT domain FROM cma_capability_lib
-           WHERE std_code_norm = q.std_code_norm AND q.std_code_norm <> '' LIMIT 1) AS exact_domain,
-        (SELECT std_code FROM cma_capability_lib
-           WHERE std_code_base = q.std_code_base
-             AND q.std_code_base <> ''
-             AND std_code_norm <> q.std_code_norm
-             AND lib_status = 'active'
-           ORDER BY std_code_norm DESC LIMIT 1) AS series_new_code,
-        (SELECT domain FROM cma_capability_lib
-           WHERE std_code_base = q.std_code_base
-             AND q.std_code_base <> ''
-             AND std_code_norm <> q.std_code_norm
-             AND lib_status = 'active'
-           ORDER BY std_code_norm DESC LIMIT 1) AS series_domain
-      FROM cma_qualifications q
-      WHERE q.cert_number = ?
-      ORDER BY q.std_code
+    const quals = this.db.prepare(`
+      SELECT id, std_code, std_code_norm, std_code_base, std_name, category, test_item
+      FROM cma_qualifications
+      WHERE cert_number = ?
+      ORDER BY std_code
     `).all(certNumber) as Array<{
-      id: number; std_code: string; std_name: string; category: string; test_item: string;
-      exact_status: LibStatus | null; exact_remark: string | null; exact_domain: string | null;
-      series_new_code: string | null; series_domain: string | null;
+      id: number; std_code: string; std_code_norm: string; std_code_base: string;
+      std_name: string; category: string; test_item: string;
     }>;
+    if (!quals.length) return [];
+
+    // 黑名单 / 手动映射加载一次
+    const blackNorm = this.blacklistNormSet();
+    const blackRaw = this.blacklistRawSet();
+    const manualMap = this.manualMapFor(certNumber);
+
+    // 按 std_code_norm 去重（norm 为空回退 std_code 作 key），聚合同号检测项目
+    type Group = {
+      qualId: number; stdCode: string; stdCodeNorm: string; stdCodeBase: string;
+      stdName: string; category: string; testItems: Set<string>;
+    };
+    const groups = new Map<string, Group>();
+    for (const q of quals) {
+      // 黑名单过滤：norm 命中 或（norm 空时）原始 std_code 命中
+      if (q.std_code_norm && blackNorm.has(q.std_code_norm)) continue;
+      if (!q.std_code_norm && blackRaw.has(q.std_code)) continue;
+      const key = q.std_code_norm || q.std_code;
+      let g = groups.get(key);
+      if (!g) {
+        g = {
+          qualId: q.id, stdCode: q.std_code, stdCodeNorm: q.std_code_norm,
+          stdCodeBase: q.std_code_base, stdName: q.std_name, category: q.category,
+          testItems: new Set<string>(),
+        };
+        groups.set(key, g);
+      }
+      if (q.test_item) g.testItems.add(q.test_item);
+    }
+    if (!groups.size) return [];
+
+    // 手动映射会把 src_norm 指向 lib_norm，查库要用 lib_norm。收集所有待查 norm。
+    const list = [...groups.values()];
+    const effNorm = (g: Group) => manualMap.get(g.stdCodeNorm) || g.stdCodeNorm;
+    const fullSet = new Set<string>();
+    const baseSet = new Set<string>();
+    for (const g of list) {
+      const n = effNorm(g);
+      if (n) fullSet.add(n);
+      if (g.stdCodeBase) baseSet.add(g.stdCodeBase);
+    }
+    const fulls = [...fullSet];
+    const bases = [...baseSet];
+
+    // 保年命中：std_code_norm IN (...)（同 norm 多领域取 active>cite_only>abolished 优先）
+    const exactMap = new Map<string, { libStatus: LibStatus; remark: string; domain: string }>();
+    if (fulls.length > 0) {
+      const ph = fulls.map(() => '?').join(',');
+      const rows = this.db.prepare(`
+        SELECT std_code_norm, lib_status, remark, domain
+        FROM cma_capability_lib WHERE std_code_norm IN (${ph})
+      `).all(...fulls) as Array<{ std_code_norm: string; lib_status: LibStatus; remark: string; domain: string }>;
+      for (const r of rows) {
+        const prev = exactMap.get(r.std_code_norm);
+        if (!prev || priority(r.lib_status) > priority(prev.libStatus)) {
+          exactMap.set(r.std_code_norm, { libStatus: r.lib_status, remark: r.remark || '', domain: r.domain });
+        }
+      }
+    }
+    // 剥年兜底：std_code_base IN (...) 只看 active 最新年版
+    const seriesMap = new Map<string, { stdCode: string; stdCodeNorm: string; domain: string }>();
+    if (bases.length > 0) {
+      const ph = bases.map(() => '?').join(',');
+      const rows = this.db.prepare(`
+        SELECT std_code_base, std_code, std_code_norm, domain
+        FROM cma_capability_lib WHERE std_code_base IN (${ph}) AND lib_status = 'active'
+        ORDER BY std_code_norm DESC
+      `).all(...bases) as Array<{ std_code_base: string; std_code: string; std_code_norm: string; domain: string }>;
+      for (const r of rows) {
+        if (!seriesMap.has(r.std_code_base)) {
+          seriesMap.set(r.std_code_base, { stdCode: r.std_code, stdCodeNorm: r.std_code_norm, domain: r.domain });
+        }
+      }
+    }
 
     const result: DiffRow[] = [];
-    for (const r of rows) {
+    for (const g of list) {
+      const lookup = effNorm(g);
+      const mapped = manualMap.has(g.stdCodeNorm);
+      const exact = lookup ? exactMap.get(lookup) : undefined;
+      const series = g.stdCodeBase ? seriesMap.get(g.stdCodeBase) : undefined;
+
       let diffStatus: DiffStatus;
-      if (r.exact_status === 'active')         diffStatus = 'in_lib';
-      else if (r.exact_status === 'cite_only') diffStatus = 'cite_only';
-      else if (r.exact_status === 'abolished') diffStatus = 'abolished';
-      else if (r.series_new_code)              diffStatus = 'series_only';
-      else                                     diffStatus = 'not_in_lib';
+      if (exact?.libStatus === 'active')         diffStatus = 'in_lib';
+      else if (exact?.libStatus === 'cite_only') diffStatus = 'cite_only';
+      else if (exact?.libStatus === 'abolished') diffStatus = 'abolished';
+      else if (series && series.stdCodeNorm && series.stdCodeNorm !== lookup) diffStatus = 'series_only';
+      else                                       diffStatus = 'not_in_lib';
 
       result.push({
-        qualId: r.id,
-        stdCode: r.std_code,
-        stdName: r.std_name,
-        category: r.category,
-        testItem: r.test_item,
+        qualId: g.qualId,
+        stdCode: g.stdCode,
+        stdName: g.stdName,
+        category: g.category,
+        testItem: [...g.testItems][0] || '',
+        testItems: [...g.testItems],
         diffStatus,
-        libStatus: r.exact_status || '',
-        libRemark: r.exact_remark || '',
-        libDomain: r.exact_domain || '',
-        seriesNewCode: r.series_new_code || '',
-        seriesDomain: r.series_domain || '',
+        libStatus: exact?.libStatus || '',
+        libRemark: exact?.remark || '',
+        libDomain: exact?.domain || '',
+        seriesNewCode: diffStatus === 'series_only' ? (series?.stdCode || '') : '',
+        seriesDomain: diffStatus === 'series_only' ? (series?.domain || '') : '',
+        manualMapped: mapped,
       });
     }
     return result;
+  }
+
+  // ── 黑名单 / 手动映射（diffByLab 依赖） ──
+
+  private blacklistNormSet(): Set<string> {
+    const rows = this.db.prepare(
+      "SELECT std_code_norm FROM cma_diff_blacklist WHERE std_code_norm <> ''",
+    ).all() as Array<{ std_code_norm: string }>;
+    return new Set(rows.map(r => r.std_code_norm));
+  }
+
+  private blacklistRawSet(): Set<string> {
+    const rows = this.db.prepare(
+      "SELECT std_code FROM cma_diff_blacklist WHERE std_code_norm = ''",
+    ).all() as Array<{ std_code: string }>;
+    return new Set(rows.map(r => r.std_code));
+  }
+
+  /** 取该机构生效的 src_norm → lib_norm 映射（机构级优先于全局） */
+  private manualMapFor(certNumber: string): Map<string, string> {
+    const rows = this.db.prepare(`
+      SELECT cert_number, src_norm, lib_norm FROM cma_diff_manual_map
+      WHERE cert_number = ? OR cert_number = ''
+      ORDER BY cert_number ASC
+    `).all(certNumber) as Array<{ cert_number: string; src_norm: string; lib_norm: string }>;
+    // cert_number='' 在前，机构级在后 → 机构级覆盖全局
+    const m = new Map<string, string>();
+    for (const r of rows) m.set(r.src_norm, r.lib_norm);
+    return m;
+  }
+
+  // ── 黑名单 CRUD（admin） ──
+
+  listBlacklist(): Array<{ id: number; stdCode: string; stdCodeNorm: string; reason: string; createdAt: string }> {
+    const rows = this.db.prepare(
+      'SELECT id, std_code, std_code_norm, reason, created_at FROM cma_diff_blacklist ORDER BY created_at DESC, id DESC',
+    ).all() as Array<{ id: number; std_code: string; std_code_norm: string; reason: string; created_at: string }>;
+    return rows.map(r => ({
+      id: r.id, stdCode: r.std_code, stdCodeNorm: r.std_code_norm, reason: r.reason || '', createdAt: r.created_at,
+    }));
+  }
+
+  /** 批量加入黑名单（多选）。沿用三层归一化：cleanStdCode → extractFullCode 落 norm。 */
+  addBlacklist(items: Array<{ stdCode: string; reason?: string }>): number {
+    if (!items.length) return 0;
+    const ins = this.db.prepare(
+      'INSERT INTO cma_diff_blacklist (std_code, std_code_norm, reason) VALUES (?, ?, ?)',
+    );
+    const tx = this.db.transaction(() => {
+      let n = 0;
+      for (const it of items) {
+        const raw = (it.stdCode || '').trim();
+        if (!raw) continue;
+        const cleaned = cleanStdCode(raw);
+        const norm = extractFullCode(cleaned);
+        // 去重：同 norm（或 norm 空时同原始）已存在则跳过
+        const exists = norm
+          ? this.db.prepare('SELECT 1 FROM cma_diff_blacklist WHERE std_code_norm = ?').get(norm)
+          : this.db.prepare("SELECT 1 FROM cma_diff_blacklist WHERE std_code_norm = '' AND std_code = ?").get(cleaned);
+        if (exists) continue;
+        ins.run(cleaned, norm, (it.reason || '').trim());
+        n++;
+      }
+      return n;
+    });
+    return tx();
+  }
+
+  removeBlacklist(ids: number[]): number {
+    if (!ids.length) return 0;
+    const ph = ids.map(() => '?').join(',');
+    return this.db.prepare(`DELETE FROM cma_diff_blacklist WHERE id IN (${ph})`).run(...ids).changes ?? 0;
+  }
+
+  // ── 手动映射 CRUD（admin） ──
+
+  listManualMap(certNumber?: string): Array<{ id: number; certNumber: string; srcNorm: string; libNorm: string; createdAt: string }> {
+    const rows = certNumber
+      ? this.db.prepare("SELECT id, cert_number, src_norm, lib_norm, created_at FROM cma_diff_manual_map WHERE cert_number = ? OR cert_number = '' ORDER BY id DESC").all(certNumber)
+      : this.db.prepare('SELECT id, cert_number, src_norm, lib_norm, created_at FROM cma_diff_manual_map ORDER BY id DESC').all();
+    return (rows as Array<{ id: number; cert_number: string; src_norm: string; lib_norm: string; created_at: string }>).map(r => ({
+      id: r.id, certNumber: r.cert_number, srcNorm: r.src_norm, libNorm: r.lib_norm, createdAt: r.created_at,
+    }));
+  }
+
+  /** 设手动映射：把机构资质标准号 srcStdCode 指向库内 libStdCode（均归一化为 norm 存）。 */
+  setManualMap(certNumber: string, srcStdCode: string, libStdCode: string): void {
+    const srcNorm = extractFullCode(cleanStdCode((srcStdCode || '').trim()));
+    const libNorm = extractFullCode(cleanStdCode((libStdCode || '').trim()));
+    if (!srcNorm || !libNorm) throw new Error('标准号不能为空');
+    this.db.prepare(`
+      INSERT INTO cma_diff_manual_map (cert_number, src_norm, lib_norm) VALUES (?, ?, ?)
+      ON CONFLICT(cert_number, src_norm) DO UPDATE SET lib_norm = excluded.lib_norm
+    `).run(certNumber || '', srcNorm, libNorm);
+  }
+
+  removeManualMap(id: number): number {
+    return this.db.prepare('DELETE FROM cma_diff_manual_map WHERE id = ?').run(id).changes ?? 0;
+  }
+
+  /**
+   * 重新匹配单个标准号（单项重试用）。复用 diffByLab 全量算后挑出该 stdCode 对应行。
+   * 量级小（单机构去重后几百行），直接复用避免重写匹配逻辑、保证与列表一致。
+   */
+  rematchOne(certNumber: string, stdCode: string): DiffRow | null {
+    const targetNorm = extractFullCode(cleanStdCode((stdCode || '').trim()));
+    const rows = this.diffByLab(certNumber);
+    return rows.find(r => extractFullCode(cleanStdCode(r.stdCode)) === targetNorm || r.stdCode === stdCode) || null;
   }
 
   /**
