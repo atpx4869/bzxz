@@ -4463,6 +4463,13 @@ button.set-chip.active:hover { background: var(--accent-h); border-color: var(--
 .cap-lib-lab-export { justify-self: end; margin-left: 6px; }
 .cap-lib-lab-body  { padding: 8px 12px 14px; }
 
+/* 机构内搜索框（机构维度对比，过滤 5 档行） */
+.cap-lib-lab-search { margin-bottom: 8px; }
+.cap-lib-lab-search-input { width: 100%; box-sizing: border-box; padding: 6px 10px; font-size: 12.5px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-h); color: var(--text); }
+.cap-lib-lab-search-input::placeholder { color: var(--text-3); }
+.cap-lib-lab-search-input:focus { outline: none; border-color: var(--accent); }
+.cap-lib-lab-search-empty { padding: 16px; text-align: center; color: var(--text-3); font-size: 12.5px; }
+
 /* 状态分组（机构内二级折叠，Part 2）—— 全 token 化主题安全 */
 .cap-lib-stgroup { margin: 4px 0; border-radius: 6px; overflow: hidden; }
 .cap-lib-stgroup-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer; background: var(--surface-h); font-size: 12.5px; font-weight: 600; }

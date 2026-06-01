@@ -488,7 +488,15 @@
       for (const r of rows) (groups[r.diffStatus] || groups.not_in_lib).push(r);
       body._capLibGroups = groups;
       body.dataset.cert = certNumber;
-      renderStatusGroups(body, groups, certNumber);
+      // 机构内搜索框 + 状态分组容器（搜索只重渲容器，不动搜索框）
+      body.innerHTML = `
+        <div class="cap-lib-lab-search">
+          <input type="text" class="cap-lib-lab-search-input" placeholder="在本机构内搜标准号 / 标准名 / 检测项目…"
+            oninput="capLibSearchLab(this)">
+        </div>
+        <div class="cap-lib-lab-groups" id="${escAttr('capLibLab_' + certNumber)}_groups"></div>`;
+      const groupsHost = body.querySelector('.cap-lib-lab-groups');
+      renderStatusGroups(groupsHost, groups, certNumber);
       body.dataset.loaded = '1';
     } catch (e) {
       body.innerHTML = `<div style="padding:8px;color:var(--danger)">加载失败：${escHtml(e.message || String(e))}</div>`;
@@ -496,17 +504,62 @@
   };
 
   /**
+   * 机构内搜索：按关键词过滤该机构缓存的 5 档行（标准号 / 标准名 / 检测项目），重渲分组容器。
+   * 空关键词 → 恢复默认（只展开最严重档）；有关键词 → 命中档全展开、显示过滤后行 + 计数。
+   * 防抖 200ms 避免逐字符重渲。
+   */
+  window.capLibSearchLab = function (input) {
+    const labBody = input.closest('.cap-lib-lab-body');
+    if (!labBody) return;
+    const host = labBody.querySelector('.cap-lib-lab-groups');
+    const groups = labBody._capLibGroups;
+    const certNumber = labBody.dataset.cert || '';
+    if (!host || !groups) return;
+    clearTimeout(input._capLibSearchTimer);
+    input._capLibSearchTimer = setTimeout(() => {
+      const kw = (input.value || '').trim().toLowerCase();
+      if (!kw) {
+        renderStatusGroups(host, groups, certNumber);   // 恢复默认视图
+        return;
+      }
+      const filtered = { not_in_lib: [], series_only: [], abolished: [], cite_only: [], in_lib: [] };
+      let hits = 0;
+      for (const status of GROUP_ORDER) {
+        for (const r of (groups[status] || [])) {
+          const items = (r.testItems && r.testItems.length ? r.testItems : (r.testItem ? [r.testItem] : []));
+          const hay = (r.stdCode + ' ' + (r.stdName || '') + ' ' + items.join(' ')).toLowerCase();
+          if (hay.indexOf(kw) !== -1) { filtered[status].push(r); hits++; }
+        }
+      }
+      renderStatusGroups(host, filtered, certNumber, {
+        expandAll: true,
+        emptyText: '没有匹配「' + (input.value || '').trim() + '」的标准行',
+      });
+      void hits;
+    }, 200);
+  };
+
+  /**
    * 渲染机构内 5 个状态档折叠卡。默认展开第一个非空的最严重档（GROUP_ORDER 首个 count>0）。
    * 每档内是分页表（renderPagedTable），其余档懒渲染（点开才生成 HTML）。
+   * opts.expandAll：搜索结果模式下，所有非空档默认展开并立即渲染（让命中行一眼可见）。
+   * opts.emptyText：所有档为空时的提示（搜索无命中时用）。
    */
-  function renderStatusGroups(body, groups, certNumber) {
+  function renderStatusGroups(body, groups, certNumber, opts) {
+    const expandAll = !!(opts && opts.expandAll);
+    // 把当前展示的分组挂到容器上，供翻页/展开懒渲染取（搜索态下取过滤后的集合，非全量）
+    body._capLibViewGroups = groups;
     const firstNonEmpty = GROUP_ORDER.find(k => (groups[k] || []).length > 0);
+    if (!firstNonEmpty) {
+      body.innerHTML = `<div class="cap-lib-lab-search-empty">${escHtml((opts && opts.emptyText) || '无数据')}</div>`;
+      return;
+    }
     let html = '';
     for (const status of GROUP_ORDER) {
       const list = groups[status] || [];
       if (!list.length) continue;             // 空组不渲染
       const meta = DIFF_STATUS_META[status];
-      const expanded = status === firstNonEmpty;
+      const expanded = expandAll || status === firstNonEmpty;
       const gid = body.id + '_s_' + status;
       const exportBtn = `<button class="btn btn-sm btn-ghost cap-lib-stgroup-export"
         onclick="event.stopPropagation();capLibExportDiff({ certNumbers: ['${escAttr(certNumber)}'], statuses: ['${status}'] }, this)"
@@ -574,14 +627,22 @@
     return out;
   }
 
-  // 翻页：定位所在 stgroup-body，从机构缓存取该档 list，重渲表 + 翻页器
+  // 当前展示中的分组：搜索态取过滤后的（挂在 .cap-lib-lab-groups 容器上），否则全量缓存
+  function viewGroupsFor(el) {
+    const host = el.closest('.cap-lib-lab-groups');
+    if (host && host._capLibViewGroups) return host._capLibViewGroups;
+    const labBody = el.closest('.cap-lib-lab-body');
+    return (labBody && labBody._capLibGroups) || {};
+  }
+
+  // 翻页：定位所在 stgroup-body，从当前展示分组取该档 list，重渲表 + 翻页器
   window.capLibPageGo = function (btn, page) {
     const stbody = btn.closest('.cap-lib-stgroup-body');
     const group = btn.closest('.cap-lib-stgroup');
     const labBody = btn.closest('.cap-lib-lab-body');
     if (!stbody || !group || !labBody) return;
     const status = group.getAttribute('data-status');
-    const list = (labBody._capLibGroups || {})[status] || [];
+    const list = viewGroupsFor(btn)[status] || [];
     const certNumber = labBody.dataset.cert || '';
     stbody.dataset.page = String(page);
     stbody.innerHTML = renderPagedTable(list, page, certNumber);
@@ -598,7 +659,7 @@
         const group = stbody.closest('.cap-lib-stgroup');
         const labBody = stbody.closest('.cap-lib-lab-body');
         const status = group && group.getAttribute('data-status');
-        const list = (labBody && labBody._capLibGroups || {})[status] || [];
+        const list = viewGroupsFor(stbody)[status] || [];
         const certNumber = (labBody && labBody.dataset.cert) || '';
         stbody.innerHTML = renderPagedTable(list, Number(stbody.dataset.page) || 1, certNumber);
         stbody.dataset.rendered = '1';
