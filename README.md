@@ -254,6 +254,7 @@ cp .env.example .env.local
 |------|------|------|
 | POST | `/api/standards/qualifications` | 按标准号批量查询资质（搜索结果徽章） |
 | GET | `/api/qualifications/search?q=&source=` | 关键词搜索资质记录 |
+| GET | `/api/qualifications/search-by-standard?q=&source=&limit=` | 按关键词查、**按标准号聚合**返回分组（产品标准可展开看全部资质行 / 方法直显），`limit` 限分组数 |
 | POST | `/api/qualifications/visual` | 可视化批量关键词查询 |
 | GET | `/api/qualifications/settings` | 资质同步设置 |
 | PUT | `/api/qualifications/settings` | 更新同步设置 |

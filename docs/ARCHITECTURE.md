@@ -58,7 +58,8 @@ type ApiResult<T> =
 /api/tasks/*              异步任务进度
 
 /api/qualifications/*     资质能力（CNAS / CMA 统一族）
-  /search                 资质搜索
+  /search                 资质搜索（行级平铺）
+  /search-by-standard     按标准号聚合（产品标准可展开 / 方法直显，searchByStandard）
   /batch-query            批量按标准号查
   /visual                 可视化批量查
   /settings               同步设置

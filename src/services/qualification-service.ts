@@ -19,6 +19,29 @@ export interface Qualification {
   limitDesc: string;
 }
 
+/** 「按标准查」分组：同一 std_code 下聚合的全部资质行（产品标准可展开 / 方法直显）。 */
+export interface StandardGroupRow {
+  labNo: string;
+  labName: string;
+  testObject: string;   // CNAS 检测对象；CMA 空
+  testParam: string;    // CNAS test_param / CMA test_item
+  testStandard: string;
+  effectiveDate: string;
+  expiryDate: string;
+  limitDesc: string;
+}
+export interface StandardGroup {
+  source: 'CNAS' | 'CMA';
+  stdCode: string;
+  stdName: string;
+  category: string;
+  isProduct: boolean;   // (检测对象×参数) 去重组合 > 1 → 产品标准
+  rowCount: number;     // 该标准下资质行数（截断前真实总数）
+  labCount: number;     // 去重机构数
+  truncated: boolean;   // rows 是否因上限被截断
+  rows: StandardGroupRow[];
+}
+
 export interface CnasLab {
   id: number;
   lab_no: string;
@@ -319,6 +342,124 @@ export class QualificationService {
       result[query] = this.searchQualifications(query, undefined, limitPerQuery);
     }
     return result;
+  }
+
+  /**
+   * 「按标准查」：关键词查本地缓存资质，**按标准号聚合**成分组返回。
+   *
+   * 与 searchQualifications 的区别：那个一行一条资质、LIMIT 行级截断；这个按 std_code_norm 分组，
+   * 每组 = 一个标准下全部资质行，便于"产品标准展开看完整资质覆盖"。limit 限分组数；每组行数另设上限。
+   *
+   * 产品/方法判定：组内 (检测对象 × 参数) 去重组合 > 1 → 产品标准（可展开）；否则方法（直显单一参数）。
+   * 搜索字段：std_code / std_name / 检测对象 / 检测参数 / 类别（不含机构名，按需求）。
+   */
+  searchByStandard(query: string, source?: 'CNAS' | 'CMA', limit = 100): StandardGroup[] {
+    const ROWS_PER_GROUP = 500;   // 单标准行数上限，防极端产品标准（如 GB/T 17219 600+ 行）撑爆
+    const q = `%${query}%`;
+    const queryFull = extractFullCode(query);
+    const queryBase = extractBaseCode(query);
+    const qNorm = `%${queryFull}%`;
+    const hasFullYear = /-\d{4}[A-Z]?$/.test(queryFull);
+    const qBase = `%${queryBase}%`;
+
+    type Flat = {
+      source: 'CNAS' | 'CMA'; norm: string; stdCode: string; stdName: string; category: string;
+      labNo: string; labName: string; testObject: string; testParam: string;
+      testStandard: string; effectiveDate: string; expiryDate: string; limitDesc: string;
+    };
+    const flat: Flat[] = [];
+
+    if (!source || source === 'CNAS') {
+      const baseClause = hasFullYear ? '' : 'OR q.std_code_base = ? OR q.std_code_base LIKE ?';
+      const sql = `
+        SELECT q.std_code, q.std_code_norm, q.std_name, q.category, q.lab_no,
+               COALESCE(link.display_name, l.lab_name) AS lab_name,
+               q.test_object, q.test_param, q.test_standard, q.effective_date, q.expiry_date, q.limit_desc
+        FROM cnas_qualifications q
+        LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
+        LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
+        WHERE q.std_code_norm = ? OR q.std_code_norm LIKE ?
+           ${baseClause}
+           OR q.std_code LIKE ? OR q.std_name LIKE ?
+           OR q.test_object LIKE ? OR q.test_param LIKE ? OR q.category LIKE ?
+        ORDER BY q.std_code, q.effective_date DESC
+      `;
+      const params = hasFullYear
+        ? [queryFull, qNorm, q, q, q, q, q]
+        : [queryFull, qNorm, queryBase, qBase, q, q, q, q, q];
+      for (const r of this.db.prepare(sql).all(...params) as any[]) {
+        flat.push({
+          source: 'CNAS', norm: r.std_code_norm || r.std_code, stdCode: r.std_code, stdName: r.std_name || '',
+          category: r.category || '', labNo: r.lab_no || '', labName: r.lab_name || '',
+          testObject: r.test_object || '', testParam: r.test_param || '', testStandard: r.test_standard || '',
+          effectiveDate: r.effective_date || '', expiryDate: r.expiry_date || '', limitDesc: r.limit_desc || '',
+        });
+      }
+    }
+
+    if (!source || source === 'CMA') {
+      const baseClause = hasFullYear ? '' : 'OR q.std_code_base = ? OR q.std_code_base LIKE ?';
+      const sql = `
+        SELECT q.std_code, q.std_code_norm, q.std_name, q.category, q.cert_number,
+               COALESCE(link.display_name, l.lab_name) AS lab_name,
+               q.test_item, q.test_standard, q.effective_date, q.expiry_date, q.limit_desc
+        FROM cma_qualifications q
+        LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
+        LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
+        WHERE q.std_code_norm = ? OR q.std_code_norm LIKE ?
+           ${baseClause}
+           OR q.std_code LIKE ? OR q.std_name LIKE ?
+           OR q.test_item LIKE ? OR q.category LIKE ?
+        ORDER BY q.std_code, q.effective_date DESC
+      `;
+      const params = hasFullYear
+        ? [queryFull, qNorm, q, q, q, q]
+        : [queryFull, qNorm, queryBase, qBase, q, q, q, q];
+      for (const r of this.db.prepare(sql).all(...params) as any[]) {
+        flat.push({
+          source: 'CMA', norm: r.std_code_norm || r.std_code, stdCode: r.std_code, stdName: r.std_name || '',
+          category: r.category || '', labNo: r.cert_number || '', labName: r.lab_name || '',
+          testObject: '', testParam: r.test_item || '', testStandard: r.test_standard || '',
+          effectiveDate: r.effective_date || '', expiryDate: r.expiry_date || '', limitDesc: r.limit_desc || '',
+        });
+      }
+    }
+
+    // 按 source + std_code_norm 分组（norm 跨写法归一；不同源不混组）
+    const groups = new Map<string, { meta: Flat; rows: Flat[] }>();
+    for (const f of flat) {
+      const key = f.source + '|' + f.norm;
+      let g = groups.get(key);
+      if (!g) { g = { meta: f, rows: [] }; groups.set(key, g); }
+      g.rows.push(f);
+    }
+
+    const out: StandardGroup[] = [];
+    for (const { meta, rows } of groups.values()) {
+      const comboSet = new Set(rows.map(r => r.testObject + '' + r.testParam));
+      const labSet = new Set(rows.map(r => r.labNo));
+      out.push({
+        source: meta.source,
+        stdCode: meta.stdCode,
+        stdName: meta.stdName,
+        category: meta.category,
+        isProduct: comboSet.size > 1,
+        rowCount: rows.length,
+        labCount: labSet.size,
+        truncated: rows.length > ROWS_PER_GROUP,
+        rows: rows.slice(0, ROWS_PER_GROUP).map(r => ({
+          labNo: r.labNo, labName: r.labName, testObject: r.testObject, testParam: r.testParam,
+          testStandard: r.testStandard, effectiveDate: r.effectiveDate, expiryDate: r.expiryDate, limitDesc: r.limitDesc,
+        })),
+      });
+    }
+    // 产品标准（行多）在前，再按行数降序、stdCode 稳定
+    out.sort((a, b) => {
+      if (a.isProduct !== b.isProduct) return a.isProduct ? -1 : 1;
+      if (a.rowCount !== b.rowCount) return b.rowCount - a.rowCount;
+      return a.stdCode.localeCompare(b.stdCode);
+    });
+    return out.slice(0, limit);
   }
 
   // ─── CNAS Lab Management ───

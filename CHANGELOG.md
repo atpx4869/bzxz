@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat(qual): 资质查询加「按标准查」tab** — 关键词查本地缓存 CNAS/CMA 资质，**按标准号聚合**返回：
+  产品标准（同一 std_code 下挂多个检测对象/参数）折叠一行、点击展开看该标准下全部资质行；方法标准
+  （基本 1 对 1 单参数）直接显示参数。产品/方法靠组内「检测对象×参数」去重组合数 >1 自动判定（数据无显式标记）。
+  搜索字段：标准号/标准名/检测对象/参数/类别（不含机构名）。后端新增 `searchByStandard` +
+  `GET /api/qualifications/search-by-standard`（按标准聚合 + 分组级 limit，避免旧 `search` 行级 LIMIT 50
+  截断产品标准）。前端复用 qual tab 切换 + `escapeHtml`/`cleanStdNameForQual`，懒渲染展开。CSS 双文件镜像全 token 化。
 - **fix(cma-diff): 导出文件名加时分，避免同名冲突** — 原文件名只到日期 `…-{YYYYMMDD}.xlsx`，
   同一天多次导出同机构文件名完全相同，下载到同目录时第二次会覆盖/加(1)失败。改为带时分
   `…-{YYYYMMDDHHmm}.xlsx`（如 `CMA一单一库比对-湖北省产品质量监督检验研究院-202606012326.xlsx`）。

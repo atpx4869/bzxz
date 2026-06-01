@@ -56,6 +56,24 @@
 .qual-result-item .qual-expired { color: var(--danger); }
 .qual-result-item .qual-valid { color: var(--success); }
 .qual-empty { text-align: center; padding: 40px 16px; color: var(--text-3); font-size: 13px; }
+
+/* 按标准查：分组卡（产品标准可展开 / 方法直显），全 token 化主题安全 */
+.qual-bystd-card { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; overflow: hidden; background: var(--surface-h); }
+.qual-bystd-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: pointer; flex-wrap: wrap; }
+.qual-bystd-head:hover { background: var(--border); }
+.qual-bystd-arrow { color: var(--text-3); font-size: 12px; width: 12px; flex-shrink: 0; }
+.qual-bystd-kind { font-size: 11px; font-weight: 600; color: var(--accent); white-space: nowrap; }
+.qual-bystd-kind-method { color: var(--text-2); }
+.qual-bystd-code { font-family: var(--mono, ui-monospace, monospace); font-size: 12.5px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.qual-bystd-name { font-size: 12.5px; color: var(--text-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.qual-bystd-meta { margin-left: auto; font-size: 11px; color: var(--text-3); white-space: nowrap; }
+.qual-bystd-cat { font-size: 10.5px; color: var(--text-3); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; }
+.qual-bystd-trunc { font-size: 10.5px; color: var(--warning); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; }
+.qual-bystd-body { padding: 4px 12px 12px; overflow-x: auto; }
+.qual-bystd-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.qual-bystd-table th, .qual-bystd-table td { padding: 5px 8px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+.qual-bystd-table th { font-size: 10.5px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+.qual-bystd-table td { color: var(--text-2); }
 .qual-results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .qual-col { min-width: 0; }
 .qual-col-header { font-size: 13px; font-weight: 600; color: var(--text); padding: 6px 10px; margin-bottom: 8px; }

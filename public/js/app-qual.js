@@ -1,6 +1,8 @@
 // ── Qualification ──
 let qualSearchSource = '';
 let qualData = {}; // stdCode -> Qualification[] (from search result badges)
+let byStdSource = '';            // 「按标准查」的 source 过滤（''=全部 / CNAS / CMA）
+let byStdGroups = [];            // 上次查询返回的分组（展开时从这里取 rows，免重复请求）
 function beijingDate() { const d = new Date(new Date().getTime() + 8*3600000); return d.toISOString().slice(0, 10); }
 function beijingTime() { const d = new Date(new Date().getTime() + 8*3600000); return d.toISOString().slice(0, 19).replace('T', ' '); }
 function utcToBeijing(utcStr) { if (!utcStr) return ''; const d = new Date(utcStr); d.setTime(d.getTime() + 8*3600000); return d.toISOString().slice(0, 16).replace('T', ' '); }
@@ -22,8 +24,10 @@ function switchQualTab(tab) {
   });
   const searchEl = document.getElementById('qualSearchTab');
   const visualEl = document.getElementById('qualVisualTab');
+  const byStdEl = document.getElementById('qualByStdTab');
   if (searchEl) searchEl.style.display = tab === 'search' ? '' : 'none';
   if (visualEl) visualEl.style.display = tab === 'visual' ? '' : 'none';
+  if (byStdEl) byStdEl.style.display = tab === 'bystd' ? 'flex' : 'none';
 }
 
 // Sub-tab switcher for the qual-subscription section that lives inside
@@ -176,6 +180,98 @@ async function doQualSearch() {
   } catch (e) {
     document.getElementById('qualResults').innerHTML = `<div class="qual-empty" style="color:var(--danger)">搜索失败: ${escapeHtml(e.message)}</div>`;
   }
+}
+
+// ===== 按标准查（关键词 → 按标准号聚合，产品标准可展开 / 方法直显）=====
+
+function setByStdFilter(btn, source) {
+  byStdSource = source;
+  btn.closest('.qual-filters').querySelectorAll('.qual-filter-btn').forEach(b => b.classList.toggle('active', b === btn));
+  doQualByStdSearch();
+}
+
+async function doQualByStdSearch() {
+  const q = document.getElementById('qualByStdInput').value.trim();
+  const box = document.getElementById('qualByStdResults');
+  if (!q) { box.innerHTML = '<div class="qual-empty">输入关键词，按标准号聚合查询本地缓存资质。产品标准可展开看全部资质行；方法标准直接显示。</div>'; return; }
+  if (typeof setSearchStage === 'function') setSearchStage('qual', 'active');
+  box.innerHTML = '<span class="spinner"></span>';
+  try {
+    const url = `/api/qualifications/search-by-standard?q=${encodeURIComponent(q)}${byStdSource ? '&source=' + byStdSource : ''}`;
+    const res = await fetch(url);
+    const data = await readApiResponse(res);
+    if (!res.ok) throw new Error(data.message);
+    byStdGroups = data.items || [];
+    renderByStdResults(byStdGroups);
+  } catch (e) {
+    box.innerHTML = `<div class="qual-empty" style="color:var(--danger)">搜索失败: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderByStdResults(groups) {
+  const box = document.getElementById('qualByStdResults');
+  if (!groups.length) { box.innerHTML = '<div class="qual-empty">未匹配到资质</div>'; return; }
+  box.innerHTML = groups.map((g, i) => {
+    const name = cleanStdNameForQual(g.stdCode, g.stdName);
+    const cat = g.category ? `<span class="qual-bystd-cat">${escapeHtml(g.category)}</span>` : '';
+    const trunc = g.truncated ? `<span class="qual-bystd-trunc" title="行数过多已截断，仅展示前 ${g.rows.length} 行">截断</span>` : '';
+    if (g.isProduct) {
+      return `
+        <div class="qual-bystd-card" data-idx="${i}">
+          <div class="qual-bystd-head" onclick="toggleByStdGroup(${i})">
+            <span class="qual-bystd-arrow" id="byStd_${i}_arrow">▸</span>
+            <span class="qual-bystd-kind">📦 产品标准</span>
+            <span class="qual-bystd-code">${escapeHtml(g.stdCode)}</span>
+            <span class="qual-bystd-name">${escapeHtml(name)}</span>
+            <span class="qual-bystd-meta">${g.rowCount} 项 · ${g.labCount} 家 · ${escapeHtml(g.source)}</span>
+            ${cat}${trunc}
+          </div>
+          <div class="qual-bystd-body" id="byStd_${i}_body" style="display:none"></div>
+        </div>`;
+    }
+    const param = g.rows[0] ? (g.rows[0].testParam || g.rows[0].testObject || '') : '';
+    return `
+      <div class="qual-bystd-card qual-bystd-method" data-idx="${i}">
+        <div class="qual-bystd-head" onclick="toggleByStdGroup(${i})">
+          <span class="qual-bystd-arrow" id="byStd_${i}_arrow">▸</span>
+          <span class="qual-bystd-kind qual-bystd-kind-method">🔬 方法</span>
+          <span class="qual-bystd-code">${escapeHtml(g.stdCode)}</span>
+          <span class="qual-bystd-name">${escapeHtml(name)}</span>
+          <span class="qual-bystd-meta">${param ? '参数:' + escapeHtml(param) + ' · ' : ''}${g.labCount} 家 · ${escapeHtml(g.source)}</span>
+          ${cat}
+        </div>
+        <div class="qual-bystd-body" id="byStd_${i}_body" style="display:none"></div>
+      </div>`;
+  }).join('');
+}
+
+window.toggleByStdGroup = function (i) {
+  const body = document.getElementById('byStd_' + i + '_body');
+  const arrow = document.getElementById('byStd_' + i + '_arrow');
+  if (!body) return;
+  if (body.style.display === 'none') {
+    if (!body.dataset.rendered) {
+      body.innerHTML = renderByStdRows(byStdGroups[i]);
+      body.dataset.rendered = '1';
+    }
+    body.style.display = '';
+    if (arrow) arrow.textContent = '▾';
+  } else {
+    body.style.display = 'none';
+    if (arrow) arrow.textContent = '▸';
+  }
+};
+
+function renderByStdRows(g) {
+  const isCnas = g.source === 'CNAS';
+  const head = isCnas
+    ? '<th>检测对象</th><th>检测参数</th><th>方法/标准</th><th>机构</th><th>限值</th>'
+    : '<th>检测项目</th><th>方法/标准</th><th>机构</th><th>限值</th>';
+  const rows = g.rows.map(r => isCnas
+    ? `<tr><td>${escapeHtml(r.testObject)}</td><td>${escapeHtml(r.testParam)}</td><td>${escapeHtml(r.testStandard)}</td><td>${escapeHtml(r.labName || r.labNo)}</td><td>${escapeHtml(r.limitDesc)}</td></tr>`
+    : `<tr><td>${escapeHtml(r.testParam)}</td><td>${escapeHtml(r.testStandard)}</td><td>${escapeHtml(r.labName || r.labNo)}</td><td>${escapeHtml(r.limitDesc)}</td></tr>`
+  ).join('');
+  return `<table class="qual-bystd-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 // Strip duplicated standard code from stdName (e.g. "家具... GB 18584-2024" -> "家具...")

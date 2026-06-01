@@ -356,6 +356,7 @@
     <h2 style="font-size:20px;font-weight:600;margin-bottom:18px">资质查询</h2>
     <div class="qual-tab-bar">
       <button class="qual-tab active" data-qual-tab="search" onclick="switchQualTab('search')">搜索</button>
+      <button class="qual-tab" data-qual-tab="bystd" onclick="switchQualTab('bystd')">按标准查</button>
       <button class="qual-tab" data-qual-tab="visual" onclick="switchQualTab('visual')">可视化</button>
     </div>
     <div id="qualSearchTab" style="display:flex;flex-direction:column;height:calc(100vh - var(--topbar-h) - 140px)">
@@ -371,6 +372,19 @@
         <button class="qual-filter-btn" data-qual-source="CMA" onclick="setQualFilter(this,'CMA')">CMA</button>
       </div>
       <div id="qualResults" style="flex:1;overflow-y:auto"><div class="qual-empty">输入关键词搜索资质信息</div></div>
+    </div>
+    <!-- 按标准查：关键词 → 按标准号聚合，产品标准可展开看全部资质行 / 方法直显 -->
+    <div id="qualByStdTab" style="display:none;flex-direction:column;height:calc(100vh - var(--topbar-h) - 140px)">
+      <div class="search-row qual-search-row">
+        <input class="qual-search-input" id="qualByStdInput" type="text" placeholder="输入标准号 / 标准名 / 检测对象 / 参数 / 类别…" onkeydown="if(event.key==='Enter')doQualByStdSearch()">
+        <button class="btn btn-primary" id="qualByStdBtn" onclick="doQualByStdSearch()"><span class="search-btn-icon" aria-hidden="true">🔍</span><span class="search-btn-label">搜索</span></button>
+      </div>
+      <div class="qual-filters">
+        <button class="qual-filter-btn active" data-bystd-source="" onclick="setByStdFilter(this,'')">全部</button>
+        <button class="qual-filter-btn" data-bystd-source="CNAS" onclick="setByStdFilter(this,'CNAS')">CNAS</button>
+        <button class="qual-filter-btn" data-bystd-source="CMA" onclick="setByStdFilter(this,'CMA')">CMA</button>
+      </div>
+      <div id="qualByStdResults" style="flex:1;overflow-y:auto"><div class="qual-empty">输入关键词，按标准号聚合查询本地缓存资质。产品标准可展开看全部资质行；方法标准直接显示。</div></div>
     </div>
     <div id="qualVisualTab" style="display:none">
       <div class="qual-visual-workspace">
