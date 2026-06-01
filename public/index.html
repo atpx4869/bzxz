@@ -403,9 +403,26 @@
       </div>
       <div class="set-page-head-actions">
         <button class="btn btn-sm btn-ghost" id="capLibExportAllBtn" onclick="capLibExportDiff({ certNumbers: [] }, this)">导出全部机构</button>
+        <button class="btn btn-sm btn-ghost" id="capLibDiagBtn" onclick="document.getElementById('capLibDiagCard').style.display='';document.getElementById('capLibDiagInput').focus()">诊断标准号</button>
         <button class="btn btn-sm btn-ghost" id="capLibBlacklistBtn" onclick="capLibOpenBlacklist()">黑名单管理</button>
         <button class="btn btn-sm btn-ghost" id="capLibCleanupBtn" onclick="capLibCleanup()" style="display:none">清理 30 天未见</button>
         <button class="btn btn-sm btn-primary" id="capLibSyncAllBtn" onclick="capLibSyncAll()">同步勾选领域</button>
+      </div>
+    </div>
+
+    <!-- 诊断卡（默认隐藏：未入库/在库行点「诊断」或顶部「诊断标准号」展开） -->
+    <div class="set-card" id="capLibDiagCard" style="display:none">
+      <div class="set-card-head">
+        <div class="set-card-title">标准号诊断</div>
+        <button class="btn btn-sm btn-ghost" style="margin-left:auto" onclick="capLibCloseDiag()">收起</button>
+      </div>
+      <div class="set-card-body">
+        <div class="cap-lib-diag-search">
+          <input type="text" id="capLibDiagInput" class="cap-lib-lab-search-input" placeholder="输入标准号（如 CJ/T 270-2017）查归一化值 / 本地库命中 / 各领域同步状态"
+            onkeydown="if(event.key==='Enter')capLibDiagnoseInput()">
+          <button class="btn btn-sm btn-primary" onclick="capLibDiagnoseInput()">诊断</button>
+        </div>
+        <div id="capLibDiagBody"><div style="color:var(--text-3)">输入标准号后点「诊断」。用于排查「显示未入库但网页有」「显示在库但网页查不到」等困惑。</div></div>
       </div>
     </div>
 

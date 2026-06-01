@@ -386,7 +386,7 @@ src/
 ├── services/
 │   └── cap-lib-service.ts    # syncDomain / diffByLab / batchStatus / summary / cleanupStaleRows / exportDiff / 黑名单 / 手动映射 / rematch
 └── api/
-    └── cap-lib-routes.ts     # 18 个端点挂 /api/cma-diff/*（含 export / blacklist / manual-map / rematch）
+    └── cap-lib-routes.ts     # 19 个端点挂 /api/cma-diff/*（含 export / blacklist / manual-map / rematch / diagnose）
 
 public/js/
 ├── app-cap-lib-badge.js      # 共用徽章（搜索 + 资质查询 + 比对页 三处复用）
@@ -431,7 +431,8 @@ Why：远端「产品质量检验」已从 41s 劣化到一次拉 41k 行需 5-7
 **人工兜底**：黑名单（`cma_diff_blacklist`，norm 命中 / norm 空回退原始 std_code）在去重后剔除，
 不显示不计数不匹配；手动映射（`cma_diff_manual_map`，机构级优先全局）在判定前把 `src_norm`
 换成 `lib_norm` 查库覆盖自动结果；`rematchOne` 复用 `diffByLab` 全量算后挑出单标准号行
-（单项重试，前端就地替换免整页重渲）。
+（单项重试，前端就地替换免整页重渲）。`diagnose(stdCode)` 本地查询误判自查：输出归一化值 +
+保年/剥年命中明细 + 黑名单/映射状态 + 各领域同步状态 + 判定结论（不打远端，秒回）。
 
 ### 权限闸门
 

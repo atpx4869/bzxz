@@ -378,6 +378,90 @@ export class CapLibService {
     return result.changes ?? 0;
   }
 
+  /**
+   * 诊断单个标准号（误判自查）。本地查询，回答：这个号在本地库里到底有没有、
+   * 归一化成什么、命中哪些领域/状态、黑名单/手动映射是否生效。
+   *
+   * 用于排查「显示未入库但网页有」（多半是该领域没同步全）/「显示在库但网页查不到」
+   * （多半是网页搜法不同 / soft delete 残留）这类困惑。不打远端，秒回。
+   */
+  diagnose(rawCode: string): {
+    input: string; cleaned: string; full: string; base: string;
+    exactMatches: Array<{ stdCode: string; domain: string; libStatus: string; remark: string; lastSeenAt: string }>;
+    seriesMatches: Array<{ stdCode: string; domain: string; libStatus: string; lastSeenAt: string }>;
+    blacklisted: boolean;
+    manualMap: { libNorm: string; certNumber: string } | null;
+    anySynced: boolean;
+    domainSyncState: Array<{ domain: string; lastSyncedAt: string; localTotal: number; remoteTotal: number }>;
+    verdict: string;
+  } {
+    const cleaned = cleanStdCode((rawCode || '').trim());
+    const full = extractFullCode(cleaned);
+    const base = extractBaseCode(cleaned);
+
+    const exactMatches = (full
+      ? this.db.prepare(`
+          SELECT std_code, domain, lib_status, remark, last_seen_at
+          FROM cma_capability_lib WHERE std_code_norm = ? ORDER BY domain
+        `).all(full)
+      : []) as Array<{ std_code: string; domain: string; lib_status: string; remark: string; last_seen_at: string }>;
+
+    const seriesMatches = (base
+      ? this.db.prepare(`
+          SELECT std_code, domain, lib_status, std_code_norm, last_seen_at
+          FROM cma_capability_lib
+          WHERE std_code_base = ? AND lib_status = 'active' AND std_code_norm <> ?
+          ORDER BY std_code_norm DESC LIMIT 10
+        `).all(base, full)
+      : []) as Array<{ std_code: string; domain: string; lib_status: string; last_seen_at: string }>;
+
+    const blacklisted = !!(full
+      ? this.db.prepare('SELECT 1 FROM cma_diff_blacklist WHERE std_code_norm = ?').get(full)
+      : this.db.prepare("SELECT 1 FROM cma_diff_blacklist WHERE std_code_norm = '' AND std_code = ?").get(cleaned));
+
+    const mm = full
+      ? this.db.prepare("SELECT lib_norm, cert_number FROM cma_diff_manual_map WHERE src_norm = ? ORDER BY cert_number DESC LIMIT 1").get(full) as { lib_norm: string; cert_number: string } | undefined
+      : undefined;
+
+    const anySynced = (this.db.prepare(
+      'SELECT COUNT(*) AS c FROM cma_capability_lib_meta WHERE last_synced_at != ""',
+    ).get() as { c: number }).c > 0;
+
+    const domainSyncState = (this.db.prepare(`
+      SELECT domain, last_synced_at, local_total, remote_total
+      FROM cma_capability_lib_meta WHERE subscribed = 1 ORDER BY domain
+    `).all() as Array<{ domain: string; last_synced_at: string; local_total: number; remote_total: number }>)
+      .map(r => ({ domain: r.domain, lastSyncedAt: r.last_synced_at || '', localTotal: r.local_total || 0, remoteTotal: r.remote_total || 0 }));
+
+    // 判定文案
+    let verdict: string;
+    if (blacklisted) {
+      verdict = '该标准号在黑名单中，已被排除（不显示、不参与匹配）。如需恢复请到黑名单管理移除。';
+    } else if (exactMatches.length) {
+      const active = exactMatches.some(m => m.lib_status === 'active');
+      verdict = active
+        ? '本地库命中（active）→ 应判「在库」。若网页查不到，多半是网页按精确写法搜、或该号已被远端调整。'
+        : '本地库命中但状态为废止/仅限引用 → 按 remark 判档。';
+    } else if (seriesMatches.length) {
+      verdict = '保年未命中、剥年命中 active 新版 → 判「年版过期」，建议改用新年版。';
+    } else if (!anySynced) {
+      verdict = '本地库为空（尚未同步任何领域）→ 一切都会判「未入库」。请先同步相关领域。';
+    } else {
+      verdict = '本地库无此号 → 判「未入库」。若网页确有此号，多半是它所属领域没同步全（如产品质量检验 4w+ 行曾超时未拉全）→ 请重新同步该领域后再看。';
+    }
+
+    return {
+      input: rawCode, cleaned, full, base,
+      exactMatches: exactMatches.map(m => ({ stdCode: m.std_code, domain: m.domain, libStatus: m.lib_status, remark: m.remark || '', lastSeenAt: m.last_seen_at || '' })),
+      seriesMatches: seriesMatches.map(m => ({ stdCode: m.std_code, domain: m.domain, libStatus: m.lib_status, lastSeenAt: m.last_seen_at || '' })),
+      blacklisted,
+      manualMap: mm ? { libNorm: mm.lib_norm, certNumber: mm.cert_number } : null,
+      anySynced,
+      domainSyncState,
+      verdict,
+    };
+  }
+
   // ── 比对 ──
 
   /**

@@ -226,6 +226,15 @@ export function createCapLibRoutes(
     } catch (e) { next(normalizeError(e)); }
   });
 
+  // 诊断单个标准号（误判自查）：归一化值 + 本地库命中 + 黑名单/映射/各领域同步状态
+  router.get('/api/cma-diff/diagnose', requireCmaDiff, (req, res, next) => {
+    try {
+      const stdCode = typeof req.query.stdCode === 'string' ? req.query.stdCode.trim() : '';
+      if (!stdCode) { respondError(res, 400, 'BAD_REQUEST', '缺少 stdCode'); return; }
+      respond(res, toCamelCase(svc.diagnose(stdCode)));
+    } catch (e) { next(normalizeError(e)); }
+  });
+
   // ── 清理（admin） ──────────────────────────────────────────────────
 
   router.post('/api/cma-diff/cleanup', requireCmaDiff, requireAdmin, (req, res, next) => {

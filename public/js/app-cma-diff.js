@@ -690,6 +690,7 @@
           ? `<button class="cap-lib-row-act" onclick="capLibManualMap('${certAttr}','${codeAttr}')" title="手动指定库内标准号">指定</button>`
           : '')
       + `<button class="cap-lib-row-act" onclick="capLibRematchRow(this,'${certAttr}','${codeAttr}')" title="重新匹配此标准号">重试</button>`
+      + `<button class="cap-lib-row-act" onclick="capLibDiagnose('${codeAttr}')" title="诊断：归一化值 + 本地库命中 + 各领域同步状态">诊断</button>`
       + `</div>`;
     return `
       <tr class="cap-lib-diff-row" data-status="${r.diffStatus}" data-code="${codeAttr}">
@@ -886,6 +887,64 @@
     const card = document.getElementById('capLibBlacklistCard');
     if (card) card.style.display = 'none';
   };
+
+  // ── 诊断（误判自查） ──────────────────────────────────────────────
+
+  /** 诊断某标准号：调后端本地查询，把归一化值 + 命中 + 各领域同步状态渲染到诊断卡。 */
+  window.capLibDiagnose = async function (stdCode) {
+    const card = document.getElementById('capLibDiagCard');
+    const bodyEl = document.getElementById('capLibDiagBody');
+    if (!card || !bodyEl) return;
+    card.style.display = '';
+    card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    bodyEl.innerHTML = '<div style="color:var(--text-3)">诊断中…</div>';
+    try {
+      const res = await fetch('/api/cma-diff/diagnose?stdCode=' + encodeURIComponent(stdCode));
+      if (!res.ok) { const t = await res.text(); bodyEl.innerHTML = '<div style="color:var(--danger)">诊断失败：' + escHtml(t || res.status) + '</div>'; return; }
+      const d = await readApiResponse(res);
+      bodyEl.innerHTML = renderDiagnose(d);
+    } catch (e) {
+      bodyEl.innerHTML = '<div style="color:var(--danger)">诊断失败：' + escHtml(e.message || String(e)) + '</div>';
+    }
+  };
+
+  // 顶部诊断输入框触发
+  window.capLibDiagnoseInput = function () {
+    const inp = document.getElementById('capLibDiagInput');
+    const v = inp && inp.value.trim();
+    if (!v) { showToast('请输入标准号', 'fail'); return; }
+    capLibDiagnose(v);
+  };
+
+  window.capLibCloseDiag = function () {
+    const card = document.getElementById('capLibDiagCard');
+    if (card) card.style.display = 'none';
+  };
+
+  function renderDiagnose(d) {
+    const fmt = (s) => s ? formatDateTime(s) : '从未';
+    const exact = (d.exactMatches || []).map(m =>
+      `<li><span class="cap-lib-row-code">${escHtml(m.stdCode)}</span> · ${escHtml(m.domain)} · ${escHtml(m.libStatus)}${m.remark ? ' · ' + escHtml(m.remark) : ''} <span style="color:var(--text-3)">(见于 ${escHtml(fmt(m.lastSeenAt))})</span></li>`).join('');
+    const series = (d.seriesMatches || []).map(m =>
+      `<li><span class="cap-lib-row-code">${escHtml(m.stdCode)}</span> · ${escHtml(m.domain)} · ${escHtml(m.libStatus)}</li>`).join('');
+    const domains = (d.domainSyncState || []).map(s => {
+      const stale = !s.lastSyncedAt;
+      const short = s.localTotal < s.remoteTotal;
+      const warn = stale ? '⚠ 从未同步' : (short ? '⚠ 本地少于远端' : '');
+      return `<tr><td>${escHtml(s.domain)}</td><td>${escHtml(fmt(s.lastSyncedAt))}</td><td>${(s.localTotal || 0).toLocaleString()} / ${(s.remoteTotal || 0).toLocaleString()}</td><td style="color:var(--warning)">${warn}</td></tr>`;
+    }).join('');
+    return `
+      <div class="cap-lib-diag-row"><b>输入</b>：${escHtml(d.input)}</div>
+      <div class="cap-lib-diag-row"><b>归一化</b>：清洗=<code>${escHtml(d.cleaned)}</code> · 保年=<code>${escHtml(d.full)}</code> · 剥年=<code>${escHtml(d.base)}</code></div>
+      <div class="cap-lib-diag-row"><b>本地库保年命中</b>：${exact ? '<ul class="cap-lib-diag-list">' + exact + '</ul>' : '<span style="color:var(--text-3)">无</span>'}</div>
+      ${series ? '<div class="cap-lib-diag-row"><b>剥年(新年版)命中</b>：<ul class="cap-lib-diag-list">' + series + '</ul></div>' : ''}
+      <div class="cap-lib-diag-row"><b>黑名单</b>：${d.blacklisted ? '<span style="color:var(--danger)">是（已排除）</span>' : '否'} · <b>手动映射</b>：${d.manualMap ? escHtml(d.manualMap.libNorm) + (d.manualMap.certNumber ? '（机构 ' + escHtml(d.manualMap.certNumber) + '）' : '（全局）') : '无'}</div>
+      <div class="cap-lib-diag-verdict">${escHtml(d.verdict)}</div>
+      <details class="cap-lib-diag-domains"><summary>各订阅领域同步状态（点开）</summary>
+        <table class="cap-lib-diff-table"><thead><tr><th>领域</th><th>上次同步</th><th>本地/远端</th><th></th></tr></thead>
+        <tbody>${domains || '<tr><td colspan="4" style="color:var(--text-3)">无订阅领域</td></tr>'}</tbody></table>
+      </details>`;
+  }
 
   // ── Cleanup（admin） ───────────────────────────────────────────────
 

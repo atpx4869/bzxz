@@ -297,6 +297,7 @@ cp .env.example .env.local
 | POST   | `/api/cma-diff/manual-map` | admin + tab | 设手动映射（body `{certNumber, srcStdCode, libStdCode}`；覆盖自动判定） |
 | DELETE | `/api/cma-diff/manual-map` | admin + tab | 删手动映射（body `{id}`） |
 | POST   | `/api/cma-diff/rematch` | tab `cma-diff` | 单标准号重新匹配（body `{certNumber, stdCode}`；返回最新 diff 行，前端就地刷新） |
+| GET    | `/api/cma-diff/diagnose?stdCode=` | tab `cma-diff` | 诊断标准号：归一化值 + 本地库命中（保年/剥年）+ 黑名单/手动映射 + 各领域同步状态 + 判定结论（误判自查，本地查询秒回） |
 | POST   | `/api/cma-diff/cleanup` | admin + tab | 清理 30 天未见的孤儿行（body `{days:30}`） |
 
 ### 管理（需 admin）
