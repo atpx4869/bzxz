@@ -285,7 +285,6 @@ cp .env.example .env.local
 | POST   | `/api/cma-diff/sync/:name` | admin + tab | 触发单领域同步（fire-and-forget；返回 jobId） |
 | POST   | `/api/cma-diff/sync-all` | admin + tab | 触发所有已订阅领域同步（返回 jobs[] 列表） |
 | GET    | `/api/cma-diff/sync/progress/:jobId` | tab | 同步进度（phase/current/total/stats） |
-| GET    | `/api/cma-diff/summary` | tab | 订阅机构 × 5 档汇总统计 |
 | GET    | `/api/cma-diff/labs` | tab | 订阅 CMA 机构维度计数表 |
 | GET    | `/api/cma-diff/labs/:certNumber?status=&q=` | tab | 单机构资质行 diff 详情 |
 | POST   | `/api/cma-diff/batch-status` | `cma-diff` / `qual` / `search` 任一 | 批量徽章状态查询（搜索结果 / 资质查询页徽章用） |

@@ -384,9 +384,9 @@ src/
 │   ├── cap-lib-domains.ts    # 11 个顶层领域常量
 │   └── cap-lib-status.ts     # parseLibStatus(remark) + LibStatus / DiffStatus 枚举
 ├── services/
-│   └── cap-lib-service.ts    # syncDomain / diffByLab / batchStatus / summary / cleanupStaleRows / exportDiff / 黑名单 / 手动映射 / rematch
+│   └── cap-lib-service.ts    # syncDomain / diffByLab / batchStatus / labsCounts / cleanupStaleRows / exportDiff / 黑名单 / 手动映射 / rematch / diagnose
 └── api/
-    └── cap-lib-routes.ts     # 19 个端点挂 /api/cma-diff/*（含 export / blacklist / manual-map / rematch / diagnose）
+    └── cap-lib-routes.ts     # 18 个端点挂 /api/cma-diff/*（含 export / blacklist / manual-map / rematch / diagnose）
 
 public/js/
 ├── app-cap-lib-badge.js      # 共用徽章（搜索 + 资质查询 + 比对页 三处复用）
@@ -419,7 +419,7 @@ Why：远端「产品质量检验」已从 41s 劣化到一次拉 41k 行需 5-7
 `diffByLab(certNumber)`：先取机构资质行按 `std_code_norm` **去重**（同号多检测项目聚合到
 `testItems[]` 一行），过滤黑名单，再对去重集合用 `std_code_norm IN` + `std_code_base IN`
 两句**批量查库**（复用 `batchStatus` 的 `exactMap`/`seriesMap`/`priority` 写法）。
-取代旧「每条资质行 6 个相关子查询」的 O(N×6) 放大；`summary`/`labsCounts`/详情/导出全部受益。
+取代旧「每条资质行 6 个相关子查询」的 O(N×6) 放大；`labsCounts`/详情/导出全部受益。
 
 5 档判定顺序：
 1. 保年 `exact='active'`    → in_lib

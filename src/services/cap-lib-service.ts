@@ -110,13 +110,6 @@ export interface DiffRow {
   manualMapped?: boolean;
 }
 
-export interface DiffSummary {
-  labCount: number;
-  totalQuals: number;
-  byStatus: Record<DiffStatus, number>;
-  unsyncedDomains: string[];   // 用户订阅但从未同步的领域名
-}
-
 export interface ExportFilter {
   /** 空数组 = 所有订阅机构 */
   certNumbers: string[];
@@ -802,32 +795,6 @@ export class CapLibService {
     const targetNorm = extractFullCode(cleanStdCode((stdCode || '').trim()));
     const rows = this.diffByLab(certNumber);
     return rows.find(r => extractFullCode(cleanStdCode(r.stdCode)) === targetNorm || r.stdCode === stdCode) || null;
-  }
-
-  /**
-   * 订阅机构整体汇总（cma-diff 顶部统计卡）。
-   */
-  summary(): DiffSummary {
-    const labs = this.db.prepare(`
-      SELECT cert_number FROM cma_labs WHERE subscribed_at IS NOT NULL
-    `).all() as Array<{ cert_number: string }>;
-
-    const byStatus: Record<DiffStatus, number> = {
-      in_lib: 0, cite_only: 0, abolished: 0, series_only: 0, not_in_lib: 0,
-    };
-    let totalQuals = 0;
-    for (const lab of labs) {
-      const rows = this.diffByLab(lab.cert_number);
-      for (const r of rows) {
-        byStatus[r.diffStatus]++;
-        totalQuals++;
-      }
-    }
-    const unsyncedDomains = (this.db.prepare(`
-      SELECT domain FROM cma_capability_lib_meta WHERE subscribed = 1 AND last_synced_at = ''
-    `).all() as Array<{ domain: string }>).map(r => r.domain);
-
-    return { labCount: labs.length, totalQuals, byStatus, unsyncedDomains };
   }
 
   /** 订阅机构维度计数（cma-diff 机构列表） */

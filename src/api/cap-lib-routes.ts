@@ -82,10 +82,6 @@ export function createCapLibRoutes(
 
   // ── 比对 ────────────────────────────────────────────────────────────
 
-  router.get('/api/cma-diff/summary', requireCmaDiff, (_req, res, next) => {
-    try { respond(res, toCamelCase(svc.summary())); } catch (e) { next(normalizeError(e)); }
-  });
-
   router.get('/api/cma-diff/labs', requireCmaDiff, (_req, res, next) => {
     try { respond(res, toCamelCase({ items: svc.labsCounts() })); } catch (e) { next(normalizeError(e)); }
   });

@@ -71,18 +71,6 @@
 .cap-lib-prog-bar > div { height: 100%; background: var(--accent); transition: width 0.3s ease; }
 .cap-lib-prog-text    { font-size: 11px; color: var(--text-3); white-space: nowrap; }
 
-/* ---------- 页面：摘要卡 stat tile ---------- */
-.cap-lib-summary-head { font-size: 13px; color: var(--text-2); margin-bottom: 8px; }
-.cap-lib-summary-head b { color: var(--text); font-size: 15px; padding: 0 4px; }
-.cap-lib-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
-.cap-lib-stat-tile {
-  padding: 10px 12px; border-radius: 8px;
-  background: var(--surface-h, rgba(255,255,255,0.03));
-}
-.cap-lib-stat-num { font-size: 18px; font-weight: 650; color: var(--text); line-height: 1.2; }
-.cap-lib-stat-lab { font-size: 11px; color: var(--text-3); margin-top: 2px; }
-.cap-lib-warn { margin-top: 10px; padding: 8px 10px; border-radius: 6px; background: rgba(234,179,8,0.1); color: #facc15; font-size: 12px; }
-
 /* ---------- 页面：机构组 ---------- */
 .cap-lib-empty { padding: 24px; text-align: center; color: var(--text-3); font-size: 13px; }
 .cap-lib-lab-group { border-radius: 8px; margin-bottom: 6px; background: var(--surface-h); overflow: hidden; }

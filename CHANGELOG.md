@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **refactor(cma-diff): 删除「汇总」卡** — 该卡（订阅机构 × 5 档统计）实用价值低、与机构维度比对信息重复，整块移除：
+  前端 `renderSummary` + `#capLibSummaryCard` HTML、后端 `GET /api/cma-diff/summary` 路由 + `summary()` 方法 +
+  `DiffSummary` 接口、专用 CSS（`cap-lib-summary-head`/`stat-grid`/`stat-tile`/`stat-num`/`stat-lab`/`warn`，双文件镜像）全清。
+  cma-diff 端点 19→18。`STATUS_ORDER` 常量保留（机构列表徽章点仍用）。
 - **fix(ui): 搜索历史下拉被标准前缀标签行压住** — `.search-history` z-index 350 < `.search-templates`（GB/T/ISO 那行）的 360，历史下拉弹出时被模板行盖住一截。改 `.search-history` z-index 350 → 380（> 360）盖过模板行。`.search-row` 仅 position:relative + box-shadow、未建 stacking context，子元素层级可正常比较。双文件镜像 `web/src/styles/components/search-history.css` + `public/styles.css`
 - **feat(cma-diff): 机构维度比对每页数量可选** — 状态档表格黑名单条上加「每页 N 条」选择器，
   可选 50/100/200/300/500/1000，**默认 100**（原写死 50），记 localStorage `capLib.pageSize`；
