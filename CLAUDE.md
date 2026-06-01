@@ -112,6 +112,26 @@ Chrome ≤109 上整条 declaration 解析失败，主题崩。
 - 新增数据源（除 CNAS/CMA 外）想沾资质徽章 → schema 也加这两列 + 索引，沿用同样的三层防御
 - 改 `cleanStdCode` / `extractFullCode` / `extractBaseCode` 逻辑（覆盖新的脏数据变体）后必须删 DB 强制下次启动回填 —— 或者临时跑 `UPDATE cnas_qualifications SET std_code_norm=''` 触发 backfill + fixup。新加 case 的单测放 `qualification-service.test.ts` 防回归
 
+## 功能权限（tab）契约（**强制**）
+
+每个 sidebar「功能页」对应一个 tab key，权限模型靠 `users.allowed_tabs`（JSON 数组，`null`=全部允许）。**新增 / 删除一个 tab 必须四处同步**：
+
+1. `public/index.html` sidebar 的 `data-tab` 按钮
+2. 后端 `src/api/admin-routes.ts` 的 `ALL_TABS` 常量 **+ 三处 `z.enum([...])`**（PUT /settings、POST /users、PUT /users/:id —— zod 无法 spread const tuple，字面量重复）
+3. 前端 `public/js/app-auth-admin.js` 的 `TAB_ITEMS`（权限勾选 UI 真相源）+ `TAB_LABELS`
+4. **服务端守卫**：该 tab 对应路由挂上 `requireTab('<key>')`
+
+**服务端强制（`requireTab`）：** `allowed_tabs` 不能只在前端 `switchTab` 隐藏入口 —— 那是纯装饰，手敲 URL 仍越权。`createAuthMiddleware` 返回的 `requireTab(...tabKeys)` 仿 `requireAdmin`：内部先跑 `requireAuth`，admin 放行，`allowed_tabs===null` 全放行，否则与 `tabKeys` 取交集（OR 语义），否则 403「没有访问该功能的权限」。
+
+**Why：** 之前 `allowed_tabs` 只做前端隐藏，任何人 `curl /api/check/...` 可越权。requireTab 把同一套名单落到服务端闭环。
+
+**How to apply：**
+
+- **路由挂载方式决定守卫写法**：`app.use('/api/stats', router)` 这种**带 mount path** 的可以 `router.use(requireTab('stats'))` 整 router 守卫；但 `check`/`labr`/`qual` 是 `app.use(router)` **挂在根上无 mount path** —— `router.use()` 会命中**全站每个请求**（router 的无 path 中间件对所有进入它的请求生效），必须改 **per-route guard**（`const requireX = requireTab('x')` 逐路由替换 `requireAuth`）。踩过这个坑，务必注意
+- **一端点多 tab 复用走 OR**：`POST /api/qualifications/batch-query` 既服务资质查询页、也给标准检索结果点资质徽章，用 `requireTab('qual','search')`，否则只有搜索权限的用户徽章全灭
+- `requireTab` 内部已含 `requireAuth`，替换后原 per-route `requireAuth` 可留作冗余兜底（不影响行为）或删除
+- `settings`/`logs` 的数据接口本身是 `requireAdmin`（admin-only），即便授予普通用户该 tab，页面数据仍 403 —— 这是有意的（与 `users` tab 同理），名单里保留它们只是为了权限 UI 完整
+
 ## 凭据配置（**强制**）
 
 源 adapter 的账号密码**必须**通过 `.env.local`（仓库根，gitignored）注入，**绝不允许**写进任何 `.ts` / `.md` / commit message / auto-memory。

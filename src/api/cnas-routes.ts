@@ -7,15 +7,22 @@ import { normalizeError } from '../shared/errors';
 import { respond, respondError } from '../shared/response';
 import { toCamelCase, toSnakeCase } from '../shared/case';
 import { trackEvent, extractUsageCtx } from '../services/usage-tracker';
+import type { RequireTab } from './auth-middleware';
 
-export function createQualificationRoutes(db: Database.Database, requireAuth: express.RequestHandler):
+export function createQualificationRoutes(db: Database.Database, requireAuth: express.RequestHandler, requireTab: RequireTab):
   express.Router & { qualificationService: QualificationService } {
   const router = express.Router() as express.Router & { qualificationService: QualificationService };
   const svc = new QualificationService(db);
   router.qualificationService = svc;
 
+  // 此 router 由 app.use(router) 挂在根上（无 mount path），不能用 router.use() 整 router
+  // 守卫——那会命中全站每个请求。改用 per-route guard。requireTab 内部已含 requireAuth。
+  const requireQual = requireTab('qual');
+
   // ─── Batch query for search result badges ───
-  router.post('/api/qualifications/batch-query', requireAuth, (req, res, next) => {
+  // 例外：batch-query 既服务「资质查询」页，也给「标准检索」结果点亮资质徽章。
+  // 因此放行 qual 或 search 任一 tab（OR 语义），否则只开搜索权限的用户徽章会全灭。
+  router.post('/api/qualifications/batch-query', requireTab('qual', 'search'), (req, res, next) => {
     try {
       const schema = z.object({ stdCodes: z.array(z.string().trim()).min(1).max(200) });
       const { stdCodes } = schema.parse(req.body);
@@ -24,7 +31,7 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
   });
 
   // ─── Qualification search ───
-  router.get('/api/qualifications/search', requireAuth, (req, res, next) => {
+  router.get('/api/qualifications/search', requireQual,(req, res, next) => {
     try {
       const schema = z.object({
         q: z.string().trim().min(1).max(500),
@@ -41,7 +48,7 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
     }
   });
 
-  router.post('/api/qualifications/visual', requireAuth, (req, res, next) => {
+  router.post('/api/qualifications/visual', requireQual,(req, res, next) => {
     try {
       const schema = z.object({
         queries: z.array(z.string().trim().min(1).max(500)).min(1).max(100),
@@ -54,11 +61,11 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
   });
 
   // ─── CNAS Labs (under /qualifications/labs/cnas) ───
-  router.get('/api/qualifications/labs/cnas', requireAuth, (_req, res) => {
+  router.get('/api/qualifications/labs/cnas', requireQual,(_req, res) => {
     respond(res, { items: toCamelCase(svc.listCnasLabs()) });
   });
 
-  router.post('/api/qualifications/labs/cnas', requireAuth, (req, res, next) => {
+  router.post('/api/qualifications/labs/cnas', requireQual,(req, res, next) => {
     try {
       const schema = z.object({
         labNo: z.string().trim().min(1).max(50),
@@ -74,14 +81,14 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.delete('/api/qualifications/labs/cnas/:labNo', requireAuth, (req, res, next) => {
+  router.delete('/api/qualifications/labs/cnas/:labNo', requireQual,(req, res, next) => {
     try {
       svc.deleteCnasLab(req.params.labNo as string);
       respond(res, { ok: true });
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.put('/api/qualifications/labs/cnas/:labNo', requireAuth, (req, res, next) => {
+  router.put('/api/qualifications/labs/cnas/:labNo', requireQual,(req, res, next) => {
     try {
       const schema = z.object({ labName: z.string().trim().max(200) });
       const { labName } = schema.parse(req.body);
@@ -91,7 +98,7 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
   });
 
   // ─── Preset CNAS labs (built-in recommendations) ───────────────────────────
-  router.get('/api/qualifications/presets/cnas', requireAuth, (_req, res) => {
+  router.get('/api/qualifications/presets/cnas', requireQual,(_req, res) => {
     const existing = db.prepare('SELECT lab_no FROM cnas_labs').all() as { lab_no: string }[];
     const subscribed = new Set(existing.map(r => r.lab_no));
     const items = PRESET_CNAS_LABS.map(p => ({
@@ -106,7 +113,7 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
     respond(res, { items });
   });
 
-  router.post('/api/qualifications/presets/cnas/:labNo/subscribe', requireAuth, (req, res, next) => {
+  router.post('/api/qualifications/presets/cnas/:labNo/subscribe', requireQual,(req, res, next) => {
     try {
       const labNo = String(req.params.labNo);
       const preset = PRESET_CNAS_LABS.find(p => p.labNo === labNo);
@@ -125,7 +132,7 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
 
 
   // ─── CMA Labs (under /qualifications/labs/cma) ───
-  router.get('/api/qualifications/labs/cma/search', requireAuth, async (req, res, next) => {
+  router.get('/api/qualifications/labs/cma/search', requireQual,async (req, res, next) => {
     try {
       const schema = z.object({ q: z.string().trim().min(1).max(200) });
       const { q } = schema.parse(req.query);
@@ -134,11 +141,11 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.get('/api/qualifications/labs/cma', requireAuth, (_req, res) => {
+  router.get('/api/qualifications/labs/cma', requireQual,(_req, res) => {
     respond(res, { items: toCamelCase(svc.listCmaLabs()) });
   });
 
-  router.post('/api/qualifications/labs/cma', requireAuth, async (req, res, next) => {
+  router.post('/api/qualifications/labs/cma', requireQual,async (req, res, next) => {
     try {
       const schema = z.object({
         publicDetailId: z.string().trim().min(1).max(120),
@@ -149,14 +156,14 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.delete('/api/qualifications/labs/cma/:certNumber', requireAuth, (req, res, next) => {
+  router.delete('/api/qualifications/labs/cma/:certNumber', requireQual,(req, res, next) => {
     try {
       svc.deleteCmaLab(req.params.certNumber as string);
       respond(res, { ok: true });
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.put('/api/qualifications/labs/cma/:certNumber', requireAuth, (req, res, next) => {
+  router.put('/api/qualifications/labs/cma/:certNumber', requireQual,(req, res, next) => {
     try {
       const schema = z.object({ labName: z.string().trim().max(200) });
       const { labName } = schema.parse(req.body);
@@ -166,7 +173,7 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
   });
 
   // ─── Qualification links (under /qualifications/links) ───
-  router.post('/api/qualifications/links', requireAuth, (req, res, next) => {
+  router.post('/api/qualifications/links', requireQual,(req, res, next) => {
     try {
       const schema = z.object({
         displayName: z.string().trim().min(1).max(200),
@@ -179,7 +186,7 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.delete('/api/qualifications/links/:source/:id', requireAuth, (req, res, next) => {
+  router.delete('/api/qualifications/links/:source/:id', requireQual,(req, res, next) => {
     try {
       const schema = z.object({
         source: z.enum(['CNAS', 'CMA']),
@@ -192,7 +199,7 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
   });
 
   // ─── Sync (under /qualifications/labs/{cnas|cma}/sync) ───
-  router.post('/api/qualifications/labs/cnas/sync', requireAuth, async (req, res, next) => {
+  router.post('/api/qualifications/labs/cnas/sync', requireQual,async (req, res, next) => {
     try {
       const schema = z.object({ labNo: z.string().trim().optional(), force: z.coerce.boolean().default(false) });
       const { labNo, force } = schema.parse(req.query);
@@ -205,7 +212,7 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
     } catch (e) { next(normalizeError(e)); }
   });
 
-  router.post('/api/qualifications/labs/cma/sync', requireAuth, async (req, res, next) => {
+  router.post('/api/qualifications/labs/cma/sync', requireQual,async (req, res, next) => {
     try {
       const schema = z.object({ certNumber: z.string().trim().optional(), force: z.coerce.boolean().default(false) });
       const { certNumber, force } = schema.parse(req.query);
@@ -219,22 +226,22 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
   });
 
   // ─── Sync Logs ───
-  router.get('/api/qualifications/labs/cnas/sync-logs', requireAuth, (req, res) => {
+  router.get('/api/qualifications/labs/cnas/sync-logs', requireQual,(req, res) => {
     const limit = Math.max(1, Math.min(Number.parseInt(String(req.query.limit ?? ''), 10) || 20, 100));
     respond(res, { items: toCamelCase(svc.getCnasSyncLogs(limit)) });
   });
 
-  router.get('/api/qualifications/labs/cma/sync-logs', requireAuth, (req, res) => {
+  router.get('/api/qualifications/labs/cma/sync-logs', requireQual,(req, res) => {
     const limit = Math.max(1, Math.min(Number.parseInt(String(req.query.limit ?? ''), 10) || 20, 100));
     respond(res, { items: toCamelCase(svc.getCmaSyncLogs(limit)) });
   });
 
   // ─── Settings ───
-  router.get('/api/qualifications/settings', requireAuth, (_req, res) => {
+  router.get('/api/qualifications/settings', requireQual,(_req, res) => {
     respond(res, svc.getSettings());
   });
 
-  router.put('/api/qualifications/settings', requireAuth, (req, res, next) => {
+  router.put('/api/qualifications/settings', requireQual,(req, res, next) => {
     try {
       const schema = z.record(z.string(), z.string());
       const data = schema.parse(req.body);
@@ -246,7 +253,7 @@ export function createQualificationRoutes(db: Database.Database, requireAuth: ex
   });
 
   // ─── Stats ───
-  router.get('/api/qualifications/stats', requireAuth, (_req, res) => {
+  router.get('/api/qualifications/stats', requireQual,(_req, res) => {
     const cnasCount = (db.prepare('SELECT COUNT(*) as c FROM cnas_qualifications').get() as any).c;
     const cmaCount = (db.prepare('SELECT COUNT(*) as c FROM cma_qualifications').get() as any).c;
     const cnasLabs = (db.prepare('SELECT COUNT(*) as c FROM cnas_labs').get() as any).c;

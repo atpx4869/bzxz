@@ -758,14 +758,17 @@ async function showCreateUser() {
   });
 }
 
+// 顺序对齐 sidebar（index.html）+ 后端 ALL_TABS（admin-routes.ts）。三处增删 tab 必须同步。
 var TAB_ITEMS = [
   { key: 'search', label: '标准检索', desc: '搜索和下载标准' },
   { key: 'labr', label: 'Labr库检索', desc: '标准库补给' },
+  { key: 'check', label: '标准查新', desc: '标准变动提醒' },
   { key: 'batch', label: '批量下载', desc: '批量解析和下载' },
   { key: 'complete', label: '标准补全', desc: 'Excel/CSV 自动补全' },
   { key: 'local', label: '本地文件库', desc: '已下载标准管理' },
   { key: 'history', label: '下载历史', desc: '查看下载记录' },
   { key: 'qual', label: '资质查询', desc: 'CNAS/CMA 资质' },
+  { key: 'logs', label: '运行日志', desc: '搜索/下载/同步记录' },
   { key: 'stats', label: '使用统计', desc: '查看使用数据' },
   { key: 'settings', label: '系统设置', desc: '下载参数和源' },
 ];
@@ -835,14 +838,20 @@ async function showUserDetail(userId) {
     if (!res.ok) throw new Error(d.message || '加载失败');
 
     const typeLabels = { search: '搜索', download: '下载', batch_resolve: '批量解析', complete: '补全' };
-    const typeColors = { search: 'var(--accent)', download: 'var(--success)', batch_resolve: 'var(--warn)', complete: '#a78bfa' };
+    // 颜色全部走主题变量，卡片随主题（暗/亮/暖）自适应。注意是 --warning 不是 --warn。
+    const typeColors = { search: 'var(--accent)', download: 'var(--success)', batch_resolve: 'var(--warning)', complete: '#a78bfa' };
+
+    // 统计卡片：中性 surface 底 + 顶部 3px 主题色条 + 同色数字（仿主题按钮风格，
+    // 替换原先死板的灰底 oklch(25% 0.01 250)）。border/surface 都是主题变量，三套主题通吃。
+    const statCard = (color, value, label) =>
+      `<div style="padding:8px 14px;border-radius:8px;background:var(--surface-h);border:1px solid var(--border);border-top:3px solid ${color};text-align:center"><div style="font-size:20px;font-weight:600;color:${color}">${value}</div><div style="font-size:11px;color:var(--text-3)">${label}</div></div>`;
 
     let summaryHtml = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin:12px 0">';
     const total = d.summary.reduce((s, r) => s + r.count, 0);
-    summaryHtml += `<div style="padding:8px 14px;border-radius:8px;background:oklch(25% 0.01 250 / 0.5);text-align:center"><div style="font-size:20px;font-weight:600;color:var(--text)">${total}</div><div style="font-size:11px;color:var(--text-3)">总计</div></div>`;
+    summaryHtml += statCard('var(--accent)', total, '总计');
     for (const s of d.summary) {
       const color = typeColors[s.eventType] || 'var(--text-2)';
-      summaryHtml += `<div style="padding:8px 14px;border-radius:8px;background:oklch(25% 0.01 250 / 0.5);text-align:center"><div style="font-size:20px;font-weight:600;color:${color}">${s.count}</div><div style="font-size:11px;color:var(--text-3)">${typeLabels[s.eventType] || s.eventType}</div></div>`;
+      summaryHtml += statCard(color, s.count, typeLabels[s.eventType] || s.eventType);
     }
     summaryHtml += '</div>';
 

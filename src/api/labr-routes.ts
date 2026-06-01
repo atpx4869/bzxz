@@ -25,12 +25,17 @@ import type { Request, Response, NextFunction } from 'express';
 import { respond, respondError } from '../shared/response';
 import { normalizeError } from '../shared/errors';
 import { getLabrService } from '../sources/labr/labr-service';
+import type { RequireTab } from './auth-middleware';
 
 export function createLabrRoutes(
   requireAuth: (req: Request, res: Response, next: NextFunction) => void,
+  requireTab: RequireTab,
 ) {
   const router = Router();
   const service = getLabrService();
+  // 此 router 由 app.use(router) 挂在根上（无 mount path），不能用 router.use() 整 router
+  // 守卫——那会命中全站每个请求。改用 per-route guard。requireTab 内部已含 requireAuth。
+  const requireLabr = requireTab('labr');
 
   /**
    * GET /api/labr/search
@@ -45,7 +50,7 @@ export function createLabrRoutes(
    *
    * 缓存：service 内部 5min TTL,重复搜索 / 翻页 0 延迟。
    */
-  router.get('/api/labr/search', requireAuth, async (req, res, next) => {
+  router.get('/api/labr/search', requireLabr,async (req, res, next) => {
     try {
       const schema = z.object({
         keyword: z.string().trim().min(1).max(200),
@@ -80,7 +85,7 @@ export function createLabrRoutes(
     }
   });
 
-  router.get('/api/labr/detail/:did', requireAuth, async (req, res, next) => {
+  router.get('/api/labr/detail/:did', requireLabr,async (req, res, next) => {
     try {
       const did = Number(req.params.did);
       if (!Number.isInteger(did) || did <= 0) {
@@ -94,7 +99,7 @@ export function createLabrRoutes(
     }
   });
 
-  router.post('/api/labr/download', requireAuth, async (req, res, next) => {
+  router.post('/api/labr/download', requireLabr,async (req, res, next) => {
     try {
       const schema = z.object({ did: z.number().int().positive() });
       const { did } = schema.parse(req.body);
@@ -105,7 +110,7 @@ export function createLabrRoutes(
     }
   });
 
-  router.post('/api/labr/batch-download', requireAuth, async (req, res, next) => {
+  router.post('/api/labr/batch-download', requireLabr,async (req, res, next) => {
     try {
       const schema = z.object({
         items: z.array(z.object({ did: z.number().int().positive() })).min(1).max(100),

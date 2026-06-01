@@ -141,7 +141,8 @@ cp .env.example .env.local
   - 开启/关闭公开注册
   - 开启/关闭登录验证（需要登录）
   - 用户增删改查（角色、启用/禁用、权限）
-  - 用户级功能权限控制（按 Tab 配置可访问功能）
+  - 用户级功能权限控制（按 Tab 配置可访问功能，覆盖全部 11 个功能页，含「标准查新」「运行日志」）
+  - **功能权限服务端强制（`requireTab` 中间件）**：`allowed_tabs` 不再只是前端隐藏入口，后端各功能路由（stats / check / labr / qual）按 tab 校验，无权限直接 403「没有访问该功能的权限」；admin 不受限，`allowed_tabs=null` 视为全部允许；资质徽章用的 `batch-query` 端点同时放行 `qual` 或 `search`
   - 新用户默认权限设置（出厂默认仅 “标准检索 / 批量下载 / 标准补全” 三项）
   - 查看用户使用明细（搜索/下载次数、来源分布、事件列表）
 
@@ -459,6 +460,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **feat(auth): 功能权限服务端强制 `requireTab` + 权限名单补齐 check/logs + 用户明细配色** — 三合一。(1)新增 `requireTab(...tabKeys)` 中间件（仿 `requireAdmin`：内部先跑 `requireAuth`，admin 放行，`allowed_tabs=null` 全放行，否则 tab 交集校验，无权限 403「没有访问该功能的权限」），落到 stats/check/labr/qual 路由；`/api/qualifications/batch-query`（搜索结果资质徽章用）特放行 `qual` 或 `search`。**注意：** check/labr/qual 路由 `app.use(router)` 挂在根上无 mount path，不能用 `router.use()` 整 router 守卫（会命中全站），改 per-route guard。修复了「`allowed_tabs` 只在前端隐藏入口、手敲 URL 仍可越权」的洞。(2)sidebar 早先加了「标准查新 check」「运行日志 logs」两个 tab，但权限名单没同步 → 补进 `ALL_TABS` + 三处 zod enum + 前端 `TAB_ITEMS`（11 项对齐）。(3)用户明细统计卡片去掉死板灰底 `oklch(25% 0.01 250)`，改主题变量（`--surface-h` 底 + 顶部 3px 主题色条 + 同色数字），三套主题自适应；顺带修 `typeColors` 里失效的 `var(--warn)` → `var(--warning)`
 - **feat(update): 软件更新加 GitHub 下载加速代理** — 设置→软件更新底部可编辑加速代理列表（默认 `gh-proxy.org` / `v4.` / `cdn.`，第一条生效，后两条备用），保存即生效。「下载并安装」内置路径自动套 `<proxy>/<github资产url>` 前缀（仅对 `TRUSTED_UPDATE_HOSTS` 命中的 GitHub 域，代理域也纳入可信校验）。IPC `bzxz:get/set-github-proxies`，`DesktopSettings.githubProxies` 落 `bzxz-settings.json`
 - **fix(theme): light/paper 50+ "灰灰"残留补丁 + 设计文档** — 项目历史上大量 CSS hardcode `oklch(20% ...)` 暗色没走 var(--surface),light/paper 切换无效。Phase 2 补丁段追加 ~610 行,light + paper 各覆盖 50+ 处(日志/按钮/卡片内部/批量/补全/ctx-menu/modal/源徽章/状态徽章/进度条 等)。新增 [`docs/THEME_DESIGN.md`](./docs/THEME_DESIGN.md) 完整设计文档(三主题哲学 / token 表 / 80+ 组件覆盖清单 / 改一处 workflow / 续作 AI 起手指南),方便换电脑无缝接手
 - **feat: 第三主题 Paper · Claude Linen 温暖印刷品** — 在 dark / light 之外新增 paper,模仿 Claude.ai 同色调:米白底 + 赤陶 accent(#c96342) + 暖墨字 + 1px 米褐边线,杂志内页质感。不用 frosted blur,不做 ambient gradient,btn-primary 纯色不用渐变 — 跟两套现有主题完全不同的"印刷品"美学。topbar 单按钮改成 3 选 1 picker(dark/light/paper),手机「我」页加第三个 `📜 Paper` chip

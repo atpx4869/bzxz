@@ -3,6 +3,13 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat(auth): 功能权限服务端强制 `requireTab` + 权限名单补齐 check/logs + 用户明细配色** —
+  - **`requireTab(...tabKeys)` 中间件**（`src/api/auth-middleware.ts`）：仿 `requireAdmin`，内部先跑 `requireAuth`（拿 `req.user` / 处理 guest / 续期），再校验 tab。admin 永远放行；`allowed_tabs===null`=全部允许；否则 user 的 `allowed_tabs` 与传入 `tabKeys` 有交集才放行（OR 语义），都不满足 → 403「没有访问该功能的权限」。导出 `RequireTab` 类型供路由工厂注入
+  - **落地路由**：`stats`（`router.use(requireTab('stats'))`，该 router 有 mount path `/api/stats`）、`check`/`labr`/`qual`（这三个 `app.use(router)` 挂根上**无 mount path**，用 `router.use()` 会命中全站每个请求，故改 **per-route guard**：`const requireCheck = requireTab('check')` 逐路由替换原 `requireAuth`）
+  - **batch-query 例外**：`POST /api/qualifications/batch-query` 既服务资质查询页、也给标准检索结果点资质徽章，放行 `requireTab('qual','search')`，否则只开搜索权限的用户徽章全灭
+  - **修复的洞**：`allowed_tabs` 此前只在前端 `switchTab` 隐藏入口（纯装饰），任何人手敲 `/api/check/...` 等仍可越权访问；现服务端闭环
+  - **权限名单补齐 check/logs**：sidebar 早先加了「标准查新 check」「运行日志 logs」两 tab，权限名单没同步。补进 `ALL_TABS`（`admin-routes.ts`）+ 三处 zod enum（PUT /settings、POST /users、PUT /users/:id）+ 前端 `TAB_ITEMS`（`app-auth-admin.js`，11 项与 sidebar/后端对齐）
+  - **用户明细统计卡片配色**：去掉死板灰底 `oklch(25% 0.01 250 / 0.5)`，改主题变量（`var(--surface-h)` 底 + `var(--border)` 边 + 顶部 3px 主题色条 + 同色数字），dark/light/paper 三主题自适应；顺带修 `typeColors` 失效的 `var(--warn)` → `var(--warning)`
 - **feat(update): 软件更新增加 GitHub 下载加速代理（设置→软件更新）** — 国内网络直连 GitHub Releases 慢，新增可编辑的加速代理列表（默认 3 条：`https://gh-proxy.org`[默认生效] / `https://v4.gh-proxy.org` / `https://cdn.gh-proxy.org`[备用]），保存即生效。
   - `electron/main.ts`：`DesktopSettings.githubProxies` + `DEFAULT_GITHUB_PROXIES`；`activeGithubProxy()`（取第一条 https 代理）+ `applyGithubProxy(url)`（仅对 `TRUSTED_UPDATE_HOSTS` 命中的 GitHub 资产 URL 套 `<proxy>/<原url>` 前缀，其它原样）；`assertTrustedUpdateHost` 放行代理域；`downloadAndInstallUpdate` 在校验后改用 `applyGithubProxy(asset.url)` 再 fetch（仅作用于"下载并安装"内置路径，"打开下载页"仍跳浏览器原页）。IPC `bzxz:get-github-proxies`/`set-github-proxies`（trim+去尾斜杠+仅留 http(s)+最多 10 条）
   - `electron/preload.ts`：暴露 `getGithubProxies`/`setGithubProxies`

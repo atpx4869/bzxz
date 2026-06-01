@@ -58,7 +58,7 @@ export function createApp() {
   const sourceRegistry = new SourceRegistry();
   const exportTaskStore = new ExportTaskStore();
   const db = getDb();
-  const { requireAuth, requireAdmin } = createAuthMiddleware(db);
+  const { requireAuth, requireAdmin, requireTab } = createAuthMiddleware(db);
 
   // Writable user data (data/, exports/) lives under BZXZ_BASE_DIR.
   // Bundled read-only assets (public/, scripts/) live under BZXZ_STATIC_DIR,
@@ -228,15 +228,15 @@ export function createApp() {
   const announcementRoutes = createAnnouncementRoutes(db, requireAuth, requireAdmin);
   app.use('/api/announcements', announcementRoutes.userRouter);
   app.use('/api/admin/announcements', announcementRoutes.adminRouter);
-  app.use('/api/stats', createStatsRoutes(db, requireAuth));
-  const qualRouter = createQualificationRoutes(db, requireAuth);
+  app.use('/api/stats', createStatsRoutes(db, requireAuth, requireTab));
+  const qualRouter = createQualificationRoutes(db, requireAuth, requireTab);
   app.use(qualRouter);
   // 预览：requireAuth 在路由内部应用，挂在根上即可（端点路径里已带 /api/preview 前缀）。
   app.use(createPreviewRoutes(db, requireAuth, sourceRegistry));
   // labr：独立 sidebar，与 SourceRegistry 解耦；路径自带 /api/labr 前缀
-  app.use(createLabrRoutes(requireAuth));
+  app.use(createLabrRoutes(requireAuth, requireTab));
   // 标准查新：路径自带 /api/check 前缀
-  app.use(createCheckRoutes(db, sourceRegistry, requireAuth, baseDir));
+  app.use(createCheckRoutes(db, sourceRegistry, requireAuth, baseDir, requireTab));
 
   app.get('/api/health', (_req, res) => {
     const version = process.env.npm_package_version || process.env.BZXZ_APP_VERSION || '';

@@ -31,7 +31,7 @@ const SALT_ROUNDS = 10;
 // 注:zod enum 字面量必须就地展开,无法 spread const tuple,所以下方三处
 // `z.enum([...])` 是字面量重复。任何 tab 增删时三处必须一起改 + 同步 ALL_TABS。
 // 前端 TAB_ITEMS (public/js/app-auth-admin.js) 是 UI source of truth,长度需对齐
-const ALL_TABS = ['search', 'labr', 'batch', 'complete', 'local', 'history', 'qual', 'stats', 'settings'] as const;
+const ALL_TABS = ['search', 'labr', 'check', 'batch', 'complete', 'local', 'history', 'qual', 'logs', 'stats', 'settings'] as const;
 export { ALL_TABS };
 
 // New users default to the three core read/download features. Admins can grant
@@ -124,7 +124,7 @@ export function createAdminRoutes(db: Database.Database) {
         registrationEnabled: z.boolean().optional(),
         loginRequired: z.boolean().optional(),
         lanGuestAllowed: z.boolean().optional(),
-        defaultAllowedTabs: z.array(z.enum(['search', 'labr', 'batch', 'complete', 'local', 'history', 'qual', 'stats', 'settings'])).nullable().optional(),
+        defaultAllowedTabs: z.array(z.enum(['search', 'labr', 'check', 'batch', 'complete', 'local', 'history', 'qual', 'logs', 'stats', 'settings'])).nullable().optional(),
         standardsLibraryDir: z.string().max(500).optional(),
         // 模板必须含 {stdCode}，否则不同标准会落同一个文件名互相覆盖。
         // {source} 也建议要求（多源同号场景），但只软提示——少数用户单源场景可以省略。
@@ -381,7 +381,7 @@ export function createAdminRoutes(db: Database.Database) {
         password: z.string().min(6).max(128),
         displayName: z.string().trim().max(64).optional(),
         role: z.enum(['user', 'admin']).optional(),
-        allowedTabs: z.array(z.enum(['search', 'labr', 'batch', 'complete', 'local', 'history', 'qual', 'stats', 'settings'])).nullable().optional(),
+        allowedTabs: z.array(z.enum(['search', 'labr', 'check', 'batch', 'complete', 'local', 'history', 'qual', 'logs', 'stats', 'settings'])).nullable().optional(),
       });
       const { username, password, displayName, role, allowedTabs } = schema.parse(req.body);
       if (username.toLowerCase() === GUEST_USERNAME) {
@@ -423,7 +423,7 @@ export function createAdminRoutes(db: Database.Database) {
         role: z.enum(['user', 'admin']).optional(),
         isActive: z.boolean().optional(),
         password: z.string().min(6).max(128).optional(),
-        allowedTabs: z.array(z.enum(['search', 'labr', 'batch', 'complete', 'local', 'history', 'qual', 'stats', 'settings'])).nullable().optional(),
+        allowedTabs: z.array(z.enum(['search', 'labr', 'check', 'batch', 'complete', 'local', 'history', 'qual', 'logs', 'stats', 'settings'])).nullable().optional(),
       });
       const updates = schema.parse(req.body);
 

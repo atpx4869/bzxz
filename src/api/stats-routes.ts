@@ -4,10 +4,12 @@ import type Database from 'better-sqlite3';
 import type { Request, Response, NextFunction } from 'express';
 import { respond, respondError } from '../shared/response';
 import { toCamelCase } from '../shared/case';
+import type { RequireTab } from './auth-middleware';
 
-export function createStatsRoutes(db: Database.Database, requireAuth: (req: Request, res: Response, next: NextFunction) => void) {
+export function createStatsRoutes(db: Database.Database, requireAuth: (req: Request, res: Response, next: NextFunction) => void, requireTab: RequireTab) {
   const router = Router();
-  router.use(requireAuth);
+  // requireTab('stats') 内部已先跑 requireAuth（拿 user + 续期），再校验 tab 权限。
+  router.use(requireTab('stats'));
 
   const querySchema = z.object({
     from: z.string().optional(),

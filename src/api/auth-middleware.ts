@@ -5,6 +5,9 @@ import { getSetting, GUEST_USERNAME } from '../services/db';
 import { respondError } from '../shared/response';
 import { SESSION_MAX_AGE_MS, SESSION_RENEW_THRESHOLD_MS, cookieOpts } from './session-cookie';
 
+// 工厂函数注入用的 requireTab 类型：传入若干 tab key（OR 语义），返回一个中间件。
+export type RequireTab = (...tabKeys: string[]) => (req: Request, res: Response, next: NextFunction) => void;
+
 export interface AuthUser {
   id: number;
   username: string;
@@ -179,5 +182,34 @@ export function createAuthMiddleware(db: Database.Database) {
     });
   }
 
-  return { requireAuth, requireAdmin, isLoginRequired };
+  // 按「功能页」（sidebar tab）做服务端权限校验。
+  // Why: allowed_tabs 之前只在前端 switchTab 里隐藏入口 —— 纯装饰。任何人手敲
+  // /api/check/... 仍能越权访问。requireTab 把同一套 allowed_tabs 落到服务端，
+  // 真正闭环。
+  // 语义：
+  //   - 先过 requireAuth（拿到 req.user / 处理 guest / 续期），与 requireAdmin 同构
+  //   - admin 永远放行（管理员不受 tab 名单约束）
+  //   - allowed_tabs === null 表示「未设限」= 全部允许
+  //   - 否则 user 的 allowed_tabs 与传入 tabKeys 有交集即放行（OR 语义：一个端点
+  //     可被多个 tab 复用，如 batch-query 同时服务 qual 页和 search 结果徽章）
+  //   - 都不满足 → 403 + 中文提示
+  function requireTab(...tabKeys: string[]) {
+    return (req: Request, res: Response, next: NextFunction): void => {
+      requireAuth(req, res, () => {
+        const user = req.user!;
+        if (user.role === 'admin' || user.allowed_tabs === null) {
+          next();
+          return;
+        }
+        const allowed = tabKeys.some((t) => user.allowed_tabs!.includes(t));
+        if (!allowed) {
+          respondError(res, 403, 'FORBIDDEN', '没有访问该功能的权限');
+          return;
+        }
+        next();
+      });
+    };
+  }
+
+  return { requireAuth, requireAdmin, requireTab, isLoginRequired };
 }
