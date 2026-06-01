@@ -34,11 +34,23 @@
 
   // ── 入口 ──────────────────────────────────────────────────────────
 
+  // 注：currentUser 在 app-auth-admin.js 用 `let` 顶层声明，不挂 window；
+  // 但脚本顶层 let 在浏览器里是"脚本作用域"全局变量，跨 <script> 文件可直读，
+  // 只是 `window.currentUser` 拿不到。统一靠局部 helper 兜底未登录状态。
+  function getCurrentUser() {
+    try { return typeof currentUser !== 'undefined' ? currentUser : null; }
+    catch (e) { return null; }
+  }
+  function isAdminUser() {
+    const u = getCurrentUser();
+    return !!(u && u.role === 'admin');
+  }
+
   window.loadCapLibPage = async function loadCapLibPage() {
     const adminBtn = document.getElementById('capLibCleanupBtn');
-    if (adminBtn) adminBtn.style.display = (window.currentUser && window.currentUser.role === 'admin') ? '' : 'none';
+    if (adminBtn) adminBtn.style.display = isAdminUser() ? '' : 'none';
     const syncBtn = document.getElementById('capLibSyncAllBtn');
-    if (syncBtn) syncBtn.disabled = !(window.currentUser && window.currentUser.role === 'admin');
+    if (syncBtn) syncBtn.disabled = !isAdminUser();
     if (syncBtn) syncBtn.title = syncBtn.disabled ? '仅管理员可触发同步' : '同步勾选的领域';
 
     await Promise.all([renderDomains(), renderSummary(), renderLabs()]);
@@ -63,7 +75,7 @@
       const data = await readApiResponse(res);
       const items = (data && data.items) || [];
       if (!items.length) { box.innerHTML = '<div style="color:var(--text-3)">无领域数据</div>'; return; }
-      const isAdmin = window.currentUser && window.currentUser.role === 'admin';
+      const isAdmin = isAdminUser();
       box.innerHTML = '<div class="cap-lib-dom-table">' + items.map(it => {
         const synced = it.lastSyncedAt ? formatDateTime(it.lastSyncedAt) : '从未';
         const remote = it.remoteTotal ? it.remoteTotal.toLocaleString() : '?';
