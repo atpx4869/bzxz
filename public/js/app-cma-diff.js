@@ -27,8 +27,16 @@
    * diffByLab 行排序、导出排序统一引这一个常量，避免散落多份失同步。
    */
   const GROUP_ORDER = ['not_in_lib', 'series_only', 'abolished', 'cite_only', 'in_lib'];
-  /** 机构内每个状态档分页大小 */
-  const PAGE_SIZE = 50;
+  /** 机构内每个状态档分页大小（可选项 + 默认 + localStorage 记忆） */
+  const PAGE_SIZE_OPTIONS = [50, 100, 200, 300, 500, 1000];
+  const PAGE_SIZE_DEFAULT = 100;
+  function getPageSize() {
+    const v = parseInt(localStorage.getItem('capLib.pageSize'), 10);
+    return PAGE_SIZE_OPTIONS.includes(v) ? v : PAGE_SIZE_DEFAULT;
+  }
+  function setPageSize(v) {
+    if (PAGE_SIZE_OPTIONS.includes(v)) { try { localStorage.setItem('capLib.pageSize', String(v)); } catch { /* ignore */ } }
+  }
 
   /** 进度轮询定时器 jobId → setInterval handle */
   const progressTimers = new Map();
@@ -600,15 +608,21 @@
     body.innerHTML = html;
   }
 
-  /** 按 PAGE_SIZE 切片 + 翻页器 + 黑名单批量条。pages≤1 只显示总数。 */
+  /** 按每页大小切片 + 翻页器 + 黑名单批量条 + 每页数量选择器。pages≤1 只显示总数。 */
   function renderPagedTable(list, page, certNumber) {
     const total = list.length;
-    const pages = Math.ceil(total / PAGE_SIZE) || 1;
+    const pageSize = getPageSize();
+    const pages = Math.ceil(total / pageSize) || 1;
     const p = Math.min(Math.max(1, page), pages);
-    const slice = list.slice((p - 1) * PAGE_SIZE, p * PAGE_SIZE);
+    const slice = list.slice((p - 1) * pageSize, p * pageSize);
+    const pageSizeSel = `<label class="cap-lib-pagesize">每页
+      <select onchange="capLibSetPageSize(this)">
+        ${PAGE_SIZE_OPTIONS.map(n => `<option value="${n}" ${n === pageSize ? 'selected' : ''}>${n}</option>`).join('')}
+      </select> 条</label>`;
     const blackBar = `<div class="cap-lib-black-bar">
       <button class="cap-lib-row-act" onclick="capLibAddCheckedToBlacklist(this)">勾选项加入黑名单</button>
       <span class="cap-lib-black-hint">黑名单内的标准号不显示也不参与匹配（用于屏蔽表格合并产生的非标准号脏行）</span>
+      ${pageSizeSel}
     </div>`;
     const tableHtml = `
       <table class="cap-lib-diff-table cap-lib-diff-table-actions">
@@ -666,6 +680,23 @@
     stbody.dataset.page = String(page);
     stbody.innerHTML = renderPagedTable(list, page, certNumber);
     stbody.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  };
+
+  // 改每页数量：记 localStorage，把本机构所有「已渲染」的状态档表从第 1 页重渲（统一生效）
+  window.capLibSetPageSize = function (sel) {
+    const v = parseInt(sel.value, 10);
+    setPageSize(v);
+    const labBody = sel.closest('.cap-lib-lab-body');
+    if (!labBody) return;
+    const certNumber = labBody.dataset.cert || '';
+    labBody.querySelectorAll('.cap-lib-stgroup').forEach(group => {
+      const stbody = group.querySelector('.cap-lib-stgroup-body');
+      if (!stbody || !stbody.dataset.rendered) return;   // 未展开渲染的档不动，下次展开自然用新值
+      const status = group.getAttribute('data-status');
+      const list = (group.closest('.cap-lib-lab-groups')?._capLibViewGroups || labBody._capLibGroups || {})[status] || [];
+      stbody.dataset.page = '1';
+      stbody.innerHTML = renderPagedTable(list, 1, certNumber);
+    });
   };
 
   // 状态档折叠：首次展开懒渲染该档分页表

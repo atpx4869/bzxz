@@ -446,7 +446,7 @@ Why：远端「产品质量检验」已从 41s 劣化到一次拉 41k 行需 5-7
 
 - **领域订阅卡整卡折叠**：默认收起、标题栏摘要「已订阅 N 个 · 最近同步 时间」，折叠态记 `localStorage('capLib.domCollapsed')`（默认值不为 `'0'` 即收起）。展开后两列 grid（窄屏 ≤900px 单列），长领域名 ellipsis、进度条弹性宽
 - **批量同步**（admin）：`capLibSyncChecked` 串行同步勾中领域（逐个 await `syncDomainAndWait`，避免并发长请求轰上游）；「全部更新」复用 `capLibSyncAll`
-- **机构内 5 档分类折叠 + 分页**：`capLibToggleLab` 拉行后按 `diffStatus` 分 5 组缓存到 `body._capLibGroups`，`renderStatusGroups` 按单一 `GROUP_ORDER`（worst→best）渲染折叠卡，默认展开首个非空最严重档；`renderPagedTable` 50 条/页 + `renderPager`/`compressPages`（≤7 页全列，否则 `1 … cur±1 … last`）。懒渲染：非默认展开档点开才生成表；收起机构清 `_capLibGroups` 引用
+- **机构内 5 档分类折叠 + 分页**：`capLibToggleLab` 拉行后按 `diffStatus` 分 5 组缓存到 `body._capLibGroups`，`renderStatusGroups` 按单一 `GROUP_ORDER`（worst→best）渲染折叠卡，默认展开首个非空最严重档；`renderPagedTable` 每页大小可选 50/100/200/300/500/1000（默认 100，`getPageSize`/`setPageSize` 记 localStorage `capLib.pageSize`，黑名单条上有选择器）+ `renderPager`/`compressPages`（≤7 页全列，否则 `1 … cur±1 … last`）。懒渲染：非默认展开档点开才生成表；收起机构清 `_capLibGroups` 引用
 - **机构内搜索**：机构展开后顶部搜索框 `capLibSearchLab`（防抖 200ms），按标准号/标准名/检测项目过滤缓存行，命中档全展开（`renderStatusGroups` 的 `expandAll`）；过滤后的分组挂到 `.cap-lib-lab-groups` 容器的 `_capLibViewGroups`，翻页/展开懒渲染经 `viewGroupsFor` 优先取它（保证搜索态翻页只翻命中行），清空恢复全量默认视图
 - 配色/文案/排序复用 `DIFF_STATUS_META`（单一真相源）；新 CSS 全 token 化（`--surface-h/--border/--accent`）保证 light/paper 主题不"白上加白"
 

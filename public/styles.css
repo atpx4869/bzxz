@@ -4507,6 +4507,8 @@ button.set-chip.active:hover { background: var(--accent-h); border-color: var(--
 .cap-lib-mapped-tag { color: var(--accent); font-size: 11px; margin-left: 4px; cursor: help; }
 .cap-lib-black-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
 .cap-lib-black-hint { font-size: 11px; color: var(--text-3); }
+.cap-lib-pagesize { margin-left: auto; font-size: 11px; color: var(--text-3); display: inline-flex; align-items: center; gap: 4px; }
+.cap-lib-pagesize select { padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-h); color: var(--text); font-size: 11px; cursor: pointer; }
 .cap-lib-black-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .cap-lib-black-list { display: flex; flex-direction: column; gap: 4px; }
 .cap-lib-black-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; background: var(--surface-h); cursor: pointer; }

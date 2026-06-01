@@ -176,6 +176,8 @@
 /* 黑名单批量条（状态档表头上方） */
 .cap-lib-black-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
 .cap-lib-black-hint { font-size: 11px; color: var(--text-3); }
+.cap-lib-pagesize { margin-left: auto; font-size: 11px; color: var(--text-3); display: inline-flex; align-items: center; gap: 4px; }
+.cap-lib-pagesize select { padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-h); color: var(--text); font-size: 11px; cursor: pointer; }
 
 /* 黑名单管理面板 */
 .cap-lib-black-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }

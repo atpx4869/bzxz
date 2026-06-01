@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat(cma-diff): 机构维度比对每页数量可选** — 状态档表格黑名单条上加「每页 N 条」选择器，
+  可选 50/100/200/300/500/1000，**默认 100**（原写死 50），记 localStorage `capLib.pageSize`；
+  改值把本机构所有已展开的状态档表从第 1 页重渲。纯前端（`getPageSize`/`setPageSize`/`capLibSetPageSize`）。
 - **feat(cma-diff): 机构维度比对行多选加表头全选** — 每个状态档表格表头加全选复选框，一键勾中/取消
   本页（筛选/分档后的当前页可见）所有行，配合「勾选项加入黑名单」批量操作；行勾选变动时表头框
   回写全选/半选/不选状态。纯前端（`capLibToggleCheckAll`/`capLibSyncCheckAll`）。
