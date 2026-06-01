@@ -215,6 +215,8 @@ function renderByStdResults(groups) {
     const name = cleanStdNameForQual(g.stdCode, g.stdName);
     const cat = g.category ? `<span class="qual-bystd-cat">${escapeHtml(g.category)}</span>` : '';
     const trunc = g.truncated ? `<span class="qual-bystd-trunc" title="行数过多已截断，仅展示前 ${g.rows.length} 行">截断</span>` : '';
+    // 机构弱化：实际只有一家机构时不显「· M 家」（避免重复噪声）
+    const labMeta = (g.labCount || 0) > 1 ? ` · ${g.labCount} 家` : '';
     if (g.isProduct) {
       return `
         <div class="qual-bystd-card" data-idx="${i}">
@@ -223,7 +225,7 @@ function renderByStdResults(groups) {
             <span class="qual-bystd-kind">📦 产品标准</span>
             <span class="qual-bystd-code">${escapeHtml(g.stdCode)}</span>
             <span class="qual-bystd-name">${escapeHtml(name)}</span>
-            <span class="qual-bystd-meta">${g.rowCount} 项 · ${g.labCount} 家 · ${escapeHtml(g.source)}</span>
+            <span class="qual-bystd-meta">${g.rowCount} 项${labMeta} · ${escapeHtml(g.source)}</span>
             ${cat}${trunc}
           </div>
           <div class="qual-bystd-body" id="byStd_${i}_body" style="display:none"></div>
@@ -237,7 +239,7 @@ function renderByStdResults(groups) {
           <span class="qual-bystd-kind qual-bystd-kind-method">🔬 方法</span>
           <span class="qual-bystd-code">${escapeHtml(g.stdCode)}</span>
           <span class="qual-bystd-name">${escapeHtml(name)}</span>
-          <span class="qual-bystd-meta">${param ? '参数:' + escapeHtml(param) + ' · ' : ''}${g.labCount} 家 · ${escapeHtml(g.source)}</span>
+          <span class="qual-bystd-meta">${param ? '参数:' + escapeHtml(param) : ''}${labMeta} · ${escapeHtml(g.source)}</span>
           ${cat}
         </div>
         <div class="qual-bystd-body" id="byStd_${i}_body" style="display:none"></div>
@@ -264,12 +266,16 @@ window.toggleByStdGroup = function (i) {
 
 function renderByStdRows(g) {
   const isCnas = g.source === 'CNAS';
+  // 机构弱化：实际只有一家机构（labCount<=1）时不出「机构」列，避免每行重复同一家名。
+  const showLab = (g.labCount || 0) > 1;
+  const labHead = showLab ? '<th>机构</th>' : '';
+  const labCell = r => showLab ? `<td>${escapeHtml(r.labName || r.labNo)}</td>` : '';
   const head = isCnas
-    ? '<th>检测对象</th><th>检测参数</th><th>方法/标准</th><th>机构</th><th>限值</th>'
-    : '<th>检测项目</th><th>方法/标准</th><th>机构</th><th>限值</th>';
+    ? `<th>检测对象</th><th>检测参数</th><th>方法/标准</th>${labHead}<th>限值</th>`
+    : `<th>检测项目</th><th>方法/标准</th>${labHead}<th>限值</th>`;
   const rows = g.rows.map(r => isCnas
-    ? `<tr><td>${escapeHtml(r.testObject)}</td><td>${escapeHtml(r.testParam)}</td><td>${escapeHtml(r.testStandard)}</td><td>${escapeHtml(r.labName || r.labNo)}</td><td>${escapeHtml(r.limitDesc)}</td></tr>`
-    : `<tr><td>${escapeHtml(r.testParam)}</td><td>${escapeHtml(r.testStandard)}</td><td>${escapeHtml(r.labName || r.labNo)}</td><td>${escapeHtml(r.limitDesc)}</td></tr>`
+    ? `<tr><td>${escapeHtml(r.testObject)}</td><td>${escapeHtml(r.testParam)}</td><td>${escapeHtml(r.testStandard)}</td>${labCell(r)}<td>${escapeHtml(r.limitDesc)}</td></tr>`
+    : `<tr><td>${escapeHtml(r.testParam)}</td><td>${escapeHtml(r.testStandard)}</td>${labCell(r)}<td>${escapeHtml(r.limitDesc)}</td></tr>`
   ).join('');
   return `<table class="qual-bystd-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
 }

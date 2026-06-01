@@ -9,6 +9,8 @@
   搜索字段：标准号/标准名/检测对象/参数/类别（不含机构名）。后端新增 `searchByStandard` +
   `GET /api/qualifications/search-by-standard`（按标准聚合 + 分组级 limit，避免旧 `search` 行级 LIMIT 50
   截断产品标准）。前端复用 qual tab 切换 + `escapeHtml`/`cleanStdNameForQual`，懒渲染展开。CSS 双文件镜像全 token 化。
+  **机构弱化**：实际常态只有一家机构（CNAS/CMA 同属一家），故折叠头「· M 家」与展开表「机构」列在
+  `labCount<=1` 时自动隐藏（>1 才显，向后兼容多机构）。
 - **fix(cma-diff): 导出文件名加时分，避免同名冲突** — 原文件名只到日期 `…-{YYYYMMDD}.xlsx`，
   同一天多次导出同机构文件名完全相同，下载到同目录时第二次会覆盖/加(1)失败。改为带时分
   `…-{YYYYMMDDHHmm}.xlsx`（如 `CMA一单一库比对-湖北省产品质量监督检验研究院-202606012326.xlsx`）。
