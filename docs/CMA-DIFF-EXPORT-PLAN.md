@@ -1,10 +1,25 @@
-# CMA 一单一库比对 — 数据导出方案（待实施）
+# CMA 一单一库比对 — 数据导出方案（决策已拍板，待实施）
 
 > 这份文档是 `cma-diff` tab 的下一步增量：把订阅机构资质 × 国家库的对比结果
 > 导出 Excel。**当前 main 已合并主体功能**（commit `5b6f3a0`），导出是接下来要做的。
 >
-> 切换电脑或新开会话时：让 Claude 读这份文档 + `CHANGELOG.md` 的 `feat(cma-diff)`
-> 那条，就能直接动手。需要先确认下方四个决策点。
+> **第二轮反馈已把导出并进 `CMA-DIFF-LABS-LAYOUT-PLAN.md` 一起落地**，且下方 5 个
+> 决策点已全部拍板（见「已拍板决策」）。两份 plan 同一会话连做、一条 commit。
+>
+> 可点击预览：[`docs/cma-diff-layout-prototype.html`](./cma-diff-layout-prototype.html)（含三级导出按钮）。
+
+## ✅ 已拍板决策（用户第二轮确认，照此实施）
+
+| 决策点 | 定案 |
+|---|---|
+| 1. 导出入口 | **三级**：状态档头「导出」(单机构单档) + 机构头「导出此机构」(单机构整表) + 顶部「导出全部机构」(全订阅合并)。即旧选项 A + D 的档级版 + C。挂载点见 LAYOUT plan「Part 2b」 |
+| 2. 格式 | **Excel (.xlsx)**，复用 `check-routes.ts` 的 `xlsx@0.18.5` |
+| 3. 列结构 | 按下方「决策点 3」表（机构名/证书号/标准号/标准名/类别/检测项目/比对状态/库内remark/库内领域/建议替代年版/替代年版领域 + 导出时间注脚） |
+| 4. 加分项 | 状态列 **emoji 前缀**（⛔🔴🟠⚠✅，零依赖、不走 cellStyles）+ 首行 **AutoFilter** + **列宽自适应**；多机构走**单 sheet 按机构列排序** |
+| 5. 文件命名 | 单机构 `CMA一单一库比对-{机构名}-{YYYYMMDD}.xlsx` / 全部 `CMA一单一库比对-全部-{YYYYMMDD}.xlsx`，机构名 sanitize 非法字符 |
+| 下载方式 | **流式 `res.send(buffer)`**（不落临时文件、无需 cleanup），不抄 check-routes 的「写 data/exports 再回 downloadUrl」那套 |
+
+下方原始决策表保留作背景，实施以上表为准。
 
 ## 用户已确认的前置决策
 
@@ -139,12 +154,13 @@ router.post('/api/cma-diff/export', requireCmaDiff, (req, res, next) => {
 
 ### 前端
 
-#### `public/js/app-cma-diff.js`
+#### `public/js/app-cma-diff.js`（三级入口，挂到 LAYOUT plan 的新结构上）
 
-1. **机构折叠组标题栏**加「导出此机构」按钮（决策 A）
-2. **顶部 head-actions** 加「导出勾选机构」按钮（决策 B）+ 机构列表加复选框
-3. **详情面板筛选条**右侧加「导出当前筛选」按钮（决策 D）
-4. 三个按钮统一调 `capLibExportDiff(filter)` 工具函数：
+1. **状态档头** `.cap-lib-stgroup-head` 右侧「导出」小按钮 →
+   `{certNumbers:[本机构], statuses:[该档]}`（取代旧「决策 D 当前筛选」；筛选 chip 已被分类折叠取代，按档导更精确）
+2. **机构折叠组头** `.cap-lib-lab-head` 右侧「导出此机构」→ `{certNumbers:[本机构]}`
+3. **顶部 head-actions**「导出全部机构」→ `{certNumbers:[]}`（空=全部订阅机构合并表）
+4. 三处按钮 **`onclick` 必须 `event.stopPropagation()`**（档头/机构头本身是折叠触发区），统一调 `capLibExportDiff(filter, btn)`：
 
 ```js
 async function capLibExportDiff(filter, btn) {
@@ -172,47 +188,47 @@ async function capLibExportDiff(filter, btn) {
 }
 ```
 
-#### `public/index.html`
+#### `public/index.html` + `web/index.html`（两入口都加）
 
-- `set-page-head-actions` 区里在「同步勾选领域」按钮前加：
+- `set-page-head-actions` 区加顶部「导出全部机构」：
   ```html
-  <button class="btn btn-sm btn-ghost" id="capLibExportSelectedBtn"
-          onclick="capLibExportSelected()" disabled>导出勾选机构</button>
+  <button class="btn btn-sm btn-ghost" id="capLibExportAllBtn"
+          onclick="capLibExportDiff({ certNumbers: [] }, this)">导出全部机构</button>
   ```
+- 机构头 / 状态档头的导出按钮是 `renderLabs` / `renderStatusGroups` 动态拼的
+  （见 LAYOUT plan「Part 2b」），不写死在 index.html
 
-### CSS（极少量）
+### CSS（极少量，全 token）
 
-机构组左侧加复选框对齐：`grid-template-columns` 头部加一列 `auto`。
+- 机构头 grid 列数 +1 给「导出此机构」按钮（LAYOUT plan 已写 `... 1fr auto auto`）
+- 导出按钮样式复用现有 `.btn .btn-sm .btn-ghost`，无需新 class（状态档头那个用 `.btn-sm` 偏小即可）
+- **不需要旧方案的机构列表复选框**（决策已改为三级导出，没有「勾选机构」这一档）
 
 ### 文档同步（CLAUDE.md 强制约定）
 
 - `README.md` API 表追加 `POST /api/cma-diff/export`
-- `CHANGELOG.md` 新一条 `feat(cma-diff): 数据导出 Excel`
+- `CHANGELOG.md` 与 LAYOUT plan 合并成一条（见 LAYOUT plan 文档同步节）
 - `docs/ARCHITECTURE.md` 「十二、CMA 一单一库」加导出小节
-- 本文档（CMA-DIFF-EXPORT-PLAN.md）**实施完成后删掉**，避免和实际代码漂移
+- 本文档 + `CMA-DIFF-LABS-LAYOUT-PLAN.md` **一起实施、一起删掉**
 
 ---
 
-## 工作量估算
+## 工作量估算（已并入 LAYOUT plan 合计）
 
 | 模块 | 估算 |
 |---|---|
-| 后端 service + 路由 | 1.5h |
-| 前端三处按钮 + 工具函数 + 复选框 | 2h |
-| 文档同步 | 0.5h |
-| **合计** | **~4h** |
+| 后端 `exportDiff` service + `/export` 路由（流式 xlsx） | 1.5h |
+| 前端 `capLibExportDiff` 工具 + 三处按钮挂载 | 1h |
+| 文档同步 | （并入 LAYOUT plan） |
+| **合计** | **~2.5h**（含在 LAYOUT plan 的 ~4.5h 总计里） |
 
 ---
 
 ## 接手指南（换电脑 / 新会话）
 
-1. `git pull origin main` 拿最新代码
-2. 让 Claude 读：
-   - 本文档 `docs/CMA-DIFF-EXPORT-PLAN.md`
-   - `src/services/cap-lib-service.ts`（看 `diffByLab` 返回的 DiffRow 字段）
-   - `src/api/check-routes.ts:135` 附近（看现有 xlsx 导出怎么写的，照抄风格）
-   - `public/js/app-cma-diff.js`（看现有机构组渲染、找按钮挂载点）
-3. 先逐个回复决策点 1-5（"都按推荐"也算确认）
-4. 让 Claude 一次性按本文档实施 + 删除本文档 + commit + push
+导出已并入 `CMA-DIFF-LABS-LAYOUT-PLAN.md` 一起实施，**接手指南以 LAYOUT plan 那份为准**
+（它列了两份 plan 都要读的文件 + 6 条修正）。本文档提供后端 `exportDiff`/`/export` 端点
+与 `ExportFilter` 契约的细节，实施时配合 LAYOUT plan「Part 2b」的前端挂载点。
 
-完成后这份 plan 文件应当被删除，留 git history 即可追溯。
+决策点 1-5 已全部拍板（见顶部「已拍板决策」表），无需再确认。
+完成后本文档与 LAYOUT plan 一起删除，留 git history 追溯。
