@@ -90,6 +90,62 @@
   - **机构维度 5 档分类折叠 + 分页**：机构展开不再是一张几百行大表，按 `not_in_lib → series_only → abolished → cite_only → in_lib`（单一 `GROUP_ORDER` 常量，worst→best）二级折叠，每档 50 条/页分页（≤50 不出翻页器）；进机构自动展开第一个非空的最严重档，其余档懒渲染；翻页/收起只重渲表，收起机构清 `_capLibGroups` 引用让 GC 回收。删旧的状态筛选 chip（`capLibApplyFilter`）—— 折叠本身即筛选
   - **三级导出**：状态档头「导出」(单机构单档) / 机构头「导出此机构」(单机构整表) / 顶部「导出全部机构」(全订阅合并表)，三处统一 `POST /api/cma-diff/export`（body `{certNumbers:[], statuses?, keyword?}`，空 certNumbers=全部）。档头/机构头是折叠触发区，导出按钮 `onclick` 必须 `event.stopPropagation()`。后端 `CapLibService.exportDiff()` 摊平 + 按最差状态在前排序（同状态 labName+stdCode），路由生成 Excel：状态列 emoji 前缀（⛔🔴🟠⚠✅，零依赖不走 cellStyles）+ 首行 AutoFilter + 列宽自适应（中文按 2 宽估算），**流式 `res.send(buffer)` 不落临时文件**；文件名 `CMA一单一库比对-{机构名|全部|N家机构}-{YYYYMMDD}.xlsx`，机构名 sanitize 非法字符
   - 文件清单：修改 `public/js/app-cma-diff.js`（折叠/分页/导出全套）/ `public/index.html`（领域卡折叠头 + 顶部导出按钮）/ `src/services/cap-lib-service.ts`（`ExportFilter`/`ExportRow`/`exportDiff`）/ `src/api/cap-lib-routes.ts`（`POST /export` + xlsx 辅助）/ `public/styles.css` + `web/src/styles/pages/cap-lib.css`（两列 grid / 折叠头 / 状态分组 / 翻页器，全 token 化主题安全）
+- **feat(theme): 第四主题 `legacy` — Win7 / Chrome ≤109 完整兜底主题** —
+  - **背景**：Windows 7 系统中 Chrome 官方支持上限为 109（2023-01 起停更）。现仓库
+    大量使用 `oklch()`（Chrome 111+）/ `backdrop-filter blur` / Google Fonts 远端 /
+    SMP 区彩色 emoji（Win7 无字形显方框）等特性 —— 即便 oklch 已有 `xxx: #hex` 双声明
+    fallback，单 Win7 渲染层 frosted glass 仍会卡顿撕裂。新增专用主题彻底兜底
+  - **设计哲学**：第四主题而非全局降级 —— dark/light/paper 是给现代浏览器用户的
+    视觉资产，削平所有 backdrop-filter 等于让 99% 用户陪 1% Win7 用户吃亏。
+    `:root[data-theme="legacy"]` scope 化，与三个现代主题 **完全隔离**，零侵入
+  - **自动触发**：`public/index.html` + `web/index.html` `<head>` 顶部 FOUC 内联
+    script UA 嗅探（`/Chrom(?:e|ium)\/(\d+)/ ≤ 109` 或 `/Windows NT (5\.|6\.[0-3])/`
+    即 XP/Vista/7/8/8.1），命中即 `localStorage 'bzxz.theme'='legacy'` 持久化
+  - **手动触发**：topbar 主题 picker 第 4 项 `◆ 经典`、我页 chip 行第 4 项。
+    `app-theme.js` `VALID/THEME_META` 加 legacy 分支
+  - **禁用清单**（写 `theme/legacy.css` 严守纪律）：
+    - `oklch() / oklab() / color-mix() / color(display-p3 ...)` — Chrome 109 不支持。
+      纯 hex 调色板（`--bg #1a1d24` / `--surface #252934` / `--accent #4f6df0` 等）
+    - `backdrop-filter / -webkit-backdrop-filter` — Win7 DirectComposition 路径
+      残缺，blur(20px+) 卡顿/撕裂/低端机黑屏。所有 frosted 表面（topbar / sidebar /
+      download-center / toast / ctx-menu / modal / auth-card / qual-tooltip /
+      env-warning / preview-overlay / stage-card / user-dropdown / search-history）
+      统一退场，换不透明 surface
+    - `mask-image` 大区域径向晕染 — Win7 旧 GPU 路径掉帧，`body::before` 直接关掉
+    - Google Fonts（DM Sans / Source Serif 4 / DM Mono）— `<head>` 内联 script
+      检测 `data-theme="legacy"` 跳过整段 link 注入，内网超时不阻塞。CSS 系统字体
+      回退到 `Microsoft YaHei / Consolas`
+    - SMP 区彩色 emoji（U+1F300+，🌙☀️📜🔍📊📥📋📑🔔📦📚🗂🛡👥👤 等）—
+      Win7 无字形显示为 □ 方框。CSS `font-size: 0` 隐藏原 emoji + `::before` / `::after`
+      注入 BMP 区几何符号覆盖（sidebar icon 按 `data-tab` 映射：search→◎ / labr→▤ /
+      check→◑ / batch→▣ / complete→▦ / local→▩ / history→↓ / qual→◈ / cma-diff→◇ /
+      logs→▥ / stats→▥ / users→⚇ / settings→⚙；topbar 主题图标→◐◎▤◆；统计→▥ /
+      用户→⚐ / sidebar-user-avatar→⚐ / env-warning-icon→⚠ / me-row-icon 等同步）
+    - 弹性 spring 动画（`cubic-bezier(0.34, 1.56, ...)` 回弹）— 低帧率下抖，统一
+      `ease-out`；多数关键 `auth-card / modal / ctx-menu / toast / user-dropdown` `animation: none`
+    - 复杂 `box-shadow` 多层叠加 / 强渐变 `linear-gradient` — `btn-primary` 改纯色 +
+      浅阴影、`.qual-badge / .cap-lib-badge` `box-shadow: none`、全局 `filter: none`
+  - **JS API 兼容性扫描**：仓库未用 `Array.prototype.toSorted/toReversed/toSpliced`
+    （Chrome 110+）/ `Promise.withResolvers`（119+）/ `Object.groupBy`/`Map.groupBy`（117+）/
+    `structuredClone`（98 OK）/ `findLast/findLastIndex`（97 OK）等危险 API。`:has()`
+    仅 `toggle-switch.css` 一处（Chrome 105 起支持，109 ✅）。无需 polyfill
+  - **入口侵入 7 处**：
+    1. **新建** `web/src/styles/theme/legacy.css`（~530 行，完整 scoped 主题）
+    2. `web/src/styles/index.css` — 末尾 `@import './theme/legacy.css'`（必须在
+       `glass.css` 之后，确保最后赢）
+    3. `public/styles.css` — 末尾追加同内容（迁移期双轨契约，沿用 `glass.css` 重复
+       加载、cascade 等价模式）
+    4. `public/index.html` — FOUC 内联 script UA 嗅探 + Google Fonts 条件 script
+       加载 + topbar picker 第 4 项 + 我页 chip 第 4 项
+    5. `web/index.html` — 同 ④
+    6. `public/js/app-theme.js` — `VALID = [...,'legacy']`、`THEME_META.legacy =
+       { icon: '◆', label: '经典' }`、`toggleTheme` 兜底分支
+    7. `scripts/css-oklch-fallback.mjs` — 新增 `SKIP_FILES` 白名单跳过 `legacy.css`
+       （强制纪律：legacy.css 误写 oklch 时 `oklch:check` 直接红，不掩盖）
+  - **同步文档**：`CLAUDE.md` 新增「Legacy 主题契约」段（触发路径 / 禁用清单 /
+    维护提示 / 入口侵入清单）+ OKLCh 段补「legacy.css 已加白名单」/ `README.md`
+    顶部「近期重点」/ `web/src/styles/SECTIONS.md` 加「Legacy 主题」段
+
 - **feat(cma-diff): 新增「CMA 一单一库」tab — 订阅机构 CMA 资质 vs 国家能力项目库比对** —
   - **数据源**：市场监管总局《检验检测机构资质认定能力项目库》[cma.caqit.org.cn](https://cma.caqit.org.cn/)。实测：`GET /cma-admin/system/standardData/list?pageNum=1&pageSize=60000&domain=<顶层领域名>` 无鉴权、无 Referer/UA 校验、单接口可一次拉 5w+ 行；远端总量 51,910 条（2026-06）、按 11 个顶层领域分布（产品质量检验占 80%）；`domainId` / 子领域名传入返回 0 行，故只接顶层名（参考 [src/shared/cap-lib-domains.ts](./src/shared/cap-lib-domains.ts) 硬编码常量）
   - **新表**：`cma_capability_lib`（`source_id PK / domain / standard_method / std_code / std_code_norm / std_code_base / remark / lib_status / raw_status / row_hash / last_seen_at / fetched_at`，4 个索引）+ `cma_capability_lib_meta`（每领域 `subscribed / last_synced_at / remote_total / local_total / last_sync_stats(JSON)`）。归一化沿用现有 `cleanStdCode + extractFullCode + extractBaseCode` 三层契约，与 `cnas_qualifications` / `cma_qualifications` 完全正交

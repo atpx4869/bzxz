@@ -14,7 +14,9 @@ web/src/styles/
 ├── base.css            # ✅ 已落地：:root tokens + reset
 ├── theme/
 │   ├── tokens.css      # :root 变量（已在 base.css）
-│   └── glass.css       # frosted/glass overrides
+│   ├── glass.css       # frosted/glass overrides
+│   └── legacy.css      # ⬅ 新增（Win7/Chrome ≤109 兜底主题；纯 hex；
+│                       #    不写 oklch；由 :root[data-theme="legacy"] scope）
 ├── layout/
 │   ├── topbar.css
 │   ├── sidebar.css
@@ -115,6 +117,20 @@ web/src/styles/
   1. 删除 `public/styles.css` 中已抽出的所有段落
   2. 删除 `index.css` 里的 `@import '../../../public/styles.css'`
 - 把 `pages/*.css` 拆到对应 page 的 entry chunk（Vite code split）—— 见执行顺序第 5 条。
+
+## Legacy 主题（2026-06，第四主题，独立 cascade）
+
+`theme/legacy.css` 是为 Win7 / Chrome ≤109 用户提供的第四主题，**与 P1 拆分方向无关**：
+
+- 整文件全 hex 调色板，**禁止** oklch / color-mix / backdrop-filter / mask-image /
+  Google Fonts / SMP 区彩色 emoji（详细禁用清单见 `CLAUDE.md`「Legacy 主题契约」段）
+- 由 `:root[data-theme="legacy"]` scope 化，与 dark/light/paper 三个现代主题
+  **完全隔离**，零侵入。`index.css` 中加载顺序在 `glass.css` 之后 → 最后赢
+- 自动触发：`public/index.html` + `web/index.html` `<head>` 顶部 FOUC 内联 script
+  检测 UA，Chrome ≤109 / Windows NT 5.x|6.x 自动写入 `localStorage 'bzxz.theme'='legacy'`
+- 手动触发：topbar picker + 我页 chip 第 4 项 `◆ 经典`
+- 镜像追加：`public/styles.css` 末尾同段（沿用迁移期双轨契约）
+- `scripts/css-oklch-fallback.mjs` 的 `SKIP_FILES` 白名单跳过此文件
 
 ## 设置面板重设计（2026-05-29，与 P1 拆分方向相反）
 

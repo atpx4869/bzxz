@@ -3,14 +3,49 @@
 <head>
 <meta charset="UTF-8">
 <!-- 主题预设(避免 FOUC):必须放在所有 CSS 加载之前 -->
-<script>(function(){try{var t=localStorage.getItem('bzxz.theme');document.documentElement.setAttribute('data-theme',(t==='light'||t==='dark')?t:'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<script>
+/* FOUC 主题预设 + Win7/Chrome ≤109 自动 legacy 兜底。
+   逻辑见 public/index.html 同段 + web/src/styles/theme/legacy.css 文件头。 */
+(function(){
+  var VALID = ['dark','light','paper','legacy'];
+  function detectLegacy(){
+    try{
+      var ua = navigator.userAgent || '';
+      var m = ua.match(/Chrom(?:e|ium)\/(\d+)/);
+      if (m && parseInt(m[1],10) <= 109) return true;
+      if (/Windows NT (5\.|6\.[0-3])(?:[^\d]|$)/.test(ua)) return true;
+    }catch(e){}
+    return false;
+  }
+  var theme = 'dark';
+  try{
+    var t = localStorage.getItem('bzxz.theme');
+    if (VALID.indexOf(t) >= 0) theme = t;
+    else if (detectLegacy()) { theme = 'legacy'; try{ localStorage.setItem('bzxz.theme','legacy'); }catch(e){} }
+  }catch(e){ if (detectLegacy()) theme = 'legacy'; }
+  document.documentElement.setAttribute('data-theme', theme);
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>标准盒子 · StandardsBox</title>
 <link rel="icon" type="image/png" sizes="256x256" href="/favicon-256.png">
 <link rel="shortcut icon" href="/favicon.ico">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;1,8..60,400&family=DM+Mono:ital,wght@0,400;0,500&display=swap" rel="stylesheet">
+<!-- Google Fonts — Legacy(Win7/Chrome ≤109)用户跳过,避免内网超时阻塞 -->
+<script>
+(function(){
+  if (document.documentElement.getAttribute('data-theme') === 'legacy') return;
+  var head = document.head;
+  function add(rel, href, cross){
+    var l = document.createElement('link');
+    l.rel = rel; l.href = href;
+    if (cross) l.setAttribute('crossorigin','');
+    head.appendChild(l);
+  }
+  add('preconnect','https://fonts.googleapis.com');
+  add('preconnect','https://fonts.gstatic.com', true);
+  add('stylesheet','https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;1,8..60,400&family=DM+Mono:ital,wght@0,400;0,500&display=swap');
+})();
+</script>
 <script src="/vendor/chart.umd.min.js"></script>
 </head>
 <body>
@@ -30,6 +65,7 @@
         <button class="topbar-theme-picker-item" data-theme="dark" role="menuitem" onclick="bzxzTheme.set('dark')"><span>🌙</span><span>深色</span></button>
         <button class="topbar-theme-picker-item" data-theme="light" role="menuitem" onclick="bzxzTheme.set('light')"><span>☀️</span><span>浅色</span></button>
         <button class="topbar-theme-picker-item" data-theme="paper" role="menuitem" onclick="bzxzTheme.set('paper')"><span>📜</span><span>Paper</span></button>
+        <button class="topbar-theme-picker-item" data-theme="legacy" role="menuitem" onclick="bzxzTheme.set('legacy')"><span>◆</span><span>经典</span></button>
       </div>
     </div>
     <button class="topbar-btn" onclick="toggleUserDropdown()" id="sidebarUserToggle" title="用户">👤</button>

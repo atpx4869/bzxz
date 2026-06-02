@@ -345,13 +345,20 @@ function processRuleBody(body) {
 
 // ─── 文件 IO ────────────────────────────────────────────────────────────
 
+// Legacy 主题契约:web/src/styles/theme/legacy.css 是 Win7/Chrome ≤109 兜底主题,
+// 必须保持「纯 hex 调色板,零 oklch」。脚本显式跳过此文件,即便未来有人误写了
+// oklch 进去也不被注入 fallback —— 让 CI 的 oklch:check 红线暴露问题而非掩盖。
+const SKIP_FILES = new Set([
+  path.join(ROOT, 'web', 'src', 'styles', 'theme', 'legacy.css'),
+]);
+
 function findCssFiles() {
   const files = [];
   const pub = path.join(ROOT, 'public', 'styles.css');
   if (fs.existsSync(pub)) files.push(pub);
   const webStylesDir = path.join(ROOT, 'web', 'src', 'styles');
   if (fs.existsSync(webStylesDir)) walk(webStylesDir, files);
-  return files;
+  return files.filter((f) => !SKIP_FILES.has(f));
 }
 
 function walk(dir, out) {

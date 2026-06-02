@@ -51,6 +51,58 @@ Chrome ≤109 上整条 declaration 解析失败，主题崩。
 - CI 用 `npm run oklch:check` 守门
 - 算法：OKLab → sRGB + gamut mapping（保 L、保 h、二分搜 sRGB 内最大 C），不偏色
 - 脚本只看 value 里的 oklch — 注释里写 `oklch()` 是文档说明、不会被误处理
+- **`web/src/styles/theme/legacy.css` 已在 `SKIP_FILES` 白名单**（见 `scripts/css-oklch-fallback.mjs`）—
+  这是 Win7 兜底主题，必须保持纯 hex 调色，**禁止写 oklch**。即便误写也不会被注入兜底
+  （让 CI 的 oklch:check 红线暴露问题而非掩盖）。
+
+## Legacy 主题契约（**强制**）
+
+`web/src/styles/theme/legacy.css` 是 Win7 / Chrome ≤109 兜底主题，作为四主题中的
+第四态（`dark` / `light` / `paper` / `legacy`），由 `:root[data-theme="legacy"]`
+scope 化，**不污染**其他三个主题。
+
+**触发路径（双轨）：**
+
+1. **自动**：`public/index.html` + `web/index.html` 顶部 FOUC 内联 script 检测 UA
+   （`Chrome ≤109` 或 `Windows NT 5.x / 6.x` 即 XP/Vista/7/8/8.1）→ 强制写入
+   `localStorage 'bzxz.theme' = 'legacy'`。下次开机生效。
+2. **手动**：`bzxzTheme.set('legacy')`，topbar picker + 我页 chip 都有第 4 项 `◆ 经典`。
+
+**禁用清单（写 legacy.css 时**绝对不能**用的现代特性）：**
+
+- `oklch()` / `oklab()` / `color(display-p3 ...)` / `color-mix()` — Chrome 109 不支持
+- `backdrop-filter` / `-webkit-backdrop-filter` — Win7 DirectComposition 路径残缺，会卡顿/撕裂/黑屏
+- `mask-image` 大区域 — Win7 旧 GPU 路径掉帧
+- `@layer` / CSS Nesting `&` / `:has()`(谨慎) / `@container` — Chrome 109 不支持或刚出
+- Google Fonts（DM Sans / Source Serif 4 / DM Mono）— 已通过 `<head>` 内联 script
+  条件加载（legacy 时跳过），内网超时不阻塞
+- SMP 区彩色 emoji（U+1F300+，如 🌙☀️📜🔍📊📥📋📑）— Win7 系统无字形显示方框，
+  legacy.css 用 `::before` / `::after` 注入 BMP 区几何符号（◎▤◐▣▦▥▩◈◇⚙⚐ 等）覆盖
+
+**Why:**
+
+- 第四主题而非全局降级：99% 用户用现代浏览器看到 frosted glass / DM Sans 设计资产，
+  削平所有 backdrop-filter 等于陪 1% Win7 用户吃亏。隔离切面才对。
+- 纯 hex 而非双声明：legacy 用户根本看不到 oklch，写它徒增维护；同时让 oklch:fix
+  脚本通过 `SKIP_FILES` 白名单忽略此文件，强制纪律。
+- UA 自动 + 手动并存：UA 嗅探不可靠（Edge IE 模式 / 公司魔改 chromium），手动入口
+  是兜底；反过来开发自测也方便。
+- 同步两个 HTML 入口 + `public/styles.css` 末尾追加重复段：维持 legacy `public/index.html`
+  入口可用，与 `theme/glass.css` 沿用同样的「迁移期重复加载、cascade 等价」契约。
+
+**改 legacy.css 后必须**：跑一遍 `npm run oklch:check`（已自动跳过 legacy.css），
+push 后 GitHub Actions 出包，理想情况下用 Win7 + Chrome 109 portable 实测一次
+（无 Win7 环境时至少用 Chrome devtools 改 UA 模拟触发 `data-theme="legacy"` 自测）。
+
+**入口侵入清单（动 legacy 主题必同步的 7 处）：**
+
+1. `web/src/styles/index.css` — 末尾 `@import './theme/legacy.css'`（在 glass.css 之后）
+2. `web/src/styles/theme/legacy.css` — 主文件
+3. `public/styles.css` — 末尾追加同内容（迁移期双轨）
+4. `public/index.html` — FOUC 内联 script UA 嗅探 + 字体 link 条件化 + picker 第 4 项 + 「我」页 chip 第 4 项
+5. `web/index.html` — 同 ④
+6. `public/js/app-theme.js` — `VALID = [...,'legacy']`、`THEME_META.legacy`
+7. `scripts/css-oklch-fallback.mjs` — `SKIP_FILES` 白名单
 
 ## CSS 迁移期约定（**重要**）
 

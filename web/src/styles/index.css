@@ -82,3 +82,8 @@
 
 /* theme —— 玻璃主题，必须最后加载以确保跨设备视觉一致。 */
 @import './theme/glass.css';
+/* legacy —— Win7/Chrome ≤109 兜底主题，必须在 glass.css 之后加载,
+ * 用 :root[data-theme="legacy"] scope 化,不影响 dark/light/paper。
+ * 由 FOUC 内联 script UA 嗅探自动触发,picker 也可手动切换。
+ * 维护契约:见文件头部注释 + CLAUDE.md「Legacy 主题契约」。 */
+@import './theme/legacy.css';
