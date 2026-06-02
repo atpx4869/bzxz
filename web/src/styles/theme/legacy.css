@@ -164,10 +164,20 @@
   background: #1c2029;
   border: 1px solid #3a3f4c;
 }
+/* toast 在 legacy 下:基础 background 在 surface 上加 8% tint 染色 —— 用 hex
+   预混色(因 Chrome 109 不支持 color-mix 也不接受变量做 gradient color)。
+   --tone-accent 仍然指 var(--accent/success/danger/warning) → legacy 主题它们
+   都是 hex,无 oklch 命中。左侧 4px 实色条 + icon 圆点继续生效。
+   只压住基础 background 不让 gradient tint 在 Win7 GPU 路径花屏。 */
 :root[data-theme="legacy"] .toast {
   background: #252934;
+  background-image: none;
   border: 1px solid #3a3f4c;
 }
+:root[data-theme="legacy"] .toast.success { background: #213128; }
+:root[data-theme="legacy"] .toast.fail    { background: #322322; }
+:root[data-theme="legacy"] .toast.warn    { background: #322c1f; }
+:root[data-theme="legacy"] .toast.info    { background: #232739; }
 :root[data-theme="legacy"] .ctx-menu {
   background: #1f2330;
   border: 1px solid #3a3f4c;

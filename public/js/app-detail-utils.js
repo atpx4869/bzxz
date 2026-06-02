@@ -1216,13 +1216,19 @@ async function batchDeleteLibraryFiles() {
 }
 
 // ── Toast ──
+// type: 'success' | 'fail' | 'warn' | 'info'
+// icon 用 BMP 区单色字符(Win7 / 任意 Chrome 都有字形),颜色由 CSS .toast-icon 染白叠状态色背景。
+// 之前用 ✅❌ℹ️ 彩色 emoji 在 Win7 显方框 + 与 toast 主体灰色对比突兀,新设计统一视觉。
+const TOAST_ICON = { success: '✓', fail: '✕', warn: '!', info: 'i' };
 function showToast(msg, type, duration) {
   type = type || 'success'; duration = duration || 3000;
+  if (!TOAST_ICON[type]) type = 'info';
   const container = document.getElementById('toastContainer');
+  if (!container) return; // 极早期调用(DOM 没起来)直接吞,不抛
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
-  const icon = type === 'success' ? '✅' : type === 'fail' ? '❌' : 'ℹ️';
-  toast.innerHTML = `<span class="toast-icon">${icon}</span><span class="toast-msg">${escapeHtml(msg)}</span><div class="toast-bar" style="animation-duration:${duration}ms"></div>`;
+  toast.setAttribute('role', type === 'fail' ? 'alert' : 'status');
+  toast.innerHTML = `<span class="toast-icon" aria-hidden="true">${TOAST_ICON[type]}</span><span class="toast-msg">${escapeHtml(msg)}</span><div class="toast-bar" style="animation-duration:${duration}ms"></div>`;
   container.appendChild(toast);
   setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.2s'; setTimeout(() => toast.remove(), 200); }, duration);
 }

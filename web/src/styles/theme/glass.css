@@ -263,13 +263,14 @@ body::before {
               0 2px 6px oklch(52% 0.20 250 / 0.25);
 }
 
-/* Glass cards / panels(dropdown / modal 顶层 — 用 strong glass) */
+/* Glass cards / panels(dropdown / modal 顶层 — 用 strong glass)
+   注意:.toast 不在此组,有独立的 toast.css 状态 tone 系统(2026-06 重设计),
+   light 主题专门的 toast box-shadow 调整在下面 */
 :root[data-theme="light"] .confirm-card,
 :root[data-theme="light"] .download-center,
 :root[data-theme="light"] .auth-card-fallback,
 :root[data-theme="light"] .user-dropdown,
-:root[data-theme="light"] .shortcuts-panel,
-:root[data-theme="light"] .toast {
+:root[data-theme="light"] .shortcuts-panel {
   background: rgba(255, 255, 255, 0.92); background: oklch(100% 0 0 / 0.92);
   border-color: rgba(220, 226, 234, 0.6); border-color: oklch(85% 0.020 245 / 0.6);
   backdrop-filter: blur(24px) saturate(180%);
@@ -278,6 +279,14 @@ body::before {
               0 4px 12px rgba(40, 60, 100, 0.08);
   box-shadow: 0 12px 32px -8px oklch(50% 0.12 245 / 0.16),
               0 4px 12px oklch(50% 0.08 245 / 0.08);
+}
+/* light theme toast:保留 toast.css 的 tone 染色,只把投影改成冷蓝 saturate
+   让浅色场景下 toast 不被黑色 box-shadow 砸"重灰一坨" */
+:root[data-theme="light"] .toast {
+  box-shadow: inset 4px 0 0 var(--tone-accent),
+              0 8px 24px rgba(40, 60, 100, 0.14);
+  box-shadow: inset 4px 0 0 var(--tone-accent),
+              0 8px 24px oklch(50% 0.10 245 / 0.14);
 }
 
 /* Search-row(标准/资质/Labr 共用玻璃容器):半透 + frosted saturate + 顶部高光 */
@@ -384,7 +393,7 @@ body::before {
   :root[data-theme="light"] body:not(.force-desktop) .result-card .card-actions button[disabled] {
     background: rgba(238, 242, 247, 0.8) !important;
     background: oklch(96% 0.012 245 / 0.8) !important;
-    color: oklch(70% 0.012 245) !important;
+    color: #989fa6 !important; color: oklch(70% 0.012 245) !important;
     box-shadow: none;
   }
 }
@@ -594,13 +603,13 @@ body::before {
               0 1px 3px oklch(40% 0.04 70 / 0.08);
 }
 
-/* Glass cards / panels(dropdown / modal 顶层):接近不透白 + 极轻 frosted */
+/* Glass cards / panels(dropdown / modal 顶层):接近不透白 + 极轻 frosted
+   注意:.toast 在 paper 下有独立 tone 系统(toast.css 2026-06 重设计) */
 :root[data-theme="paper"] .confirm-card,
 :root[data-theme="paper"] .download-center,
 :root[data-theme="paper"] .auth-card-fallback,
 :root[data-theme="paper"] .user-dropdown,
-:root[data-theme="paper"] .shortcuts-panel,
-:root[data-theme="paper"] .toast {
+:root[data-theme="paper"] .shortcuts-panel {
   background: rgba(255, 255, 255, 0.96); background: oklch(100% 0 0 / 0.96);
   border-color: rgba(223, 216, 198, 0.6); border-color: oklch(86% 0.025 75 / 0.6);
   backdrop-filter: blur(8px);
@@ -609,6 +618,13 @@ body::before {
               0 4px 12px rgba(60, 50, 30, 0.06);
   box-shadow: 0 12px 32px -8px oklch(40% 0.05 70 / 0.12),
               0 4px 12px oklch(40% 0.04 70 / 0.06);
+}
+/* paper theme toast:暖色阴影,保 toast.css 的 tone 染色 */
+:root[data-theme="paper"] .toast {
+  box-shadow: inset 4px 0 0 var(--tone-accent),
+              0 8px 24px rgba(60, 50, 30, 0.10);
+  box-shadow: inset 4px 0 0 var(--tone-accent),
+              0 8px 24px oklch(40% 0.05 70 / 0.10);
 }
 
 /* Search-row:几近白 + 1px 米褐边,无 frosted */
@@ -711,7 +727,7 @@ body::before {
   :root[data-theme="paper"] body:not(.force-desktop) .result-card .card-actions button[disabled] {
     background: rgba(239, 234, 223, 0.85) !important;
     background: oklch(93% 0.020 75 / 0.85) !important;
-    color: oklch(70% 0.020 75) !important;
+    color: #a69d91 !important; color: oklch(70% 0.020 75) !important;
     box-shadow: none;
   }
 }
