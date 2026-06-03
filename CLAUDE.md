@@ -185,6 +185,32 @@ push 后 GitHub Actions 出包，理想情况下用 Win7 + Chrome 109 portable �
 - `requireTab` 内部已含 `requireAuth`，替换后原 per-route `requireAuth` 可留作冗余兜底（不影响行为）或删除
 - `settings`/`logs` 的数据接口本身是 `requireAdmin`（admin-only），即便授予普通用户该 tab，页面数据仍 403 —— 这是有意的（与 `users` tab 同理），名单里保留它们只是为了权限 UI 完整
 
+## `bzxz://` 协议联动（deep-link）契约（**重要**）
+
+桌面端注册了 `bzxz://` 自定义协议，供 Listary 等外部启动器「打开 URL」唤起本应用直达结果页。协议格式 **`bzxz://<host>?q=<词>`**：`host` = tab key（目前 `search` / `qual`），`q` = 搜索词。资质查询**合并为单一 `qual` 入口**——「按关键词」模式（`searchQualifications`）的 SQL 本就同时匹配标准号字段（`std_code_norm`/`std_code`）与关键词字段（`std_name`/`test_object`/`test_param` 等），不需要为「按标准号」单独开 host。
+
+**热路径 / 冷路径双轨（动协议逻辑时要意识到两条都走通才算对）：**
+
+- **冷启动**（应用未运行被协议拉起）：`electron/main.ts` 的 `whenReady` 里扫 `process.argv` 取出 `bzxz://` URL → `parseDeepLink` → 暂存 `pendingDeepLink` → `createWindow()` 把它拼进**首个 `loadURL`** 的 `?tab=&q=` → 前端 `initRouter` 读 `?q=` 消费。
+- **热路径**（应用已在跑）：单实例锁（`requestSingleInstanceLock`）把第二实例的 argv 交给主实例 → `second-instance`（Windows）/ `open-url`（macOS）解析 → `dispatchDeepLink` 聚焦窗口 + `webContents.send('bzxz:deeplink', …)` → preload 的 `onDeepLink` → 前端 `applyDeepLink` 填框触发。
+
+**改协议相关功能必须同步的 5 处（漏一处某条路径就断）：**
+
+1. `electron/main.ts` — `DEEPLINK_SCHEME` 常量、`parseDeepLink`（host→tab 映射 + 已知 tab 白名单）、`dispatchDeepLink`、单实例锁 + `second-instance`/`open-url` 事件、`whenReady` 冷启动 argv 扫描、`createWindow` 里 `pendingDeepLink` 拼进 `loadURL`、运行时 `setAsDefaultProtocolClient`（portable 兜底）
+2. `electron/preload.ts` — `onDeepLink` 暴露（订阅 `bzxz:deeplink`，仿 `onUpdateDownloadProgress` 返回 unsubscribe）
+3. `public/js/app-core.js` — `initRouter` 读 `?q=`（消费后从 URL 抹掉，避免刷新重搜）+ `applyDeepLink({tab,q})`（host→输入框 id + 触发函数映射：`search`→`#searchInput`+`doSearch`，`qual`→`#qualSearchInput`+`doQualSearch`）+ `initPanels` 里 `window.bzxz.onDeepLink` 订阅
+4. `package.json` build 段 `protocols` 字段（`schemes:['bzxz']`）— **NSIS 安装时写注册表，是正式版协议生效的唯一途径**
+5. README「Listary / 外部启动器联动」+ CHANGELOG
+
+**Why 关键决策：**
+
+- **单实例锁是前提**：没有它，协议每次唤起都开新 Electron 实例 + 新 express 端口（端口默认 5937 占用会回退随机），词送不进运行中的窗口，已有窗口也不聚焦。
+- **运行时注册 + builder `protocols` 双保险**：NSIS 安装版靠 `protocols` 写注册表；portable 版无安装步骤，靠运行时 `setAsDefaultProtocolClient` 兜底。
+- **协议不依赖固定端口**：`main.ts` 自己持有真实 `serverPort`，`loadURL` 用它，绕开「5937 被回退成随机端口」的坑——所以新增 host 时**不要**让前端去猜端口，词的载体始终是 main 进程已知的那个 URL。
+- **新增 host = 新增 tab 联动**：要让 `bzxz://<新tab>?q=` 生效，先确认该 tab 已走完上面的「功能权限（tab）契约」，再在 `parseDeepLink` 的 host 映射 + `applyDeepLink` 的输入框/触发函数映射各加一条。
+
+**改后验证**：本机跑不了打包，至少跑 `npx tsc -p tsconfig.electron.json --noEmit`（electron 目录不在主 `tsconfig.json` include 内，主 build 测不到 main.ts/preload.ts）。协议注册**必须重新打包 NSIS 安装一次**系统才认识 `bzxz://`，push 后看 Action 出包实测。
+
 ## CMA 一单一库（cma-diff）契约（**重要**）
 
 `cma_capability_lib` 是市场监管总局《检验检测机构资质认定能力项目库》的本地镜像，给 `cma-diff` tab + 搜索/资质查询徽章用。数据语义**不同于** `cma_qualifications`（机构持有的资质行）—— **本表是"政策范围内的合法标准号清单"**，两表正交不重叠。
