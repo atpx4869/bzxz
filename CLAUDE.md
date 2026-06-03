@@ -211,6 +211,8 @@ push 后 GitHub Actions 出包，理想情况下用 Win7 + Chrome 109 portable �
 
 **改后验证**：本机跑不了打包，至少跑 `npx tsc -p tsconfig.electron.json --noEmit`（electron 目录不在主 `tsconfig.json` include 内，主 build 测不到 main.ts/preload.ts）。协议注册**必须重新打包 NSIS 安装一次**系统才认识 `bzxz://`，push 后看 Action 出包实测。
 
+**网页版联动复用同一套 `?tab=&q=`**：`bzxz://` 只在装了桌面版的机器生效；无桌面版的用户（常态：仅 admin 装桌面版，其余走网页版）改用 http 深链 `http://<admin内网IP>:5937/?tab=<tab>&q=<词>`，**前端 `initRouter` 读 `?q=` 是桌面 / 浏览器共用代码、零额外实现**。所以改 `applyDeepLink` 的 host→输入框映射时，桌面冷启动和 web 深链**同时受影响**，验证两条都要顾。登录态不丢参：LAN 用户登录成功后 `onAuthReady → initPanels → initRouter` 才读地址栏并触发，不会提前空打。分流**按机器**（装没装桌面版）而非按账号，固定绑定、不做运行时协议探测——普通用户机器没 `bzxz://`，给他们配协议链接会弹"无法打开"框。
+
 ## CMA 一单一库（cma-diff）契约（**重要**）
 
 `cma_capability_lib` 是市场监管总局《检验检测机构资质认定能力项目库》的本地镜像，给 `cma-diff` tab + 搜索/资质查询徽章用。数据语义**不同于** `cma_qualifications`（机构持有的资质行）—— **本表是"政策范围内的合法标准号清单"**，两表正交不重叠。
