@@ -420,6 +420,32 @@ cp .env.example .env.local
 - 开机自启开关（仅桌面端可用）
 - 在线更新：启动后轻量检查 GitHub Release；设置页可手动检查、打开下载页、下载并启动 NSIS 安装包
 - 下载文件保存到 `用户目录/downloads/bzxz`
+- **单实例运行**：`requestSingleInstanceLock` 保证只有一个实例；重复唤起（含协议）只聚焦已有窗口、不再开新端口
+- **`bzxz://` 自定义协议**：供 Listary 等外部启动器快捷唤起，见下「Listary / 外部启动器联动」
+
+### Listary / 外部启动器联动（`bzxz://` 协议）
+
+桌面端注册了 `bzxz://` 协议，任何能「打开 URL」的工具（Listary、PowerToys Run、浏览器地址栏、`.url` 快捷方式）都能唤起标准盒子并直达结果页：
+
+| 协议 URL | 行为 |
+|---|---|
+| `bzxz://search?q=GB150` | 唤起/聚焦窗口 → 标准搜索 tab → 自动填入 `GB150` 并搜索 |
+| `bzxz://qual?q=水质` | 唤起/聚焦窗口 → 资质查询 tab → 自动填入 `水质` 并搜索 |
+
+- **host = tab key**（`search` / `qual`），`q` = 搜索词（URL 编码）。资质查询合并为单一关键词入口——「按关键词」模式的查询本就同时匹配标准号与关键词字段，无需区分子模式。
+- **冷启动**（应用未运行）：主进程扫 `process.argv` 取出协议 URL，拼进首个 `loadURL` 的 `?tab=&q=`，由前端 `initRouter` 消费。
+- **热路径**（应用在跑）：单实例锁把 URL 交给主实例，`second-instance`（Windows）/ `open-url`（macOS）解析后聚焦窗口并经 IPC（`onDeepLink`）推词。
+
+**Listary 配置**：选项 → Web Search → ➕ 添加两个自定义引擎（`{query}` 是 Listary 的占位符）：
+
+| 关键词 | 标题 | URL |
+|---|---|---|
+| `bz` | 标准搜索 '{query}' | `bzxz://search?q={query}` |
+| `zz` | 资质查询 '{query}' | `bzxz://qual?q={query}` |
+
+用法：Listary 里敲 `bz` + 空格 + `GB 150` + 回车。
+
+> **生效前提**：协议关联写在系统注册表里，**必须用重新打包后的版本安装（NSIS）一次**才生效（`package.json` build `protocols` 字段负责写入）。便携版靠运行时 `setAsDefaultProtocolClient` 兜底注册。
 
 ## 手机访问
 

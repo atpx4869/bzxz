@@ -3,6 +3,17 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat(deeplink): `bzxz://` 自定义协议 — Listary 等启动器快捷唤起标准搜索 / 资质查询** —
+  注册 `bzxz://` 协议，外部工具构造 `bzxz://search?q={query}`（标准搜索）/
+  `bzxz://qual?q={query}`（资质查询）即可唤起桌面端并直达对应结果页。资质查询合并为单一关键词
+  入口（「按关键词」模式的 SQL 本就同时匹配标准号与关键词字段，无需区分子模式）。
+  **实现**：`electron/main.ts` 加 ① 单实例锁（`requestSingleInstanceLock`，防协议每次唤起开新实例/新端口）+
+  `second-instance`/`open-url` 解析 argv 里的 `bzxz://` URL → `parseDeepLink` → 聚焦窗口 + IPC 推词；
+  ② 冷启动扫 `process.argv`，把词拼进首个 `loadURL` 的 `?tab=&q=`；③ 运行时 `setAsDefaultProtocolClient`
+  兜底 portable 版。`preload.ts` 暴露 `onDeepLink`；`app-core.js` 的 `initRouter` 读 `?q=` + 新增
+  `applyDeepLink`（切 tab → 填 `#searchInput`/`#qualSearchInput` → 触发搜索，消费后从 URL 抹掉 q）。
+  `package.json` build 段加 `protocols` 字段让 NSIS 安装时写注册表。**需重新打包安装后系统才认识协议**。
+  Listary 配置见 README「Listary / 外部启动器联动」。
 - **fix(std-code): 标准号归一化剥年份后缀 + 问号噪声，修脏数据漏命中/重复** — 用户报多类脏标准号
   误判未入库且同号重复：`？QB/T？4566-2025`（全角问号噪声）、`GB/T 24977-2024第8.3.1.3条`（条款后缀）、
   `GB 20950-2020 附录A`（附录后缀）、`GB 26753-2011 4.2条`（无"第"条款）。根因：归一化没剥这些后缀/噪声，

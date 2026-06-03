@@ -232,12 +232,46 @@ function switchTab(tab) {
 function initRouter() {
   var KNOWN_TABS = ['search', 'batch', 'complete', 'qual', 'cma-diff', 'labr', 'local', 'history', 'settings', 'users', 'stats', 'me'];
   var requested = 'search';
+  var deepQ = '';
   try {
     var params = new URLSearchParams(window.location.search);
     var t = params.get('tab');
     if (t && KNOWN_TABS.indexOf(t) >= 0) requested = t;
+    // ?q= 来自 Listary 等外部 deep-link 冷启动（主进程把 bzxz://<tab>?q= 拼进首个
+    // loadURL）。切 tab 后预填搜索框并触发搜索。消费后从 URL 抹掉，避免刷新重搜。
+    deepQ = (params.get('q') || '').trim();
   } catch (e) { /* ignore */ }
   switchTab(requested);
+  if (deepQ) {
+    applyDeepLink({ tab: requested, q: deepQ });
+    try {
+      var p2 = new URLSearchParams(window.location.search);
+      p2.delete('q');
+      var qs2 = p2.toString();
+      window.history.replaceState(null, '', window.location.pathname + (qs2 ? '?' + qs2 : '') + window.location.hash);
+    } catch (e) { /* ignore */ }
+  }
+}
+
+// 把外部 deep-link（Listary）的搜索词落到对应 tab 的输入框并触发搜索。
+//   search → #searchInput + doSearch()
+//   qual   → #qualSearchInput + doQualSearch()（按关键词模式本就兼吃标准号与关键词）
+// 窗口已开时由 window.bzxz.onDeepLink 调用；冷启动由 initRouter 调用。
+function applyDeepLink(link) {
+  if (!link || !link.q) return;
+  var tab = link.tab || 'search';
+  // 权限闸：无权访问该 tab 时静默放弃（switchTab 内部也会拦，这里提前避免填框）
+  if (currentUser && currentUser.allowedTabs && currentUser.allowedTabs.indexOf(tab) < 0) return;
+  switchTab(tab);
+  var inputId = tab === 'qual' ? 'qualSearchInput' : 'searchInput';
+  var trigger = tab === 'qual' ? doQualSearch : doSearch;
+  // 延一帧等 tab DOM 显示（switchTab 切 display），再填值触发。
+  setTimeout(function () {
+    var input = document.getElementById(inputId);
+    if (!input) return;
+    input.value = link.q;
+    try { if (typeof trigger === 'function') trigger(); } catch (e) { /* ignore */ }
+  }, 0);
 }
 
 // 浏览器前进/后退时按当前 URL 重新派发到对应 tab。
@@ -246,7 +280,16 @@ window.addEventListener('popstate', function() {
 });
 function toggleSidebar() { document.body.classList.toggle("sidebar-collapsed"); }
 
-function initPanels() { initRouter(); }
+function initPanels() {
+  initRouter();
+  // 桌面端：订阅主进程转发的 bzxz:// deep-link（窗口已开时的热路径）。
+  // 冷启动路径由 initRouter 读 ?q= 处理，二者互不干扰。
+  try {
+    if (window.bzxz && typeof window.bzxz.onDeepLink === 'function') {
+      window.bzxz.onDeepLink(function (link) { applyDeepLink(link); });
+    }
+  } catch (e) { /* 非 Electron 环境忽略 */ }
+}
 
 function togglePanel(name) {
   switchTab(name);

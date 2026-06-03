@@ -29,6 +29,14 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let serverPort = 0;
 let isQuitting = false;
+
+// ── Listary / deep-link 联动 (bzxz://) ─────────────────────────────────
+// 协议格式：bzxz://search?q=GB150 （标准搜索） / bzxz://qual?q=水质（资质查询）。
+// host = tab key，q = 搜索词。Listary 的 Web Search 用 {query} 占位符拼出 URL
+// 交给系统默认 handler → 唤起本应用。冷启动时窗口尚未建好，先把解析结果暂存到
+// pendingDeepLink，由 createWindow() 拼进首个 loadURL（走前端 initRouter 路径）。
+const DEEPLINK_SCHEME = 'bzxz';
+let pendingDeepLink: { tab: string; q: string } | null = null;
 const UPDATE_REPO = 'atpx4869/bzxz';
 const UPDATE_RELEASES_URL = `https://github.com/${UPDATE_REPO}/releases`;
 const UPDATE_API_URL = `https://api.github.com/repos/${UPDATE_REPO}/releases/latest`;
@@ -412,6 +420,45 @@ function webAccessGate(req: Request, res: Response, next: NextFunction) {
   res.status(403).send('标准盒子 / StandardsBox web access is disabled on this desktop host.');
 }
 
+// 从 argv 数组里捞第一个 bzxz:// URL（second-instance / 冷启动都用）。
+function extractDeepLinkFromArgv(argv: string[]): string | null {
+  for (const arg of argv) {
+    if (typeof arg === 'string' && arg.startsWith(`${DEEPLINK_SCHEME}://`)) return arg;
+  }
+  return null;
+}
+
+// 解析 bzxz://<tab>?q=<词> → { tab, q }。只放行已知 tab，未知一律落到 search。
+// host 大小写不敏感；q 经 URL 解码。解析失败返回 null（调用方静默忽略）。
+function parseDeepLink(raw: string): { tab: string; q: string } | null {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== `${DEEPLINK_SCHEME}:`) return null;
+    const host = (u.hostname || '').toLowerCase();
+    // 资质两个子模式（按关键词 / 按标准号）共用 qual tab——searchQualifications
+    // 本身就同时匹配标准号与关键词字段，无需区分。
+    const tab = host === 'qual' ? 'qual' : 'search';
+    const q = (u.searchParams.get('q') || '').trim();
+    return { tab, q };
+  } catch {
+    return null;
+  }
+}
+
+// 把 deep-link 派发到前端：窗口在 → show+focus 后通过 IPC 推词（热路径）；
+// 窗口不在 → 暂存 pendingDeepLink 并 createWindow（冷路径，由 loadURL query 带入）。
+function dispatchDeepLink(link: { tab: string; q: string }): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+    mainWindow.webContents.send('bzxz:deeplink', link);
+  } else {
+    pendingDeepLink = link;
+    createWindow();
+  }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1360,
@@ -430,7 +477,16 @@ function createWindow() {
     },
   });
 
-  mainWindow.loadURL(`http://localhost:${serverPort}`);
+  // 冷启动若有待处理 deep-link，拼进首个 URL 的 query，由前端 initRouter 消费
+  // （?tab=&q=）。消费一次即清空，避免后续手动 reload 又触发搜索。
+  let startUrl = `http://localhost:${serverPort}`;
+  if (pendingDeepLink) {
+    const p = new URLSearchParams({ tab: pendingDeepLink.tab });
+    if (pendingDeepLink.q) p.set('q', pendingDeepLink.q);
+    startUrl += `/?${p.toString()}`;
+    pendingDeepLink = null;
+  }
+  mainWindow.loadURL(startUrl);
 
   // 把渲染进程里的 window.open(url, '_blank') 路由到系统默认浏览器。
   // 背景：预览 Phase 2 让命中本地的标准用 window.open(/api/preview/file/:id) 跳新 tab；
@@ -628,6 +684,50 @@ async function startServer(): Promise<number> {
   return r.port;
 }
 
+// ── 单实例锁 + bzxz:// 协议注册（Listary 联动前提）─────────────────────
+// 拿不到锁 = 已有实例在跑：当前进程把 argv（含可能的 bzxz:// URL）交给主实例后
+// 立即退出。主实例在 second-instance 事件里解析并聚焦窗口 + 推词。没有这把锁，
+// 协议每次唤起都会开新实例 + 新端口，词也送不进运行中的窗口。
+const gotInstanceLock = app.requestSingleInstanceLock();
+if (!gotInstanceLock) {
+  app.quit();
+} else {
+  // 运行时注册协议（portable 版没有安装步骤写注册表，靠这条兜底；NSIS 安装版
+  // 由 package.json build.protocols 写注册表，二者互补）。dev 模式需带 argv[1]
+  // 让系统回调时把脚本路径 + 协议 URL 一起传回 electron.exe。
+  if (process.defaultApp) {
+    if (process.argv.length >= 2) {
+      app.setAsDefaultProtocolClient(DEEPLINK_SCHEME, process.execPath, [path.resolve(process.argv[1])]);
+    }
+  } else {
+    app.setAsDefaultProtocolClient(DEEPLINK_SCHEME);
+  }
+
+  // 第二实例被拉起（含协议唤起）：Windows 把协议 URL 放在 argv 尾部传过来。
+  app.on('second-instance', (_event, argv) => {
+    const raw = extractDeepLinkFromArgv(argv);
+    if (raw) {
+      const link = parseDeepLink(raw);
+      if (link) { dispatchDeepLink(link); return; }
+    }
+    // 没有可解析的协议参数也要把已有窗口拉到前台（用户重复点了图标）。
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    } else {
+      createWindow();
+    }
+  });
+
+  // macOS 走 open-url 事件（与 Windows 的 argv 路径分离）。窗口未就绪时暂存。
+  app.on('open-url', (event, url) => {
+    event.preventDefault();
+    const link = parseDeepLink(url);
+    if (link) dispatchDeepLink(link);
+  });
+}
+
 app.whenReady().then(async () => {
   serverPort = await startServer();
   console.log(`Server on http://localhost:${serverPort}`);
@@ -750,6 +850,16 @@ app.whenReady().then(async () => {
     app.relaunch();
     app.exit(0);
   });
+
+  // 冷启动：本进程就是被协议唤起的（Windows 把 bzxz:// URL 放在 argv 里）。
+  // 在 createWindow 前解析好 pendingDeepLink，让首个 loadURL 带上 ?tab=&q=。
+  if (!pendingDeepLink) {
+    const raw = extractDeepLinkFromArgv(process.argv);
+    if (raw) {
+      const link = parseDeepLink(raw);
+      if (link) pendingDeepLink = link;
+    }
+  }
 
   createWindow();
   createTray();

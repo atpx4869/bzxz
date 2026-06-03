@@ -26,6 +26,14 @@
   "build": {
     "appId": "com.bzxz.app",
     "productName": "标准盒子",
+    "protocols": [
+      {
+        "name": "标准盒子协议",
+        "schemes": [
+          "bzxz"
+        ]
+      }
+    ],
     "directories": {
       "output": "release"
     },

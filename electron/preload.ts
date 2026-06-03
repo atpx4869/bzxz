@@ -21,6 +21,13 @@ contextBridge.exposeInMainWorld('bzxz', {
     ipcRenderer.on('bzxz:update-download-progress', listener);
     return () => ipcRenderer.removeListener('bzxz:update-download-progress', listener);
   },
+  // Listary / 协议联动：主进程解析 bzxz://<tab>?q=<词> 后通过此通道推给前端，
+  // 前端切 tab + 填搜索框 + 触发搜索（窗口已开的热路径；冷启动走 URL query）。
+  onDeepLink: (callback: (link: { tab: string; q: string }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, link: { tab: string; q: string }) => callback(link);
+    ipcRenderer.on('bzxz:deeplink', listener);
+    return () => ipcRenderer.removeListener('bzxz:deeplink', listener);
+  },
   copyWebAccessUrl: (url?: string) => ipcRenderer.invoke('bzxz:copy-web-access-url', url),
   openWebAccessUrl: (url?: string) => ipcRenderer.invoke('bzxz:open-web-access-url', url),
   getPortConfig: () => ipcRenderer.invoke('bzxz:get-port-config'),
