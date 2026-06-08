@@ -46,6 +46,110 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
   });
 }
 
+const MAX_XLSX_COL_INDEX = 16383; // XLSX column limit (XFD = 16384, 0-indexed)
+
+const completeBodySchema = z.object({
+  sources: z.array(sourceEnum).min(1).optional(),
+  inputColumn: z.string().trim().min(1).max(5).optional(),
+  outputColumn: z.string().trim().min(1).max(5).optional(),
+  preserveStyle: z.boolean().optional(),
+  includeSource: z.boolean().optional(),
+  includeStatus: z.boolean().optional(),
+  includeDownloadLink: z.boolean().optional(),
+  includeTextFlag: z.boolean().optional(),
+});
+
+function parseMultipartJsonArray(raw: unknown, fieldName: string): unknown {
+  if (raw == null || raw === '') return undefined;
+  if (Array.isArray(raw)) return raw;
+  try {
+    return JSON.parse(String(raw));
+  } catch {
+    throw new BadRequestError(`${fieldName} 不是有效 JSON`);
+  }
+}
+
+function parseCompleteBody(body: Record<string, unknown>) {
+  return completeBodySchema.parse({
+    sources: parseMultipartJsonArray(body.sources, 'sources'),
+    inputColumn: body.inputColumn,
+    outputColumn: body.outputColumn,
+    preserveStyle: body.preserveStyle === 'true',
+    includeSource: body.includeSource !== 'false',
+    includeStatus: body.includeStatus !== 'false',
+    includeDownloadLink: body.includeDownloadLink === 'true',
+    includeTextFlag: body.includeTextFlag === 'true',
+  });
+}
+
+function colToIndex(value: string | undefined, fallback: number): number {
+  const s = (value || '').trim().toUpperCase();
+  if (!s) return fallback;
+  if (/^\d+$/.test(s)) {
+    const n = Number(s);
+    if (!Number.isFinite(n) || n < 1 || n > MAX_XLSX_COL_INDEX + 1) {
+      throw new BadRequestError(`列号超出范围: ${value}`);
+    }
+    return n - 1;
+  }
+  if (!/^[A-Z]{1,3}$/.test(s)) {
+    throw new BadRequestError(`无效的列名: ${value}`);
+  }
+  let index = 0;
+  for (const ch of s) index = index * 26 + (ch.charCodeAt(0) - 64);
+  const result = index - 1;
+  if (result < 0 || result > MAX_XLSX_COL_INDEX) {
+    throw new BadRequestError(`列号超出范围: ${value}`);
+  }
+  return result;
+}
+
+function indexToCol(index: number): string {
+  let n = index + 1;
+  let out = '';
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    out = String.fromCharCode(65 + rem) + out;
+    n = Math.floor((n - 1) / 26);
+  }
+  return out;
+}
+
+function looksLikeStandardNumber(value: string): boolean {
+  return /^[A-Z]{2,4}\d{0,2}(?:\/[TZQ])?\s*\d+(?:\.\d+)*(?:\s*[–\-—]\s*\d{0,4})?$/i.test(value.trim());
+}
+
+function completeKey(value: string): string {
+  return normalizeStandardNumber(value);
+}
+
+function extractCompleteRows(rows: string[][], inputCol: number) {
+  const firstVal = String(rows[0]?.[inputCol] ?? '').trim();
+  const skippedHeader = Boolean(firstVal && !looksLikeStandardNumber(firstVal));
+  const startRow = skippedHeader ? 1 : 0;
+  const entries: Array<{ rowIndex: number; value: string }> = [];
+  for (let i = startRow; i < rows.length; i++) {
+    const value = String(rows[i]?.[inputCol] ?? '').trim();
+    if (value) entries.push({ rowIndex: i, value });
+  }
+  const seen = new Set<string>();
+  let duplicateCount = 0;
+  for (const entry of entries) {
+    const key = completeKey(entry.value);
+    if (seen.has(key)) duplicateCount++;
+    else seen.add(key);
+  }
+  return {
+    entries,
+    lines: entries.map(entry => entry.value),
+    startRow,
+    skippedHeader,
+    duplicateCount,
+    uniqueCount: seen.size,
+    previewRows: entries.slice(0, 8).map(entry => ({ rowNumber: entry.rowIndex + 1, value: entry.value })),
+  };
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
@@ -171,7 +275,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       const { lines, sources } = bodySchema.parse(req.body);
       const selectedSources = (sources ?? sourceRegistry.list()) as SourceName[];
       const resolver = new StandardResolver(sourceRegistry);
-      const result = await resolver.resolve(lines, selectedSources);
+      const result = await resolver.resolve(lines, selectedSources, { collectSourceIds: true });
       trackEvent(db, req.user!.id, 'batch_resolve', selectedSources.join(','), undefined, {
         lineCount: lines.length, resolvedCount: result.resolved.length, unmatchedCount: result.unmatched.length,
       }, { ...extractUsageCtx(req), result: 'success' });
@@ -450,90 +554,76 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
     }
   });
 
-  router.post('/api/standards/complete', requireAuth, upload.single('file'), async (req, res, next) => {
+  router.post('/api/standards/complete/preview', requireAuth, upload.single('file'), async (req, res, next) => {
     try {
       if (!req.file) {
         throw new BadRequestError('请上传文件');
       }
 
-      const bodySchema = z.object({
-        sources: z.array(sourceEnum).min(1).optional(),
-        inputColumn: z.string().trim().min(1).max(3).optional(),
-        outputColumn: z.string().trim().min(1).max(3).optional(),
-        preserveStyle: z.boolean().optional(),
-        includeSource: z.boolean().optional(),
-        includeStatus: z.boolean().optional(),
-        includeDownloadLink: z.boolean().optional(),
-        includeTextFlag: z.boolean().optional(),
-      });
-      const parsedBody = bodySchema.parse({
-        sources: req.body.sources ? JSON.parse(req.body.sources) : undefined,
-        inputColumn: req.body.inputColumn,
-        outputColumn: req.body.outputColumn,
-        preserveStyle: req.body.preserveStyle === 'true',
-        includeSource: req.body.includeSource !== 'false',
-        includeStatus: req.body.includeStatus !== 'false',
-        includeDownloadLink: req.body.includeDownloadLink === 'true',
-        includeTextFlag: req.body.includeTextFlag === 'true',
-      });
-      const { sources } = parsedBody;
-      const MAX_COL_INDEX = 16383; // XLSX column limit (XFD = 16384, 0-indexed)
-      const colToIndex = (value: string | undefined, fallback: number) => {
-        const s = (value || '').trim().toUpperCase();
-        if (!s) return fallback;
-        if (/^\d+$/.test(s)) {
-          const n = Number(s);
-          if (!Number.isFinite(n) || n < 1 || n > MAX_COL_INDEX + 1) {
-            throw new BadRequestError(`列号超出范围: ${value}`);
-          }
-          return n - 1;
-        }
-        if (!/^[A-Z]{1,3}$/.test(s)) {
-          throw new BadRequestError(`无效的列名: ${value}`);
-        }
-        let index = 0;
-        for (const ch of s) index = index * 26 + (ch.charCodeAt(0) - 64);
-        const result = index - 1;
-        if (result < 0 || result > MAX_COL_INDEX) {
-          throw new BadRequestError(`列号超出范围: ${value}`);
-        }
-        return result;
-      };
+      const parsedBody = parseCompleteBody(req.body);
       const inputCol = colToIndex(parsedBody.inputColumn, 0);
       const outputCol = colToIndex(parsedBody.outputColumn, 1);
 
-      // Parse workbook — lazy load xlsx only when needed
       const XLSX = (await import('xlsx')).default;
       const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
       if (!sheetName) throw new BadRequestError('表格为空或格式无法识别');
       const sheet = workbook.Sheets[sheetName];
       const rows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      const extracted = extractCompleteRows(rows, inputCol);
 
-      // Extract column A, skip header row if it looks like a header
-      const lines: string[] = [];
-      let startRow = 0;
-      const firstVal = String(rows[0]?.[inputCol] ?? '').trim();
-      if (firstVal && !/[A-Z]{2,}/i.test(firstVal)) {
-        startRow = 1; // Skip header row
+      respond(res, {
+        fileName: req.file.originalname,
+        sheetName,
+        rowCount: rows.length,
+        inputColumn: indexToCol(inputCol),
+        outputColumn: indexToCol(outputCol),
+        skippedHeader: extracted.skippedHeader,
+        startRow: extracted.startRow + 1,
+        total: extracted.lines.length,
+        unique: extracted.uniqueCount,
+        duplicates: extracted.duplicateCount,
+        previewRows: extracted.previewRows,
+      });
+    } catch (error) {
+      next(normalizeError(error));
+    }
+  });
+
+  router.post('/api/standards/complete', requireAuth, upload.single('file'), async (req, res, next) => {
+    try {
+      if (!req.file) {
+        throw new BadRequestError('请上传文件');
       }
-      for (let i = startRow; i < rows.length; i++) {
-        const val = String(rows[i]?.[inputCol] ?? '').trim();
-        if (val) lines.push(val);
-      }
 
-      if (lines.length === 0) throw new BadRequestError(`未在${parsedBody.inputColumn || 'A'}列找到有效的标准号`);
+      const parsedBody = parseCompleteBody(req.body);
+      const { sources } = parsedBody;
+      const inputCol = colToIndex(parsedBody.inputColumn, 0);
+      const outputCol = colToIndex(parsedBody.outputColumn, 1);
 
-      // Resolve
+      const XLSX = (await import('xlsx')).default;
+      const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      if (!sheetName) throw new BadRequestError('表格为空或格式无法识别');
+      const sheet = workbook.Sheets[sheetName];
+      const rows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      const { entries, lines, startRow, skippedHeader, duplicateCount, uniqueCount } = extractCompleteRows(rows, inputCol);
+
+      if (lines.length === 0) throw new BadRequestError(`未在${indexToCol(inputCol)}列找到有效的标准号`);
+
       const selectedSources = (sources ?? sourceRegistry.list()) as SourceName[];
       const resolver = new StandardResolver(sourceRegistry);
       const { resolved, unmatched } = await resolver.resolve(lines, selectedSources);
 
-      // Build lookup map
       const lookup = new Map<string, (typeof resolved)[0]>();
       for (const r of resolved) {
-        const key = r.input.trim();
+        const key = completeKey(r.input);
         if (!lookup.has(key)) lookup.set(key, r);
+      }
+      const unmatchedLookup = new Map<string, string>();
+      for (const u of unmatched) {
+        const key = completeKey(u.input);
+        if (!unmatchedLookup.has(key)) unmatchedLookup.set(key, u.reason);
       }
 
       const outputHeaders = ['标准号', '标准名称'];
@@ -544,7 +634,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       outputHeaders.push('备注');
 
       const rowValues = (original: string) => {
-        const match = lookup.get(original);
+        const match = lookup.get(completeKey(original));
         if (match) {
           const values = [match.standardNumber, match.title];
           if (parsedBody.includeStatus) values.push(match.status ?? '');
@@ -559,7 +649,7 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         if (parsedBody.includeSource) values.push('');
         if (parsedBody.includeDownloadLink) values.push('');
         if (parsedBody.includeTextFlag) values.push('');
-        values.push(unmatched.find(u => u.input === original)?.reason ?? '未匹配');
+        values.push(unmatchedLookup.get(completeKey(original)) ?? '未匹配');
         return values;
       };
 
@@ -571,11 +661,9 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         outputHeaders.forEach((header, offset) => {
           outSheet[XLSX.utils.encode_cell({ r: Math.max(0, startRow - 1), c: outputCol + offset })] = { t: 's', v: header };
         });
-        for (let i = startRow; i < rows.length; i++) {
-          const original = String(rows[i]?.[inputCol] ?? '').trim();
-          if (!original) continue;
-          rowValues(original).forEach((value, offset) => {
-            outSheet[XLSX.utils.encode_cell({ r: i, c: outputCol + offset })] = { t: 's', v: value };
+        for (const entry of entries) {
+          rowValues(entry.value).forEach((value, offset) => {
+            outSheet[XLSX.utils.encode_cell({ r: entry.rowIndex, c: outputCol + offset })] = { t: 's', v: value };
           });
         }
         const range = XLSX.utils.decode_range(outSheet['!ref'] || 'A1:A1');
@@ -589,10 +677,8 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       } else {
         const outRows: string[][] = [];
         outRows.push(['用户提供', ...outputHeaders]);
-        for (let i = startRow; i < rows.length; i++) {
-          const original = String(rows[i]?.[inputCol] ?? '').trim();
-          if (!original) continue;
-          outRows.push([original, ...rowValues(original)]);
+        for (const entry of entries) {
+          outRows.push([entry.value, ...rowValues(entry.value)]);
         }
         outWorkbook = XLSX.utils.book_new();
         outSheet = XLSX.utils.aoa_to_sheet(outRows);
@@ -611,7 +697,16 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       await writeFile(outPath, buf);
 
       trackEvent(db, req.user!.id, 'complete', undefined, undefined, {
-        fileName: outFileName, totalLines: lines.length, resolved: resolved.length, unmatched: unmatched.length,
+        fileName: outFileName,
+        sheetName,
+        inputColumn: indexToCol(inputCol),
+        outputColumn: indexToCol(outputCol),
+        totalLines: lines.length,
+        unique: uniqueCount,
+        duplicates: duplicateCount,
+        skippedHeader,
+        resolved: resolved.length,
+        unmatched: unmatched.length,
       }, { ...extractUsageCtx(req), result: 'success' });
 
       respond(res, {
@@ -619,8 +714,14 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
         downloadUrl: `/api/downloads/${encodeURIComponent(outFileName)}`,
         summary: {
           total: lines.length,
+          unique: uniqueCount,
+          duplicates: duplicateCount,
           resolved: resolved.length,
           unmatched: unmatched.length,
+          skippedHeader,
+          inputColumn: indexToCol(inputCol),
+          outputColumn: indexToCol(outputCol),
+          sheetName,
         },
       });
     } catch (error) {

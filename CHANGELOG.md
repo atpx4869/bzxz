@@ -3,6 +3,13 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **feat(complete/batch): 标准补全预览 + 批量下载真实多源回退** —
+  `POST /api/standards/complete/preview` 新增 Excel/CSV 轻量预览，上传后先校验输入/输出列、
+  表头跳过、唯一/重复数和前 8 条标准号，前端列配置变更会自动刷新预览；正式补全摘要增加
+  `unique/duplicates/skippedHeader/inputColumn/outputColumn/sheetName`。`StandardResolver.resolve`
+  支持 `collectSourceIds`，批量解析返回每条标准在各来源的真实 `sourceIds/sources`，
+  批量下载据此调用 `/api/standards/multi-download` 切源，不再只知道首个命中来源；结果卡片同步显示
+  下载中/成功/失败状态，并提供失败项重试入口。
 - **perf(cma-diff): 产品质量检验拉取提速 + 领域订阅批量化** —
   `runSync` 不再整条进入全局串行队列，改为远端页请求限流并发、SQLite 入库单独走
   `dbWriteChain` 串行分块事务。产品质量检验仍按 `pageSize=2000` 分页，但首页拿到 `total`

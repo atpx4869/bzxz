@@ -8,6 +8,10 @@ export interface ResolvedItem {
   standardNumber: string;
   title: string;
   source: SourceName;
+  /** 批量下载用：同一标准在各来源的 source-specific id，便于下载失败后真实切源。 */
+  sourceIds?: Partial<Record<SourceName, string>>;
+  /** sourceIds 中实际命中的来源，按用户设置的 sources 顺序排列。 */
+  sources?: SourceName[];
   status?: string;
   publishDate?: string | null;
   implementDate?: string | null;
@@ -23,6 +27,11 @@ export interface UnmatchedItem {
 export interface ResolveResult {
   resolved: ResolvedItem[];
   unmatched: UnmatchedItem[];
+}
+
+export interface ResolveOptions {
+  /** 继续查完所有来源并带回 sourceIds；批量下载需要，补全报表默认不需要额外查询。 */
+  collectSourceIds?: boolean;
 }
 
 interface ParsedNumber {
@@ -55,7 +64,7 @@ const RESOLVE_CONCURRENCY = 6;
 export class StandardResolver {
   constructor(private readonly registry: SourceRegistry) {}
 
-  async resolve(lines: string[], sources: SourceName[]): Promise<ResolveResult> {
+  async resolve(lines: string[], sources: SourceName[], options: ResolveOptions = {}): Promise<ResolveResult> {
     const resolved: ResolvedItem[] = [];
     const unmatched: UnmatchedItem[] = [];
 
@@ -79,7 +88,7 @@ export class StandardResolver {
     }
 
     await mapLimit([...tasks.entries()], RESOLVE_CONCURRENCY, async ([_key, task]) => {
-      task.promise = this.findMatch('', task.parsed, sources);
+      task.promise = this.findMatch('', task.parsed, sources, options);
       await task.promise;
     });
 
@@ -112,10 +121,15 @@ export class StandardResolver {
     input: string,
     parsed: ParsedNumber,
     sources: SourceName[],
+    options: ResolveOptions,
   ): Promise<ResolvedItem | null> {
     const query = parsed.yearCode
       ? `${parsed.prefix} ${parsed.number}-${parsed.yearCode}`
       : `${parsed.prefix} ${parsed.number}`;
+
+    let winner: ResolvedItem | null = null;
+    const sourceIds: Partial<Record<SourceName, string>> = {};
+    const matchedSources: SourceName[] = [];
 
     for (const source of sources) {
       try {
@@ -123,13 +137,25 @@ export class StandardResolver {
         const results = await service.searchStandards({ query });
 
         const match = this.pickBest(input, results, parsed, source);
-        if (match) return match;
+        if (match) {
+          sourceIds[source] = match.standardId;
+          matchedSources.push(source);
+          if (!winner) {
+            winner = match;
+            if (!options.collectSourceIds) return winner;
+          }
+        }
       } catch (err) {
         console.error(`[resolver] source ${source} error for query "${query}":`, (err as Error).message);
       }
     }
 
-    return null;
+    if (!winner) return null;
+    return {
+      ...winner,
+      sourceIds,
+      sources: matchedSources,
+    };
   }
 
   private pickBest(

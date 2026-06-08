@@ -39,6 +39,7 @@
   .batch-mode-pill, .batch-summary { text-align: left; }
   .batch-result-card { grid-template-columns: 20px minmax(104px, 34%) minmax(0, 1fr); }
   .batch-result-card .card-src { grid-column: 2 / -1; width: max-content; }
+  .batch-result-card .batch-result-note { grid-column: 2 / -1; justify-self: start; }
   .batch-result-card.unmatched { grid-template-columns: minmax(104px, 34%) minmax(0, 1fr); }
 
   /* completion.css */

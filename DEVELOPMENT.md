@@ -218,6 +218,10 @@ curl.exe "http://localhost:3000/api/standards/gbw:25940C3CEF158A9AE06397BE0A0A52
 # 导出
 curl.exe -X POST "http://localhost:3000/api/standards/bz:443847/export"
 
+# 批量解析 / 标准补全预览
+curl.exe -X POST "http://localhost:3000/api/standards/resolve" -H "Content-Type: application/json" -d "{\"lines\":[\"GB/T 3324-2024\"],\"sources\":[\"gbw\",\"by\",\"bz\"]}"
+curl.exe -X POST "http://localhost:3000/api/standards/complete/preview" -F "file=@C:\path\standards.xlsx" -F "inputColumn=A" -F "outputColumn=B"
+
 # gbw自动下载
 Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/standards/gbw:{id}/auto-download"
 ```

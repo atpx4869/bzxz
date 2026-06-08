@@ -135,6 +135,10 @@ type ApiResult<T> =
 
 路由层调用时根据 `adapter.autoDownload`、`adapter.exportStandard` 是否存在选择路径——前端的 `/api/standards/multi-download` 已经做了这层路由。**不要为了"统一"强抽基类**——之前评估过，会产出空壳接口。
 
+批量下载的跨源回退依赖 `/api/standards/resolve` 带回的 `sourceIds/sources`。解析阶段启用 `StandardResolver.resolve(..., { collectSourceIds: true })` 时会继续查完用户启用的来源，保留同一标准在各源的 source-specific id；`/api/standards/multi-download` 只按这些真实 id 逐源尝试，不能用首个命中 id 伪装其它来源。标准补全默认不启用 `collectSourceIds`，避免为了报表补全额外打所有来源。
+
+标准补全分两步：`POST /api/standards/complete/preview` 只解析 Excel/CSV 首个 sheet，返回列校验、表头跳过、唯一/重复统计和前 8 条预览；`POST /api/standards/complete` 复用同一套解析 helper 后再调用 resolver 并写回 workbook。新增列规则或表头识别规则时，两条端点必须同步走共享 helper，避免预览通过但正式补全失败。
+
 ### 六-A. labr：第 4 源，**独立 service，不挂 SourceRegistry**
 
 `labr.cc` 是第 4 标准源，但**有意不实现 `SourceAdapter`**。原因：

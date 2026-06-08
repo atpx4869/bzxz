@@ -17,12 +17,19 @@
 .batch-stat.warn strong { color: var(--warning); }
 .batch-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0 8px; }
 .batch-results-list { display: grid; gap: 6px; }
-.batch-result-card { display: grid; grid-template-columns: 20px minmax(120px, 170px) minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid rgba(32, 36, 42, 0.4); border: 1px solid oklch(26% 0.012 255 / 0.4); border-radius: var(--radius-sm); background: rgba(19, 25, 32, 0.4); background: oklch(21% 0.016 255 / 0.4); font-size: 13px; transition: border-color 0.15s, background 0.15s; }
+.batch-result-card { display: grid; grid-template-columns: 20px minmax(120px, 170px) minmax(0, 1fr) minmax(74px, auto) minmax(60px, auto); align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid rgba(32, 36, 42, 0.4); border: 1px solid oklch(26% 0.012 255 / 0.4); border-radius: var(--radius-sm); background: rgba(19, 25, 32, 0.4); background: oklch(21% 0.016 255 / 0.4); font-size: 13px; transition: border-color 0.15s, background 0.15s; }
 .batch-result-card:hover { border-color: rgba(51, 56, 63, 0.55); border-color: oklch(34% 0.014 255 / 0.55); background: rgba(22, 27, 34, 0.55); background: oklch(22% 0.016 255 / 0.55); }
+.batch-result-card.is-downloading { border-color: rgba(0, 149, 254, 0.42); }
+.batch-result-card.is-success { border-color: rgba(21, 187, 119, 0.38); }
+.batch-result-card.is-fail { border-color: rgba(222, 59, 61, 0.4); }
 .batch-result-card input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; width: 15px; height: 15px; }
 .batch-result-card .card-num { font: 500 12px 'DM Mono', monospace; color: var(--accent); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .batch-result-card .card-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 .batch-result-card .card-src { font-size: 10px; color: var(--text-3); padding: 2px 8px; background: rgba(26, 32, 39, 0.5); background: oklch(24% 0.016 255 / 0.5); border-radius: var(--radius-sm); flex-shrink: 0; font-weight: 600; }
+.batch-result-note { justify-self: end; max-width: 86px; padding: 2px 8px; border: 1px solid rgba(42, 46, 52, 0.5); border-radius: var(--radius-sm); color: var(--text-3); background: rgba(7, 11, 17, 0.25); font-size: 10px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.batch-result-card.is-downloading .batch-result-note { color: var(--accent); border-color: rgba(0, 149, 254, 0.28); background: rgba(0, 149, 254, 0.08); }
+.batch-result-card.is-success .batch-result-note { color: var(--success); border-color: rgba(21, 187, 119, 0.25); background: rgba(21, 187, 119, 0.08); }
+.batch-result-card.is-fail .batch-result-note { color: var(--danger); border-color: rgba(222, 59, 61, 0.25); background: rgba(222, 59, 61, 0.08); }
 .batch-result-card.unmatched { grid-template-columns: minmax(120px, 170px) minmax(0, 1fr); opacity: 0.72; }
 .batch-result-card.unmatched .card-num { color: var(--text-3); }
 .batch-result-card.unmatched .card-title { color: var(--text-3); font-style: italic; }

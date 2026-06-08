@@ -456,6 +456,37 @@ function updateBatchSourceHint() {
   if (el) el.textContent = `级联顺序：${sources.map(s => labels[s]||s).join(' → ')}（超时 ${downloadTimeout}s）`;
 }
 
+function getBatchAvailableSources(item) {
+  const ids = item?.sourceIds || item?._sourceIds || {};
+  const available = item?.sources?.length ? item.sources : Object.keys(ids);
+  const ordered = [...downloadPriority, ...available.filter(s => !downloadPriority.includes(s))];
+  const list = [...new Set(ordered)].filter(s => available.includes(s) || ids[s] || s === item?.source);
+  return list.length ? list : [item?.source].filter(Boolean);
+}
+
+function getBatchSourceIds(item, sources) {
+  const result = typeof results !== 'undefined'
+    ? results.find(r => r.id === item.standardId || (r._sourceIds && Object.values(r._sourceIds).includes(item.standardId)))
+    : null;
+  const ids = item.sourceIds || item._sourceIds || {};
+  const sourceIds = {};
+  sources.forEach(s => {
+    const srcId = ids[s] || getSourceIdForDownload(result, s, item.standardId) || (s === item.source ? item.standardId : '');
+    if (srcId) sourceIds[s] = srcId;
+  });
+  return sourceIds;
+}
+
+function setBatchCardState(standardId, state, message = '') {
+  const card = [...document.querySelectorAll('#batchResults .batch-result-card[data-standard-id]')]
+    .find(el => el.dataset.standardId === standardId);
+  if (!card) return;
+  card.classList.remove('is-downloading', 'is-success', 'is-fail');
+  if (state) card.classList.add(`is-${state}`);
+  const note = card.querySelector('[data-batch-note]');
+  if (note) note.textContent = message || ({ downloading: '下载中', success: '已完成', fail: '失败' }[state] || '');
+}
+
 async function doBatchResolve() {
   const raw = document.getElementById('batchInput').value;
   const lines = raw.split(/[\n\r]+/).map(s => s.trim()).filter(Boolean);
@@ -464,7 +495,7 @@ async function doBatchResolve() {
   document.getElementById('batchResolveBtn').innerHTML = '<span class="spinner"></span>解析中';
   document.getElementById('batchSummary').innerHTML = '解析中...';
   document.getElementById('batchResults').innerHTML = '<div class="batch-results-empty">正在按来源优先级匹配标准号...</div>';
-  batchResolved = []; batchUnmatched = [];
+  batchResolved = []; batchUnmatched = []; lastBatchFailedItems = [];
   try {
     const sources = downloadPriority.filter(s => downloadSources.includes(s));
     const res = await fetch(`${API}/api/standards/resolve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lines, sources }) });
@@ -490,13 +521,18 @@ function renderBatchResults() {
       <div class="batch-stat ${batchUnmatched.length ? 'warn' : ''}"><strong>${batchUnmatched.length}</strong><span>未匹配</span></div>
       <div class="batch-stat"><strong>${total}</strong><span>总计</span></div>
     </div>` : '';
-  const resolvedCards = batchResolved.map((r, i) => `
-    <div class="batch-result-card">
+  const resolvedCards = batchResolved.map((r, i) => {
+    const available = getBatchAvailableSources(r);
+    const sourceTitle = available.map(srcLabel).join(' → ');
+    return `
+    <div class="batch-result-card" data-standard-id="${escapeHtml(r.standardId)}">
       <input type="checkbox" id="br_${i}" data-batch-index="${i}" checked onchange="updateBatchToolbar()">
       <span class="card-num" title="${escapeHtml(r.standardNumber)}">${escapeHtml(r.standardNumber)}</span>
       <span class="card-title" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</span>
-      <span class="card-src">${srcLabel(r.source)}</span>
-    </div>`).join('');
+      <span class="card-src" title="可下载来源：${escapeHtml(sourceTitle)}">${escapeHtml(sourceTitle)}</span>
+      <span class="batch-result-note" data-batch-note>待下载</span>
+    </div>`;
+  }).join('');
   const unmatchedCards = batchUnmatched.map(u => `
     <div class="batch-result-card unmatched">
       <span class="card-num">${escapeHtml(u.input)}</span>
@@ -507,10 +543,12 @@ function renderBatchResults() {
       <span class="badge-count" id="batchSelectedCount">已选 ${batchResolved.length}</span>
       <button class="btn btn-sm btn-primary" id="batchDownloadBtn" onclick="doBatchDownload()">下载选中</button>
       <button class="btn btn-sm btn-ghost" id="batchStopBtn" onclick="stopBatchDownload()" style="display:none;color:var(--danger);border-color:var(--danger)">停止</button>
+      <button class="btn btn-sm btn-ghost" id="batchRetryFailedBtn" onclick="retryFailedBatchDownload()" disabled>重试失败项</button>
       <button class="btn btn-sm btn-ghost" onclick="toggleBatchSelect()">全选/取消</button>
     </div>` : '';
   document.getElementById('batchResults').innerHTML = summary + toolbar + `<div class="batch-results-list">${resolvedCards + unmatchedCards}</div>`;
   updateBatchSourceHint();
+  updateBatchToolbar();
 }
 
 function toggleBatchSelect() {
@@ -524,6 +562,8 @@ function updateBatchToolbar() {
   const checks = document.querySelectorAll('#batchResults input[type="checkbox"]:checked');
   const el = document.getElementById('batchSelectedCount');
   if (el) el.textContent = `已选 ${checks.length}`;
+  const retry = document.getElementById('batchRetryFailedBtn');
+  if (retry) retry.disabled = batchDownloading || lastBatchFailedItems.length === 0;
 }
 
 async function doBatchDownload() {
@@ -555,7 +595,9 @@ async function doCascadeDownload() {
   async function worker() {
     while (queue.length > 0 && !batchAborted) {
       const item = queue.shift();
+      const sourceIds = getBatchSourceIds(item, sources);
       setRowDownloadState(item.standardId, 'downloading');
+      setBatchCardState(item.standardId, 'downloading', '下载中');
       const logId = addLog(`${item.standardNumber} 下载中...`, 'pending');
       const taskId = createDownloadTask({
         standardId: item.standardId,
@@ -565,13 +607,6 @@ async function doCascadeDownload() {
         retry: () => retryBatchItem(item),
       });
       try {
-        // Build sourceIds map for this item
-        const r = results.find(r => r.id === item.standardId);
-        const sourceIds = {};
-        sources.forEach(s => {
-          const srcId = (r && r._sourceIds && r._sourceIds[s]) || (s === item.source ? item.standardId : null);
-          if (srcId) sourceIds[s] = srcId;
-        });
         const resp = await fetch(`${API}/api/standards/multi-download`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -582,6 +617,7 @@ async function doCascadeDownload() {
           const sizeStr = data.fileSize ? ` ${formatSize(data.fileSize)}` : '';
           updateLog(logId, `${item.standardNumber} ✅ ${srcLabel(data.source)} ${data.fileName || ''}${sizeStr}`, 'success');
           setRowDownloadState(item.standardId, 'success');
+          setBatchCardState(item.standardId, 'success', srcLabel(data.source));
           markLibraryHit(item.standardId, data.fileId);
           success++; successItems.push(item);
           if (data.fileName) { triggerDownload(data.fileName); recordDownload(data.source, data.fileName, item.standardNumber); }
@@ -592,6 +628,7 @@ async function doCascadeDownload() {
           const errMsg = `入库失败: ${data.libraryError || '未知'}`;
           updateLog(logId, `${item.standardNumber} ⚠ ${srcLabel(data.source)} ${errMsg}`, 'fail');
           setRowDownloadState(item.standardId, 'fail');
+          setBatchCardState(item.standardId, 'fail', '入库失败');
           if (data.fileName) { triggerDownload(data.fileName); recordDownload(data.source, data.fileName, item.standardNumber); }
           allFailedItems.push({ ...item, _failReason: errMsg });
           completeDownloadTask(taskId, 'fail', { error: errMsg, progress: errMsg });
@@ -600,6 +637,7 @@ async function doCascadeDownload() {
           const errMsg = data.message || (perSource ? Object.values(perSource).join('; ') : '下载失败');
           updateLog(logId, `${item.standardNumber} ❌ ${errMsg}`, 'fail');
           setRowDownloadState(item.standardId, 'fail');
+          setBatchCardState(item.standardId, 'fail', '下载失败');
           allFailedItems.push({ ...item, _failReason: errMsg });
           completeDownloadTask(taskId, 'fail', { error: errMsg, progress: errMsg });
         }
@@ -607,6 +645,7 @@ async function doCascadeDownload() {
         const msg = (e && e.message) || '请求失败';
         updateLog(logId, `${item.standardNumber} ❌ ${msg}`, 'fail');
         setRowDownloadState(item.standardId, 'fail');
+        setBatchCardState(item.standardId, 'fail', '请求失败');
         allFailedItems.push({ ...item, _failReason: msg });
         completeDownloadTask(taskId, 'fail', { error: msg, progress: msg });
       }
@@ -623,6 +662,7 @@ async function doCascadeDownload() {
   batchDownloading = false;
   document.getElementById('batchDownloadBtn').disabled = false;
   document.getElementById('batchStopBtn').style.display = 'none';
+  updateBatchToolbar();
 }
 
 async function doRaceDownload() {
@@ -680,6 +720,7 @@ function raceSourceWithTimeout(standardId, source, label, timeoutMs, onProgress)
 
 function showBatchResultModal(successItems, allFailedItems, finalFailed, elapsed) {
   lastBatchFailedItems = finalFailed;
+  updateBatchToolbar();
   const total = successItems.length + finalFailed.length;
   const successRows = successItems.map(it => `
     <div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;border-bottom:1px solid var(--border)">
