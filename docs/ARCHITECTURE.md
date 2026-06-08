@@ -389,7 +389,7 @@ src/
 ├── services/
 │   └── cap-lib-service.ts    # syncDomain / diffByLab / batchStatus / labsCounts / cleanupStaleRows / exportDiff / 黑名单 / 手动映射 / rematch / diagnose
 └── api/
-    └── cap-lib-routes.ts     # 18 个端点挂 /api/cma-diff/*（含 export / blacklist / manual-map / rematch / diagnose）
+    └── cap-lib-routes.ts     # 20 个端点挂 /api/cma-diff/*（含批量订阅 / sync-selected / export / blacklist / manual-map / rematch / diagnose）
 
 public/js/
 ├── app-cap-lib-badge.js      # 共用徽章（搜索 + 资质查询 + 比对页 三处复用）
@@ -407,15 +407,20 @@ public/js/
 - `removedSoft` 统计写入 meta.last_sync_stats
 - admin 在 `cma-diff` 页点「清理 30 天未见」走 `POST /api/cma-diff/cleanup` 真删 + 重算 local_total
 
-**并发与事件循环（防假死）**：所有 `runSync` 串到模块级 `syncChain`（**并发 1**），任意时刻
-最多一个领域入库事务在跑；入库按 **2000 行分块事务**，批次间 `await setImmediate` 让出事件循环。
-Why：better-sqlite3 事务同步阻塞主线程，旧版「全部更新」一次性启动全部领域 → 多个 41k 行大事务
-连环锁死事件循环 → 进度轮询/所有请求排队 → 页面假死。串行队列 + 分块让出根治。
+**并发与事件循环（防假死）**：`runSync` 拆成「远端拉取」和「SQLite 入库」两段。远端 fetch 是 IO 等待，
+可限流并发；better-sqlite3 事务同步阻塞主线程，所以只有入库阶段串到模块级 `dbWriteChain`
+（**写并发 1**）。入库按 **2000 行分块事务**，批次间 `await setImmediate` 让出事件循环。
+Why：旧版「全部更新」一次性启动全部领域时，如果多个大领域写事务并发回到主线程，会连环锁死事件循环 →
+进度轮询/所有请求排队 → 页面假死；但把整条 `runSync` 全局串行，又会让产品质量检验的 21 页远端请求逐页慢等。
+现在的边界是：远端请求并发，DB 写入串行。
 
-**远端分页拉取（防超时/卡 0%）**：`runSync` 按 `pageSize=2000` 逐页拉（`pageNum` 递增到拉满
-`total` 或末页），每页独立短请求（~36s，远低于 90s 单页超时）+ 实时 `setProgress(fetching, current=已拉行数, total)`。
-Why：远端「产品质量检验」已从 41s 劣化到一次拉 41k 行需 5-7 分钟（超 180s 旧超时）→ 整批失败 /
-前端死显「拉取中 0%」误判假死。前端 `progressText` 把 fetching 显示成「拉取中 X/total (pct%)」。
+**远端分页拉取（防超时/卡 0%）**：`runSync` 仍按 `pageSize=2000` 分页。第一页先拿 `total`，
+后续页同领域最多 `REMOTE_DOMAIN_PAGE_CONCURRENCY=4` 个 worker 并发；所有领域共享
+`REMOTE_FETCH_CONCURRENCY=4` 的 `Semaphore`，防「全部更新」把 11 个领域页请求同时轰上游。
+每页完成后实时 `setProgress(fetching, current=已拉行数, total)`；拉完但前面还有领域在入库时，
+phase 进入 `queued`（等待串行入库）。前端 `progressText` 把 fetching 显示成「并发拉取 X/total (pct%)」。
+Why：远端「产品质量检验」已从 41s 劣化到一次拉 41k 行需 5-7 分钟（超 180s 旧超时），逐页串行仍会累积到
+很长等待；限流并发能明显缩短大领域拉取时间，同时保留上游保护。
 
 ### 比对算法（5 档，按标准号去重）
 
@@ -441,14 +446,17 @@ Why：远端「产品质量检验」已从 41s 劣化到一次拉 41k 行需 5-7
 
 - 大多数读端点：`requireTab('cma-diff')` per-route guard（router 挂在根上无 mount path）
 - `batch-status`（徽章注入用）：`requireTab('cma-diff','qual','search')` OR 语义 —— 徽章注入三处页面，权限路径要一致
-- 写操作（同步 / 订阅切换 / 清理 / 黑名单增删 / 手动映射增删）：叠加 `requireAdmin`；
+- 写操作（同步 / 批量同步 / 订阅切换 / 批量订阅 / 清理 / 黑名单增删 / 手动映射增删）：叠加 `requireAdmin`；
   导出 / rematch / 列表读取仅 `requireTab('cma-diff')`
 - 导出 `POST /export`：`requireTab('cma-diff')`（仅比对页触发，不同于 batch-status 的三 tab OR）
 
 ### 页面 UI（app-cma-diff.js）
 
 - **领域订阅卡整卡折叠**：默认收起、标题栏摘要「已订阅 N 个 · 最近同步 时间」，折叠态记 `localStorage('capLib.domCollapsed')`（默认值不为 `'0'` 即收起）。展开后两列 grid（窄屏 ≤900px 单列），长领域名 ellipsis、进度条弹性宽
-- **批量同步**（admin）：`capLibSyncChecked` 串行同步勾中领域（逐个 await `syncDomainAndWait`，避免并发长请求轰上游）；「全部更新」复用 `capLibSyncAll`
+- **批量同步**（admin）：`capLibSyncChecked` 一次 `POST /api/cma-diff/sync-selected` 启动所有勾选领域；
+  「全部更新」复用 `capLibSyncAll`。两个入口都只负责启动 job + 追加进度监听，远端并发/DB 串行由后端控制，完成后统一 `capLibInvalidateCache()` + 重渲，避免每个领域 done 都刷新页面
+- **订阅批量保存**：复选框变更先进 `pendingDomainSubs`，350ms 防抖后一次 `PUT /api/cma-diff/domains/subscriptions`；
+  点击同步前会 `flushPendingDomainSubs()`，保证 UI 勾选和后端订阅状态一致
 - **机构内 5 档分类折叠 + 分页**：`capLibToggleLab` 拉行后按 `diffStatus` 分 5 组缓存到 `body._capLibGroups`，`renderStatusGroups` 按单一 `GROUP_ORDER`（worst→best）渲染折叠卡，默认展开首个非空最严重档；`renderPagedTable` 每页大小可选 50/100/200/300/500/1000（默认 100，`getPageSize`/`setPageSize` 记 localStorage `capLib.pageSize`，黑名单条上有选择器）+ `renderPager`/`compressPages`（≤7 页全列，否则 `1 … cur±1 … last`）。懒渲染：非默认展开档点开才生成表；收起机构清 `_capLibGroups` 引用
 - **机构内搜索**：机构展开后顶部搜索框 `capLibSearchLab`（防抖 200ms），按标准号/标准名/检测项目过滤缓存行，命中档全展开（`renderStatusGroups` 的 `expandAll`）；过滤后的分组挂到 `.cap-lib-lab-groups` 容器的 `_capLibViewGroups`，翻页/展开懒渲染经 `viewGroupsFor` 优先取它（保证搜索态翻页只翻命中行），清空恢复全量默认视图
 - 配色/文案/排序复用 `DIFF_STATUS_META`（单一真相源）；新 CSS 全 token 化（`--surface-h/--border/--accent`）保证 light/paper 主题不"白上加白"

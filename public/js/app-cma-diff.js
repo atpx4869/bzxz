@@ -3,8 +3,8 @@
  *
  * 整体逻辑：
  *  1) switchTab('cma-diff') 触发 loadCapLibPage()，并发拉 domains / summary / labs
- *  2) 用户勾领域 → PUT /api/cma-diff/domains/:name/subscribe（仅 admin）
- *  3) 点「立即同步」→ POST /api/cma-diff/sync/:name 拿 jobId → 1.5s 轮询 progress
+ *  2) 用户勾领域 → 批量 PUT /api/cma-diff/domains/subscriptions（仅 admin，短防抖）
+ *  3) 点同步 → POST /api/cma-diff/sync-selected 或 /sync/:name 拿 jobId → 1.5s 轮询 progress
  *  4) 同步完成 → window.capLibInvalidateCache() + 重渲整页
  *
  * 与其它 tab 的解耦：本文件只动 #page-cma-diff 内的 DOM，不干扰任何全局状态。
@@ -40,11 +40,20 @@
 
   /** 进度轮询定时器 jobId → setInterval handle */
   const progressTimers = new Map();
+  /** 同一个 jobId 可能被多个批量按钮关注，完成回调集中挂这里 */
+  const progressSettlers = new Map();
+  const pendingDomainSubs = new Map();
+  let domainSubFlushTimer = null;
+  let domainSubFlushPromise = Promise.resolve();
 
   window._tabCleanup = window._tabCleanup || {};
   window._tabCleanup.capLibDiff = function () {
     for (const t of progressTimers.values()) clearInterval(t);
     progressTimers.clear();
+    progressSettlers.clear();
+    if (pendingDomainSubs.size || domainSubFlushTimer) {
+      flushPendingDomainSubs().catch(function () { /* toast already shown */ });
+    }
   };
 
   // ── 入口 ──────────────────────────────────────────────────────────
@@ -103,12 +112,12 @@
         summaryEl.textContent = `已订阅 ${subscribedCount} 个领域 · 最近同步 ${latestSynced ? formatDateTime(latestSynced) : '从未'}`;
       }
 
-      // 批量同步条（仅 admin）：更新勾选（串行）/ 全部更新（复用 sync-all）
+      // 批量同步条（仅 admin）：远端限流并发拉取，SQLite 入库仍串行排队
       const batchBar = isAdmin
         ? `<div class="cap-lib-dom-batchbar">
              <button class="btn btn-sm btn-ghost" onclick="capLibSyncChecked(this)">更新勾选</button>
-             <button class="btn btn-sm btn-ghost" onclick="capLibSyncAll()">全部更新</button>
-             <span class="cap-lib-dom-batchhint">更新勾选 = 串行同步勾中的领域；全部更新 = 同步全部已勾选订阅领域</span>
+             <button class="btn btn-sm btn-ghost" onclick="capLibSyncAll(this)">全部更新</button>
+             <span class="cap-lib-dom-batchhint">远端限流并发拉取，入库串行排队；连续勾选会批量保存</span>
            </div>`
         : '';
 
@@ -167,8 +176,7 @@
   };
 
   /**
-   * 更新勾选：串行同步勾中的领域（避免 N 个 pageSize=60000 长请求并发轰上游）。
-   * 逐个 await 现有 capLibSyncOne 完成再发下一个；进度条复用每行 pollSyncProgress。
+   * 更新勾选：一次请求启动所有勾选领域。后端会限流并发拉远端页，DB 写入串行排队。
    */
   window.capLibSyncChecked = async function (triggerBtn) {
     if (!isAdminUser()) return;
@@ -177,98 +185,38 @@
       .map(row => row && row.getAttribute('data-domain'))
       .filter(Boolean);
     if (!checked.length) { showToast('未勾选任何领域', 'fail'); return; }
-    if (triggerBtn) { triggerBtn.disabled = true; triggerBtn.textContent = '同步中…'; }
+    if (triggerBtn) { triggerBtn.disabled = true; triggerBtn.textContent = '启动中…'; }
     try {
-      for (const domain of checked) {
-        const rowBtn = document.querySelector(
-          `.cap-lib-dom-row[data-domain="${cssEscape(domain)}"] .cap-lib-dom-actions button`);
-        await syncDomainAndWait(domain, rowBtn);
-      }
-      showToast('勾选领域已全部同步完成');
-      // 串行循环结束后整页刷新一次（syncDomainAndWait 内只失效缓存、不重渲）
-      if (window.capLibInvalidateCache) window.capLibInvalidateCache();
-      window.loadCapLibPage();
-    } finally {
-      if (triggerBtn) { triggerBtn.disabled = false; triggerBtn.textContent = '更新勾选'; }
-    }
-  };
-
-  /**
-   * 同步单个领域并等待其完成（串行批量同步用）。包装 sync 启动 + 轮询 done/error，
-   * 返回 Promise，避免一次 for 循环把所有 sync 并发打出去。
-   */
-  function syncDomainAndWait(domain, btn) {
-    return new Promise((resolve) => {
-      if (btn) { btn.disabled = true; btn.textContent = '同步中…'; }
-      const progEl = document.getElementById('capLibDomProg-' + domain);
-      fetch('/api/cma-diff/sync/' + encodeURIComponent(domain), { method: 'POST' })
-        .then(async (res) => {
-          if (!res.ok) {
-            const txt = await res.text();
-            showToast('启动同步失败：' + (txt || res.status), 'fail');
-            if (btn) { btn.disabled = false; btn.textContent = '刷新'; }
-            resolve();
-            return;
-          }
-          const body = await readApiResponse(res);
-          const jobId = body.jobId;
-          if (progressTimers.has(jobId)) { resolve(); return; }
-          const tick = async function () {
-            try {
-              const pr = await fetch('/api/cma-diff/sync/progress/' + encodeURIComponent(jobId));
-              if (!pr.ok) { stop(); resolve(); return; }
-              const p = await readApiResponse(pr);
-              const pct = p.total ? Math.min(100, Math.round((p.current || 0) / p.total * 100)) : 0;
-              if (progEl) {
-                progEl.innerHTML = '<div class="cap-lib-prog-bar"><div style="width:' + pct + '%"></div></div>'
-                  + '<span class="cap-lib-prog-text">' + escHtml(progressText(p, pct)) + '</span>';
-              }
-              if (p.phase === 'done') {
-                stop();
-                if (window.capLibInvalidateCache) window.capLibInvalidateCache();
-                resolve();
-              } else if (p.phase === 'error') {
-                showToast('「' + domain + '」同步失败：' + (p.error || '未知错误'), 'fail');
-                stop();
-                resolve();
-              }
-            } catch (e) { stop(); resolve(); }
-          };
-          const stop = function () {
-            const h = progressTimers.get(jobId); if (h) clearInterval(h);
-            progressTimers.delete(jobId);
-            if (btn) { btn.disabled = false; btn.textContent = '刷新'; }
-          };
-          tick();
-          progressTimers.set(jobId, setInterval(tick, 1500));
-        })
-        .catch((e) => {
-          showToast('启动同步失败：' + (e.message || e), 'fail');
-          if (btn) { btn.disabled = false; btn.textContent = '刷新'; }
-          resolve();
-        });
-    });
-  }
-
-  window.capLibToggleSub = async function (domain, subscribed) {
-    try {
-      const res = await fetch('/api/cma-diff/domains/' + encodeURIComponent(domain) + '/subscribe', {
-        method: 'PUT',
+      await flushPendingDomainSubs();
+      const res = await fetch('/api/cma-diff/sync-selected', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subscribed }),
+        body: JSON.stringify({ domains: checked }),
       });
       if (!res.ok) {
         const txt = await res.text();
-        showToast('保存失败：' + (txt || res.status), 'fail');
+        showToast('启动同步失败：' + (txt || res.status), 'fail');
+        return;
       }
+      const body = await readApiResponse(res);
+      startBatchProgress((body && body.jobs) || [], '勾选领域已全部同步完成');
     } catch (e) {
-      showToast('保存失败：' + (e.message || e), 'fail');
+      showToast('启动同步失败：' + (e.message || e), 'fail');
+    } finally {
+      if (triggerBtn) { setTimeout(function () { triggerBtn.disabled = false; triggerBtn.textContent = '更新勾选'; }, 600); }
     }
+  };
+
+  window.capLibToggleSub = function (domain, subscribed) {
+    if (!isAdminUser()) return;
+    pendingDomainSubs.set(domain, !!subscribed);
+    scheduleDomainSubFlush();
   };
 
   window.capLibSyncOne = async function (domain, btn) {
     if (btn) { btn.disabled = true; btn.textContent = '同步中…'; }
     try {
+      await flushPendingDomainSubs();
       const res = await fetch('/api/cma-diff/sync/' + encodeURIComponent(domain), { method: 'POST' });
       if (!res.ok) {
         const txt = await res.text();
@@ -284,10 +232,12 @@
     }
   };
 
-  window.capLibSyncAll = async function () {
-    const btn = document.getElementById('capLibSyncAllBtn');
+  window.capLibSyncAll = async function (triggerBtn) {
+    const btn = triggerBtn || document.getElementById('capLibSyncAllBtn');
+    const originalText = btn ? btn.textContent : '';
     if (btn) { btn.disabled = true; btn.textContent = '同步中…'; }
     try {
+      await flushPendingDomainSubs();
       const res = await fetch('/api/cma-diff/sync-all', { method: 'POST' });
       if (!res.ok) {
         const txt = await res.text();
@@ -300,31 +250,93 @@
         showToast('没有勾选领域可同步', 'fail');
         return;
       }
-      // 收敛重渲：每个领域 done 不各刷一次（旧版重渲风暴），最后一个完成才整页刷一次
-      let remaining = jobs.length;
-      const onSettled = function () {
-        remaining -= 1;
-        if (remaining <= 0) {
-          if (window.capLibInvalidateCache) window.capLibInvalidateCache();
-          window.loadCapLibPage();
-        }
-      };
-      for (const j of jobs) pollSyncProgress(j.jobId, j.domain, null, { onSettled });
+      startBatchProgress(jobs, '已订阅领域已全部同步完成');
     } catch (e) {
       showToast('启动同步失败：' + (e.message || e), 'fail');
     } finally {
-      if (btn) { setTimeout(function () { btn.disabled = false; btn.textContent = '同步勾选领域'; }, 600); }
+      if (btn) { setTimeout(function () { btn.disabled = false; btn.textContent = originalText || '同步勾选领域'; }, 600); }
     }
   };
 
+  function scheduleDomainSubFlush() {
+    if (domainSubFlushTimer) clearTimeout(domainSubFlushTimer);
+    domainSubFlushTimer = setTimeout(function () {
+      domainSubFlushTimer = null;
+      flushPendingDomainSubs().catch(function () { /* toast already shown */ });
+    }, 350);
+  }
+
+  async function flushPendingDomainSubs() {
+    if (domainSubFlushTimer) {
+      clearTimeout(domainSubFlushTimer);
+      domainSubFlushTimer = null;
+    }
+    await domainSubFlushPromise.catch(function () { /* next flush may still succeed */ });
+    if (!pendingDomainSubs.size) return;
+    const items = [...pendingDomainSubs.entries()].map(([domain, subscribed]) => ({ domain, subscribed }));
+    pendingDomainSubs.clear();
+    domainSubFlushPromise = (async function () {
+      try {
+        const res = await fetch('/api/cma-diff/domains/subscriptions', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items }),
+        });
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(txt || 'HTTP ' + res.status);
+        }
+      } catch (e) {
+        for (const it of items) {
+          if (!pendingDomainSubs.has(it.domain)) pendingDomainSubs.set(it.domain, it.subscribed);
+        }
+        showToast('保存订阅失败：' + (e.message || e), 'fail');
+        throw e;
+      }
+    })();
+    return domainSubFlushPromise;
+  }
+
+  function startBatchProgress(jobs, doneMessage) {
+    if (!jobs.length) { showToast('没有勾选领域可同步', 'fail'); return; }
+    let remaining = jobs.length;
+    const onSettled = function () {
+      remaining -= 1;
+      if (remaining <= 0) {
+        showToast(doneMessage || '领域同步已完成');
+        if (window.capLibInvalidateCache) window.capLibInvalidateCache();
+        window.loadCapLibPage();
+      }
+    };
+    for (const j of jobs) {
+      const rowBtn = document.querySelector(
+        `.cap-lib-dom-row[data-domain="${cssEscape(j.domain)}"] .cap-lib-dom-actions button`);
+      if (rowBtn) { rowBtn.disabled = true; rowBtn.textContent = '同步中…'; }
+      pollSyncProgress(j.jobId, j.domain, rowBtn, { onSettled, quietDone: true });
+    }
+  }
+
+  function addProgressSettler(jobId, onSettled) {
+    if (!onSettled) return;
+    const list = progressSettlers.get(jobId) || [];
+    list.push(onSettled);
+    progressSettlers.set(jobId, list);
+  }
+
   function pollSyncProgress(jobId, domain, btn, opts) {
-    if (progressTimers.has(jobId)) return; // 同 jobId 已在轮询
-    const onSettled = opts && opts.onSettled;   // 批量同步：完成/失败回调（收敛重渲），不每个领域各刷一次
+    const onSettled = opts && opts.onSettled;
+    if (progressTimers.has(jobId)) {
+      addProgressSettler(jobId, onSettled);
+      return;
+    }
+    addProgressSettler(jobId, onSettled);
+    const quietDone = opts && opts.quietDone;
     const progEl = document.getElementById('capLibDomProg-' + domain);
+    let settled = false;
     const tick = async function () {
       try {
         const res = await fetch('/api/cma-diff/sync/progress/' + encodeURIComponent(jobId));
-        if (!res.ok) { stop(); if (onSettled) onSettled(); return; }
+        if (!res.ok) { settle(); return; }
         const p = await readApiResponse(res);
         const pct = p.total ? Math.min(100, Math.round((p.current || 0) / p.total * 100)) : 0;
         if (progEl) {
@@ -332,24 +344,33 @@
             + '<span class="cap-lib-prog-text">' + escHtml(progressText(p, pct)) + '</span>';
         }
         if (p.phase === 'done') {
-          showToast('「' + domain + '」同步完成 · 新增 ' + (p.stats?.added || 0) + ' / 变更 ' + (p.stats?.changed || 0));
-          stop();
-          if (onSettled) { onSettled(); }
-          else {
+          if (!quietDone) showToast('「' + domain + '」同步完成 · 新增 ' + (p.stats?.added || 0) + ' / 变更 ' + (p.stats?.changed || 0));
+          const didSettle = settle();
+          if (didSettle && !onSettled) {
             if (window.capLibInvalidateCache) window.capLibInvalidateCache();
             window.loadCapLibPage();
           }
         } else if (p.phase === 'error') {
           showToast('「' + domain + '」同步失败：' + (p.error || '未知错误'), 'fail');
-          stop();
-          if (onSettled) onSettled();
+          settle();
         }
-      } catch (e) { stop(); if (onSettled) onSettled(); }
+      } catch (e) { settle(); }
     };
     const stop = function () {
       const h = progressTimers.get(jobId); if (h) clearInterval(h);
       progressTimers.delete(jobId);
       if (btn) { btn.disabled = false; btn.textContent = '刷新'; }
+    };
+    const settle = function () {
+      if (settled) return false;
+      settled = true;
+      stop();
+      const list = progressSettlers.get(jobId) || [];
+      progressSettlers.delete(jobId);
+      for (const fn of list) {
+        try { fn(); } catch (e) { /* ignore */ }
+      }
+      return true;
     };
     tick();
     progressTimers.set(jobId, setInterval(tick, 1500));
@@ -358,8 +379,8 @@
   function phaseLabel(phase) {
     switch (phase) {
       case 'pending': return '排队';
-      case 'fetching': return '拉取中';
-      case 'parsing': return '解析中';
+      case 'fetching': return '并发拉取中';
+      case 'queued': return '等待入库';
       case 'upserting': return '入库中';
       case 'done': return '完成';
       case 'error': return '失败';
@@ -368,12 +389,15 @@
   }
 
   // 进度文案：拉取/入库阶段尽量显「X/Y 行 + 百分比」；拉取首页未拿到 total 时给明确的等待提示，
-  // 不再死显「拉取中 0%」让人误判卡死（产品质量检验 41k 行、远端慢，整个拉取要 10+ 分钟）。
+  // 不再死显「拉取中 0%」让人误判卡死（产品质量检验 41k 行、旧串行拉取很容易等到心焦）。
   function progressText(p, pct) {
     const label = phaseLabel(p.phase);
     if (p.phase === 'fetching') {
-      if (p.total > 0) return '拉取中 ' + (p.current || 0).toLocaleString() + '/' + p.total.toLocaleString() + ' (' + pct + '%)';
-      return '拉取中…（数据较大，首页约需半分钟）';
+      if (p.total > 0) return '并发拉取 ' + (p.current || 0).toLocaleString() + '/' + p.total.toLocaleString() + ' (' + pct + '%)';
+      return '拉取首页…（大领域约需半分钟）';
+    }
+    if (p.phase === 'queued' && p.total > 0) {
+      return '等待入库 ' + p.total.toLocaleString() + ' 行';
     }
     if (p.phase === 'upserting' && p.total > 0) {
       return '入库中 ' + (p.current || 0).toLocaleString() + '/' + p.total.toLocaleString() + ' (' + pct + '%)';

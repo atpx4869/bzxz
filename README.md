@@ -128,13 +128,13 @@ cp .env.example .env.local
 - 🔴 **年版过期** — 持有的年版不在库，但系列新年版在库（提示「建议改用 X」）
 - ⛔ **完全不在库** — 整个标准号系列都不在能力项目库（按政策，**资质到期后不再延续**）
 
-数据源 `cma.caqit.org.cn` 实测无鉴权。**分页拉取**：远端按行数线性变慢（~277 行/秒），产品质量检验 41k 行一次拉全要 5-7 分钟会超时，故按 `pageSize=2000` 逐页拉、边拉边报「拉取中 X/total」进度（单页 ~36s）。同步策略：按 11 个领域分桶手动同步（产品质量检验占库 80%、独立刷）。同步用 `row_hash` 比对，未变行只刷 `last_seen_at` 不写主字段，索引干净。**soft delete 防误删**：远端某次没返回的行不立删，30 天后由 admin 手动「清理 30 天未见」才真删 —— 防远端临时抽风把订阅机构资质徽章瞬间全变红。
+数据源 `cma.caqit.org.cn` 实测无鉴权。**分页 + 限流并发拉取**：远端按行数线性变慢，产品质量检验 41k 行一次拉全要 5-7 分钟会超时，故按 `pageSize=2000` 分页；首页拿到 `total` 后同领域最多 4 页并发、全进程最多 4 个远端请求，边拉边报「并发拉取 X/total」进度。同步策略：按 11 个领域分桶手动同步（产品质量检验占库 80%、独立刷）。同步用 `row_hash` 比对，未变行只刷 `last_seen_at` 不写主字段，索引干净。**soft delete 防误删**：远端某次没返回的行不立删，30 天后由 admin 手动「清理 30 天未见」才真删 —— 防远端临时抽风把订阅机构资质徽章瞬间全变红。
 
-**性能（防假死）**：同步走**全局串行队列**（并发 1），`runSync` 入库按 2000 行分块事务、批次间 `setImmediate` 让出事件循环 —— 避免「全部更新」时多个 41k 行 better-sqlite3 同步事务连环锁死主线程导致页面假死。`diffByLab` 先按 `std_code_norm` **去重**机构标准号（同号多检测项目聚合一行）再用 `IN` 批量查库，取代旧「每行 6 个相关子查询」。
+**性能（防假死）**：同步拆成「远端拉取」和「SQLite 入库」两段；远端页请求用信号量限流并发，入库仍走 `dbWriteChain` 串行队列（并发 1），按 2000 行分块事务、批次间 `setImmediate` 让出事件循环 —— 既避免「全部更新」时多个 better-sqlite3 大事务连环锁死主线程，也不再让产品质量检验 21 页远端请求逐页慢等。`diffByLab` 先按 `std_code_norm` **去重**机构标准号（同号多检测项目聚合一行）再用 `IN` 批量查库，取代旧「每行 6 个相关子查询」。
 
 **人工兜底**：标准号**黑名单**（屏蔽表格合并产生的非标准号脏行，按 norm 命中、不显示不匹配，可多选增删）；**手动映射**（未入库行人工指定库内标准号，覆盖自动判定）；**单项重试 / 机构重新对比**（同步后局部或整机构刷新匹配）。
 
-**页面交互**：领域订阅卡整卡可折叠（默认收起 + 标题栏摘要「已订阅 N 个 · 最近同步 时间」，记 localStorage），展开后两列布局并提供「更新勾选 / 全部更新」批量同步（admin，更新勾选串行化避免并发轰上游）。机构维度比对按 5 档状态二级折叠 + 分页（每页 50/100/200/300/500/1000 可选，默认 100，记 localStorage），进机构自动展开第一个非空的最严重档。**三级导出**：状态档头「导出」(单机构单档) / 机构头「导出此机构」(单机构整表) / 顶部「导出全部机构」(全订阅合并表)，统一 `POST /api/cma-diff/export` 生成 Excel（状态列 emoji 前缀 + 首行 AutoFilter + 列宽自适应，流式下载不留临时文件）。
+**页面交互**：领域订阅卡整卡可折叠（默认收起 + 标题栏摘要「已订阅 N 个 · 最近同步 时间」，记 localStorage），展开后两列布局并提供「更新勾选 / 全部更新」批量同步（admin，更新勾选一次请求启动所有勾选领域；连续勾选订阅状态会短防抖批量保存）。机构维度比对按 5 档状态二级折叠 + 分页（每页 50/100/200/300/500/1000 可选，默认 100，记 localStorage），进机构自动展开第一个非空的最严重档。**三级导出**：状态档头「导出」(单机构单档) / 机构头「导出此机构」(单机构整表) / 顶部「导出全部机构」(全订阅合并表)，统一 `POST /api/cma-diff/export` 生成 Excel（状态列 emoji 前缀 + 首行 AutoFilter + 列宽自适应，流式下载不留临时文件）。
 
 徽章注入到标准检索结果 + 资质查询页（共享 `app-cap-lib-badge.js`），与现有 CNAS/CMA 资质徽章并排显示。
 
@@ -286,9 +286,11 @@ cp .env.example .env.local
 |------|------|------|------|
 | GET    | `/api/cma-diff/domains` | tab `cma-diff` | 11 个领域元数据（订阅状态 / 上次同步 / 本地&远端行数 / 上次同步统计） |
 | PUT    | `/api/cma-diff/domains/:name/subscribe` | admin + tab | 切换某领域订阅勾选状态（body `{subscribed: bool}`） |
+| PUT    | `/api/cma-diff/domains/subscriptions` | admin + tab | 批量保存领域订阅状态（body `{items:[{domain,subscribed}]}`；前端连续勾选防抖合并） |
 | POST   | `/api/cma-diff/sync/:name` | admin + tab | 触发单领域同步（fire-and-forget；返回 jobId） |
+| POST   | `/api/cma-diff/sync-selected` | admin + tab | 一次触发指定领域列表同步（body `{domains:[]}`；返回 jobs[] 列表） |
 | POST   | `/api/cma-diff/sync-all` | admin + tab | 触发所有已订阅领域同步（返回 jobs[] 列表） |
-| GET    | `/api/cma-diff/sync/progress/:jobId` | tab | 同步进度（phase/current/total/stats） |
+| GET    | `/api/cma-diff/sync/progress/:jobId` | tab | 同步进度（phase/current/total/stats；`queued` 表示已拉完、等待串行入库） |
 | GET    | `/api/cma-diff/labs` | tab | 订阅 CMA 机构维度计数表 |
 | GET    | `/api/cma-diff/labs/:certNumber?status=&q=` | tab | 单机构资质行 diff 详情 |
 | POST   | `/api/cma-diff/batch-status` | `cma-diff` / `qual` / `search` 任一 | 批量徽章状态查询（搜索结果 / 资质查询页徽章用） |
@@ -558,6 +560,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **perf(cma-diff): CMA 一单一库同步提速** — 产品质量检验等大领域改为 `pageSize=2000` 分页后限流并发拉取（同领域最多 4 页、全进程最多 4 个远端请求），SQLite 入库仍用 `dbWriteChain` 串行分块事务防假死；「更新勾选」一次启动所有勾选领域，订阅勾选短防抖批量保存。
 - **fix(theme): 弹窗灰底残留收口** — 公告弹窗、公告 Markdown 代码块、normalize 预览区 chip/list 继续补齐主题覆盖，dark/light/paper/legacy 下不再露固定灰白底；`public/styles.css` 与 `web/src/styles/theme/*` 已双轨同步。
 - **perf/ci: 本地文件库索引与关键路径优化** — `standard_files` 新增 `file_name` 索引列并自动回填，`/api/downloads/:filename` 从 `abs_path LIKE` 改为 `file_name = ?`，本地文件库列表支持 `q/limit/offset` 服务端筛选（前端防抖请求、计数显示已加载/总数，并支持加载更多）。同时优化「按标准查」资质聚合、CMA 一单一库批量统计/导出上下文复用、源检测 AbortController 传递、搜索结果渲染批处理，并补上 PR Check + OKLCh CI 守门。
 - **polish(ui): 本地文件库加载态 + 搜索结果防跳动 + 源检测分层提示** — 本地文件库刷新/筛选/加载更多都有明确状态，防重复点击与过期响应覆盖；搜索结果默认智能排序不再受异步资质徽章影响，徽章只更新视觉和筛选计数，避免卡片回流；数据源检测把超时、凭据未配置、普通异常分开显示。

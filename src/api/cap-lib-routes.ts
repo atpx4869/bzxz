@@ -8,7 +8,7 @@
  * 权限：
  * - 大多数读端点：requireTab('cma-diff')
  * - batch-status（搜索/资质查询页徽章用）：OR `cma-diff` / `qual` / `search` —— 三个 tab 任一即可
- * - 触发同步 / 清理：requireAdmin（在路由内部组合 requireAdmin）
+ * - 触发同步 / 批量订阅 / 清理：requireAdmin（在路由内部组合 requireAdmin）
  */
 import express from 'express';
 import { z } from 'zod';
@@ -44,6 +44,22 @@ export function createCapLibRoutes(
     } catch (e) { next(normalizeError(e)); }
   });
 
+  router.put('/api/cma-diff/domains/subscriptions', requireCmaDiff, requireAdmin, (req, res, next) => {
+    try {
+      const schema = z.object({
+        items: z.array(z.object({
+          domain: z.string().trim().min(1),
+          subscribed: z.boolean(),
+        })).min(1).max(CAP_LIB_DOMAIN_NAMES.length),
+      });
+      const { items } = schema.parse(req.body);
+      const invalid = items.find(it => !isValidCapLibDomain(it.domain));
+      if (invalid) { respondError(res, 400, 'BAD_REQUEST', `非法领域名: ${invalid.domain}`); return; }
+      const changed = svc.setSubscriptions(items);
+      respond(res, { ok: true, changed });
+    } catch (e) { next(normalizeError(e)); }
+  });
+
   router.put('/api/cma-diff/domains/:name/subscribe', requireCmaDiff, requireAdmin, (req, res, next) => {
     try {
       const schema = z.object({ subscribed: z.boolean() });
@@ -63,6 +79,20 @@ export function createCapLibRoutes(
       if (!isValidCapLibDomain(name)) { respondError(res, 400, 'BAD_REQUEST', '非法领域名'); return; }
       const jobId = svc.startSync(name);
       respond(res, { jobId, domain: name });
+    } catch (e) { next(normalizeError(e)); }
+  });
+
+  router.post('/api/cma-diff/sync-selected', requireCmaDiff, requireAdmin, (req, res, next) => {
+    try {
+      const schema = z.object({
+        domains: z.array(z.string().trim().min(1)).min(1).max(CAP_LIB_DOMAIN_NAMES.length),
+      });
+      const { domains } = schema.parse(req.body || {});
+      const unique = [...new Set(domains)];
+      const invalid = unique.find(name => !isValidCapLibDomain(name));
+      if (invalid) { respondError(res, 400, 'BAD_REQUEST', `非法领域名: ${invalid}`); return; }
+      const jobs = unique.map(domain => ({ domain, jobId: svc.startSync(domain) }));
+      respond(res, { jobs });
     } catch (e) { next(normalizeError(e)); }
   });
 

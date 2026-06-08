@@ -8,9 +8,9 @@
  *
  * 远端接口（实测无鉴权，详见 README 数据源章节）：
  *   GET https://cma.caqit.org.cn/cma-admin/system/standardData/list?pageNum=N&pageSize=2000&domain=<name>
- * 返回 RuoYi 标准 `{total, rows[], code, msg}`。**分页拉取**：远端按行数线性变慢
- * （~277 行/秒），产品质量检验 41k 行一次拉全要 5-7 分钟会超时，故按 pageSize=2000 逐页拉、
- * 边拉边报进度（单页 ~36s，远低于超时）。RuoYi 标准分页实测有效（pageNum/pageSize 生效）。
+ * 返回 RuoYi 标准 `{total, rows[], code, msg}`。**分页 + 限流并发拉取**：远端按行数
+ * 线性变慢，产品质量检验 41k 行一次拉全要 5-7 分钟会超时；改为 pageSize=2000，
+ * 首页拿 total 后同领域最多 4 页并发、全进程最多 4 个远端请求，边拉边报进度。
  *
  * 与 cma_qualifications 的关系：两表正交。本表是"政策范围内的合法标准号清单"，
  * cma_qualifications 是"机构持有的资质行"。diffByLab 按 std_code_norm 等值 JOIN，
@@ -21,19 +21,26 @@ import type Database from 'better-sqlite3';
 import { cleanStdCode, extractFullCode, extractBaseCode } from '../shared/std-code';
 import { parseLibStatus, type LibStatus, type DiffStatus } from '../shared/cap-lib-status';
 import { CAP_LIB_DOMAIN_NAMES, isValidCapLibDomain } from '../shared/cap-lib-domains';
+import { Semaphore } from '../shared/semaphore';
 import { setSetting } from './db';
 
 const REMOTE_BASE = 'https://cma.caqit.org.cn/cma-admin/system/standardData/list';
 /**
- * 分页拉取的每页行数。远端按行数线性变慢（实测 ~277 行/秒）：单页 2000 行 ~36s，
- * 远低于单页超时，且能边拉边报进度。不再一次拉 60000（产品质量检验 41k 行单请求要 5-7 分钟、
- * 超过任何合理超时 → 整批失败 / 卡 0%）。
+ * 分页拉取的每页行数。远端按行数线性变慢：单页 2000 行远低于单页超时，且能边拉
+ * 边报进度。不再一次拉 60000（产品质量检验 41k 行单请求要 5-7 分钟、超过任何合理
+ * 超时 → 整批失败 / 卡 0%）。
  */
 const REMOTE_PAGE_SIZE = 2000;
 /** 单页响应超时。单页 2000 行实测 ~36s，留余量到 90s（覆盖远端抖动）。 */
 const REMOTE_TIMEOUT_MS = 90_000;
 /** 安全上限：最多拉多少页，防远端 total 异常导致死循环。41285/2000≈21 页，留到 100 页。 */
 const REMOTE_MAX_PAGES = 100;
+/** 同一领域首页之后最多并发几页；产品质量检验 21 页时由 21 次串行降为约 6 轮。 */
+const REMOTE_DOMAIN_PAGE_CONCURRENCY = 4;
+/** 全进程远端出口并发上限，避免「全部更新」一次性把 11 个领域页请求打满上游。 */
+const REMOTE_FETCH_CONCURRENCY = 4;
+
+const remoteFetchSemaphore = new Semaphore(REMOTE_FETCH_CONCURRENCY);
 
 // ─── 类型定义 ─────────────────────────────────────────────────────────────
 
@@ -55,7 +62,7 @@ interface RemoteListResp {
 }
 
 export interface SyncProgress {
-  phase: 'pending' | 'fetching' | 'parsing' | 'upserting' | 'done' | 'error';
+  phase: 'pending' | 'fetching' | 'queued' | 'upserting' | 'done' | 'error';
   domain: string;
   current: number;
   total: number;
@@ -157,14 +164,14 @@ function pruneProgressStore(): void {
 }
 
 /**
- * 全局同步串行队列（并发 1）。所有 runSync 串到这条 chain 上，任意时刻最多一个领域
- * 入库事务在跑 —— 配合 runSync 内分块让出，事件循环始终可响应。
+ * SQLite 写入串行队列（并发 1）。远端 fetch 是 IO 等待，可以限流并发；better-sqlite3
+ * 事务同步执行，仍必须让所有领域的入库阶段串到这条 chain 上。
  *
- * Why 串行而非并发 N：better-sqlite3 事务同步阻塞主线程，N 个大事务并发返回会连环锁死
- * 事件循环（= 用户点「全部更新」假死的根因）。远端 fetch 是 IO 等待、不占主线程，
- * 串行不显著拖慢总时长。
+ * Why 只串行写、不串行整条 runSync：产品质量检验 4w+ 行的慢点在远端页响应；把 fetch
+ * 也排成全局单线程会让大领域和「更新勾选」叠加变慢。拆开后能并发拉取、串行入库，
+ * 保留防假死，同时缩短等待时间。
  */
-let syncChain: Promise<void> = Promise.resolve();
+let dbWriteChain: Promise<void> = Promise.resolve();
 
 // ─── Service ─────────────────────────────────────────────────────────────
 
@@ -204,6 +211,26 @@ export class CapLibService {
     `).run(subscribed ? 1 : 0, domain);
   }
 
+  setSubscriptions(items: Array<{ domain: string; subscribed: boolean }>): number {
+    const deduped = new Map<string, boolean>();
+    for (const it of items) {
+      if (!isValidCapLibDomain(it.domain)) throw new Error(`非法领域名: ${it.domain}`);
+      deduped.set(it.domain, !!it.subscribed);
+    }
+    if (deduped.size === 0) return 0;
+    const stmt = this.db.prepare(`
+      UPDATE cma_capability_lib_meta SET subscribed = ? WHERE domain = ?
+    `);
+    const tx = this.db.transaction(() => {
+      let changed = 0;
+      for (const [domain, subscribed] of deduped) {
+        changed += stmt.run(subscribed ? 1 : 0, domain).changes ?? 0;
+      }
+      return changed;
+    });
+    return tx();
+  }
+
   // ── 抓取 ──
 
   /**
@@ -220,14 +247,14 @@ export class CapLibService {
     setProgress(jobId, { phase: 'pending', domain, current: 0, total: 0 });
     pruneProgressStore();
 
-    // 串到全局队列：前一个领域 settle 后才跑本领域，保证任意时刻最多 1 个入库事务。
-    // 内部错误存到 progressStore 而非抛出（chain 不能因单领域失败中断后续）。
-    syncChain = syncChain.then(() => this.runSync(jobId, domain).catch(err => {
+    // 远端拉取可并发启动；runSync 内部只把 DB 写入阶段串到 dbWriteChain。
+    // 内部错误存到 progressStore 而非抛出，避免 fire-and-forget 产生 unhandled rejection。
+    void this.runSync(jobId, domain).catch(err => {
       setProgress(jobId, {
         phase: 'error', domain, current: 0, total: 0,
         error: err instanceof Error ? err.message : String(err),
       });
-    }));
+    });
     return jobId;
   }
 
@@ -235,11 +262,71 @@ export class CapLibService {
     const startedAt = Date.now();
     setProgress(jobId, { phase: 'fetching', domain, current: 0, total: 0 });
 
-    // 1) 远端分页拉全。远端按行数线性变慢，单次拉 41k 行要 5-7 分钟会超时；改按页拉，
-    //    每页独立短请求 + 实时报「拉取中 X/total」进度。第一页拿到 total 后算总页数。
+    const rows = await this.fetchRemoteRows(jobId, domain);
+    const total = rows.length;
+    setProgress(jobId, { phase: 'queued', domain, current: total, total });
+
+    const writeTask = dbWriteChain.then(() => this.upsertRows(jobId, domain, rows, startedAt));
+    dbWriteChain = writeTask.catch(() => undefined);
+    await writeTask;
+  }
+
+  private async fetchRemoteRows(jobId: string, domain: string): Promise<RemoteRow[]> {
+    const first = await this.fetchRemotePage(domain, 1);
+    const firstRows = Array.isArray(first.rows) ? first.rows : [];
+    const remoteTotal = Number(first.total) || firstRows.length;
+    const totalPages = remoteTotal > 0 ? Math.ceil(remoteTotal / REMOTE_PAGE_SIZE) : 1;
+    if (totalPages > REMOTE_MAX_PAGES) {
+      throw new Error(`远端 total=${remoteTotal} 超过安全页数上限 ${REMOTE_MAX_PAGES}，请检查分页参数`);
+    }
+
+    const pages = new Map<number, RemoteRow[]>();
+    pages.set(1, firstRows);
+    let fetchedRows = firstRows.length;
+    setProgress(jobId, { phase: 'fetching', domain, current: fetchedRows, total: remoteTotal });
+
+    if (totalPages <= 1 || firstRows.length < REMOTE_PAGE_SIZE) {
+      return firstRows;
+    }
+
+    const pageNums = Array.from({ length: totalPages - 1 }, (_v, i) => i + 2);
+    let next = 0;
+    let failed = false;
+    const workerCount = Math.min(REMOTE_DOMAIN_PAGE_CONCURRENCY, pageNums.length);
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (!failed) {
+        const pageNum = pageNums[next++];
+        if (!pageNum) return;
+        try {
+          const data = await this.fetchRemotePage(domain, pageNum);
+          if (failed) return;
+          const pageRows = Array.isArray(data.rows) ? data.rows : [];
+          pages.set(pageNum, pageRows);
+          fetchedRows += pageRows.length;
+          setProgress(jobId, {
+            phase: 'fetching',
+            domain,
+            current: Math.min(fetchedRows, remoteTotal || fetchedRows),
+            total: remoteTotal,
+          });
+          await new Promise<void>(resolve => setImmediate(resolve));
+        } catch (e) {
+          failed = true;
+          throw e;
+        }
+      }
+    });
+    await Promise.all(workers);
+
     const rows: RemoteRow[] = [];
-    let remoteTotal = 0;
-    for (let pageNum = 1; pageNum <= REMOTE_MAX_PAGES; pageNum++) {
+    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+      rows.push(...(pages.get(pageNum) || []));
+    }
+    return remoteTotal > 0 && rows.length > remoteTotal ? rows.slice(0, remoteTotal) : rows;
+  }
+
+  private async fetchRemotePage(domain: string, pageNum: number): Promise<RemoteListResp> {
+    return remoteFetchSemaphore.run(async () => {
       const url = `${REMOTE_BASE}?pageNum=${pageNum}&pageSize=${REMOTE_PAGE_SIZE}&domain=${encodeURIComponent(domain)}`;
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), REMOTE_TIMEOUT_MS);
@@ -247,27 +334,19 @@ export class CapLibService {
       try {
         resp = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal });
       } catch (e) {
-        // 单页失败（超时/网络）：带页号抛出，便于排查；不静默吞掉
         throw new Error(`远端第 ${pageNum} 页请求失败：${e instanceof Error ? e.message : String(e)}`);
       } finally {
         clearTimeout(timer);
       }
       if (!resp.ok) throw new Error(`远端第 ${pageNum} 页 HTTP ${resp.status}`);
       const data = await resp.json() as RemoteListResp;
-      if (data.code !== 200) throw new Error(`远端返回 code=${data.code} msg=${data.msg}`);
-      const pageRows = Array.isArray(data.rows) ? data.rows : [];
-      if (pageNum === 1) remoteTotal = Number(data.total) || pageRows.length;
-      rows.push(...pageRows);
-      // 实时报拉取进度（current=已拉行数，total=远端总数）
-      setProgress(jobId, { phase: 'fetching', domain, current: rows.length, total: remoteTotal });
-      // 拉满或本页不足一页（最后一页）→ 结束
-      if (rows.length >= remoteTotal || pageRows.length < REMOTE_PAGE_SIZE) break;
-      // 让出事件循环，别把进度轮询/其它请求挤在两页之间
-      await new Promise<void>(resolve => setImmediate(resolve));
-    }
-    const total = rows.length;
+      if (data.code !== 200) throw new Error(`远端第 ${pageNum} 页返回 code=${data.code} msg=${data.msg}`);
+      return data;
+    });
+  }
 
-    // 2) 解析 + 入库
+  private async upsertRows(jobId: string, domain: string, rows: RemoteRow[], startedAt: number): Promise<void> {
+    const total = rows.length;
     setProgress(jobId, { phase: 'upserting', domain, current: 0, total });
     const now = new Date().toISOString();
     const stats: SyncStats = { added: 0, changed: 0, unchanged: 0, removedSoft: 0, durationMs: 0 };

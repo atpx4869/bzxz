@@ -3,6 +3,13 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **perf(cma-diff): 产品质量检验拉取提速 + 领域订阅批量化** —
+  `runSync` 不再整条进入全局串行队列，改为远端页请求限流并发、SQLite 入库单独走
+  `dbWriteChain` 串行分块事务。产品质量检验仍按 `pageSize=2000` 分页，但首页拿到 `total`
+  后同领域最多 4 页并发、全进程最多 4 个远端请求，进度新增 `queued` 表示已拉完等待入库。
+  前端「更新勾选」改为一次 `POST /api/cma-diff/sync-selected` 启动所有勾选领域；领域复选框
+  350ms 防抖后批量 `PUT /api/cma-diff/domains/subscriptions` 保存，点击同步前会先 flush。
+  同一个 job 被多个按钮监听时现在支持追加完成回调，避免批量按钮卡在等待态。
 - **fix(theme): 弹窗灰底残留继续收口** — 公告弹窗不再固定使用 `#fff/#eee/#f4f4f5`
   亮色 popup，dark/light/paper/legacy 主题下卡片、页眉/页脚边线、正文、代码块、链接和关闭按钮都走对应
   theme token；本地文件统一命名/批量补全里的 normalize 预览区补齐 chip/list 边框和 active 态主题色。
