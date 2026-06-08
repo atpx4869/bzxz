@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import crypto from 'node:crypto';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import type Database from 'better-sqlite3';
 import type { Request, Response, NextFunction } from 'express';
 import type { AuthUser } from './auth-middleware';

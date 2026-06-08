@@ -561,6 +561,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
+- **fix(ci/electron): 打包移除 bcrypt native rebuild** — 登录/用户管理密码哈希从 native `bcrypt` 换成纯 JS `bcryptjs`（兼容 `$2b$` 哈希），删除 `@types/bcrypt`；GitHub Actions 的 `electron:build:all` 不再在 `@electron/rebuild` 阶段为 bcrypt 触发 node-gyp 下载/重编译，规避 `UND_ERR_SOCKET / TypeError: terminated` 这类上游连接抖动导致的打包失败。
 - **feat(complete/batch): 标准补全预览 + 批量下载真实多源回退** — 标准补全选择文件后先走 `POST /api/standards/complete/preview` 解析首个 sheet，校验输入/输出列（A-ZZZ 或 1-16384）、展示表头跳过、唯一/重复统计和前 8 条预览；正式补全摘要同步返回 `unique/duplicates/skippedHeader/inputColumn/outputColumn/sheetName`。批量解析 `POST /api/standards/resolve` 现在可收集各来源 `sourceIds`，批量下载卡片显示可用来源链并在下载中/成功/失败间回写状态，失败项可直接重试。
 - **fix(batch): 批量解析支持裸数字标准号** — `StandardResolver` 现在接受 `3324-2024`、`3325`、`18584`、`17657` 这类不带 `GB/T` 前缀的输入；带年份时按年份精确命中，不带年份时优先取现行最新版本。批量下载与标准补全共用该 resolver，二者都会受益。
 - **perf(cma-diff): CMA 一单一库同步提速** — 产品质量检验等大领域改为 `pageSize=2000` 分页后限流并发拉取（同领域最多 4 页、全进程最多 4 个远端请求），SQLite 入库仍用 `dbWriteChain` 串行分块事务防假死；「更新勾选」一次启动所有勾选领域，订阅勾选短防抖批量保存。

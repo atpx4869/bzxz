@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import type Database from 'better-sqlite3';
 import { getSetting, setSetting, GUEST_USERNAME } from '../services/db';
 import { normalizeError } from '../shared/errors';

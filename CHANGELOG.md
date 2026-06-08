@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix(ci/electron): 密码哈希改用 `bcryptjs`，避开 bcrypt native rebuild** —
+  GitHub Actions `npm run electron:build:all` 在 `@electron/rebuild` 阶段重编译 `bcrypt`
+  时，node-gyp 下载链路偶发 `TypeError: terminated / UND_ERR_SOCKET` 导致打包失败。
+  认证/用户管理只需要 bcrypt 哈希与 compare，改为纯 JS `bcryptjs`（自带类型、兼容 `$2b$`
+  哈希格式），移除 `bcrypt` 与 `@types/bcrypt`，Electron 打包不再为该依赖触发 native rebuild。
 - **fix(batch): 批量解析支持裸数字标准号** —
   `StandardResolver` 新增裸号解析分支，接受 `3324-2024` / `3325` / `18584` / `17657`
   这类不带 `GB/T` 前缀的输入；查询时按原文数字号搜索各源，挑选时仍用同基础号过滤，
