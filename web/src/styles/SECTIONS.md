@@ -101,7 +101,7 @@ web/src/styles/
 | 1071–1088 | Result cards frosted      | theme/glass.css |
 | 1089–1095 | Source/filter chips       | theme/glass.css |
 | 1096–1113 | Topbar brand z-index fix  | theme/glass.css |
-| 1114–1150 | Announcement modal        | pages/announcement.css |
+| 1114–1150 | Announcement modal        | pages/announcement.css；主题覆盖见 theme/glass.css Phase 6 / legacy.css |
 | 1151–1161 | Admin announcement mgr    | pages/admin.css |
 | 1162–1179 | Qualification flatter     | pages/qualifications.css |
 
@@ -222,8 +222,8 @@ actions / subsection / versions），取代旧设置页的
    - `pages/users.css`                    行 720–732
    - `pages/qualifications.css`           行 733–887 + 1162–1179
    - `pages/completion.css`               行 337–382
-   - `pages/announcement.css`             行 1114–1150（**亮色调色板** —— `#fff/#333/#eee/#2563eb`）
-   - `pages/admin.css`                    行 1151–1161（亮色，配 announcement）
+   - `pages/announcement.css`             行 1114–1150（基础亮色调色板；实际主题弹窗由 `theme/glass.css` Phase 6 / `theme/legacy.css` 覆盖）
+   - `pages/admin.css`                    行 1151–1161（亮色管理表单基线；公告 popup 本体走主题覆盖）
 
    **responsive 已落地（2026-05-23）**：
    - `responsive.css`                     行 889–963（三个 `@media`：1100 / 900 / 640px）

@@ -70,6 +70,8 @@ export interface ExportTask {
 
 export interface SearchStandardsInput {
   query: string;
+  signal?: AbortSignal;
+  timeoutMs?: number;
 }
 
 export interface DownloadSessionInfo {

@@ -919,11 +919,19 @@ function renderTopSourceHealth() {
   }
   el.innerHTML = ALL_SOURCES.map(function(s) {
     var r = sourceStatusCache[s];
-    var cls = !r ? 'unknown' : r.status === 'ok' ? 'ok' : 'bad';
-    var text = !r ? '—' : r.status === 'ok' ? (r.ms + 'ms') : '异常';
+    var detail = sourceStatusDetail(r);
+    var cls = !r ? 'unknown' : r.status === 'ok' ? 'ok' : detail.tone;
+    var text = !r ? '—' : r.status === 'ok' ? (r.ms + 'ms') : detail.label;
     var title = r?.error ? srcLabel(s) + ': ' + r.error : srcLabel(s) + ': ' + text;
     return '<button class="source-health-mini ' + cls + '" data-health-source="' + escapeHtml(s) + '" title="' + escapeHtml(title) + '"><b>' + srcLabel(s) + '</b><span>' + escapeHtml(text) + '</span></button>';
   }).join('');
+}
+
+function sourceStatusDetail(r) {
+  var msg = String(r?.error || '');
+  if (msg.includes('凭据未配置')) return { label: '未配置', tone: 'warn' };
+  if (msg.includes('超时') || msg.toLowerCase().includes('timeout')) return { label: '超时', tone: 'warn' };
+  return { label: '异常', tone: 'bad' };
 }
 
 document.addEventListener('click', function(e) {
@@ -987,7 +995,9 @@ function renderSourceStatusItem(src) {
   if (r.status === 'ok') {
     return '<span style="color:var(--success)">● 正常</span> <span style="color:var(--text-3)">' + r.ms + 'ms</span>';
   }
-  return '<span style="color:var(--danger)">● 异常</span> <span style="color:var(--text-3)">' + escapeHtml(r.error || '未知错误') + '</span>';
+  var detail = sourceStatusDetail(r);
+  var color = detail.tone === 'warn' ? 'var(--warning)' : 'var(--danger)';
+  return '<span style="color:' + color + '">● ' + escapeHtml(detail.label) + '</span> <span style="color:var(--text-3)">' + escapeHtml(r.error || '未知错误') + '</span>';
 }
 
 function renderSourceStatusList() {

@@ -2065,3 +2065,117 @@ body::before {
 :root[data-theme="paper"] .users-table td {
   border-bottom: 1px solid var(--border);
 }
+
+/* ============================================================
+   Phase 6 — 弹窗残余灰底收尾
+   Announcement popup 原本是独立亮色调色板,在深色/纸张主题下会露出
+   #fff/#eee/#f4f4f5 灰块。这里只做主题层覆盖,保留 pages/announcement.css
+   作为 legacy 入口废弃前的基础样式来源。
+   ============================================================ */
+
+:root[data-theme="dark"] .ann-modal-mask {
+  background: rgba(2, 4, 8, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+:root[data-theme="light"] .ann-modal-mask {
+  background: rgba(35, 50, 80, 0.32);
+  backdrop-filter: blur(6px) saturate(140%);
+  -webkit-backdrop-filter: blur(6px) saturate(140%);
+}
+:root[data-theme="paper"] .ann-modal-mask {
+  background: rgba(80, 60, 35, 0.30);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+:root[data-theme="dark"] .ann-modal-card,
+:root[data-theme="light"] .ann-modal-card,
+:root[data-theme="paper"] .ann-modal-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text);
+  box-shadow: var(--shadow-lg, 0 18px 48px rgba(0, 0, 0, 0.28));
+}
+:root[data-theme="dark"] .ann-modal-header,
+:root[data-theme="light"] .ann-modal-header,
+:root[data-theme="paper"] .ann-modal-header,
+:root[data-theme="dark"] .ann-modal-footer,
+:root[data-theme="light"] .ann-modal-footer,
+:root[data-theme="paper"] .ann-modal-footer {
+  border-color: var(--border);
+}
+:root[data-theme="dark"] .ann-modal-title,
+:root[data-theme="light"] .ann-modal-title,
+:root[data-theme="paper"] .ann-modal-title,
+:root[data-theme="dark"] .ann-modal-body,
+:root[data-theme="light"] .ann-modal-body,
+:root[data-theme="paper"] .ann-modal-body {
+  color: var(--text);
+}
+:root[data-theme="dark"] .ann-modal-close,
+:root[data-theme="light"] .ann-modal-close,
+:root[data-theme="paper"] .ann-modal-close {
+  color: var(--text-3);
+}
+:root[data-theme="dark"] .ann-modal-close:hover,
+:root[data-theme="light"] .ann-modal-close:hover,
+:root[data-theme="paper"] .ann-modal-close:hover {
+  color: var(--text);
+}
+:root[data-theme="dark"] .ann-modal-body code,
+:root[data-theme="light"] .ann-modal-body code,
+:root[data-theme="paper"] .ann-modal-body code,
+:root[data-theme="dark"] .ann-modal-body pre,
+:root[data-theme="light"] .ann-modal-body pre,
+:root[data-theme="paper"] .ann-modal-body pre {
+  background: var(--surface-h);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+:root[data-theme="dark"] .ann-modal-body pre code,
+:root[data-theme="light"] .ann-modal-body pre code,
+:root[data-theme="paper"] .ann-modal-body pre code {
+  background: transparent;
+  border: 0;
+}
+:root[data-theme="dark"] .ann-modal-body a,
+:root[data-theme="light"] .ann-modal-body a,
+:root[data-theme="paper"] .ann-modal-body a {
+  color: var(--accent);
+}
+
+:root[data-theme="dark"] .normalize-chip,
+:root[data-theme="light"] .normalize-chip,
+:root[data-theme="paper"] .normalize-chip {
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="dark"] .normalize-chip:hover,
+:root[data-theme="light"] .normalize-chip:hover,
+:root[data-theme="paper"] .normalize-chip:hover {
+  border-color: var(--border-strong, var(--border));
+  color: var(--text);
+}
+:root[data-theme="dark"] .normalize-chip.active {
+  background: rgba(79, 109, 240, 0.18);
+  border-color: var(--accent);
+  color: var(--text);
+}
+:root[data-theme="light"] .normalize-chip.active,
+:root[data-theme="paper"] .normalize-chip.active {
+  background: var(--accent-soft, var(--surface-h));
+  border-color: var(--accent);
+  color: var(--accent-h);
+}
+:root[data-theme="dark"] .normalize-list,
+:root[data-theme="light"] .normalize-list,
+:root[data-theme="paper"] .normalize-list {
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="dark"] .normalize-to,
+:root[data-theme="light"] .normalize-to,
+:root[data-theme="paper"] .normalize-to {
+  color: var(--text);
+}

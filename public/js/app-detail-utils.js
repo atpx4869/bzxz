@@ -564,6 +564,14 @@ document.getElementById('searchHistory').addEventListener('click', e => {
 // ── Download history ──
 const DL_HISTORY_KEY = 'bzxz_dl_history';
 let fileLibraryItems = [];
+let fileLibraryTotal = 0;
+let fileLibraryLibraryTotal = 0;
+let fileLibraryLimit = 200;
+let fileLibraryOffset = 0;
+let fileLibrarySearchTimer = 0;
+let fileLibraryLoading = false;
+let fileLibraryAppending = false;
+let fileLibraryRequestSeq = 0;
 let fileLibrarySelectedIds = new Set();
 function loadDownloadHistory() {
   try { return JSON.parse(localStorage.getItem(DL_HISTORY_KEY) || '[]'); } catch { return []; }
@@ -637,18 +645,80 @@ function removeSavedStandard(key) {
   if (typeof renderResults === 'function') { renderResults(); renderFilterBar(); updateToolbar(); }
 }
 
-async function refreshFileLibrary() {
+async function refreshFileLibrary(options = {}) {
   const list = document.getElementById('fileLibraryList');
   if (!list) return;
+  const append = !!options.append;
+  if (append && (fileLibraryLoading || fileLibraryAppending)) return;
+  const q = (document.getElementById('fileLibrarySearch')?.value || '').trim();
+  const nextOffset = append ? fileLibraryItems.filter(f => f.kind === 'library').length : 0;
+  const params = new URLSearchParams({
+    limit: String(fileLibraryLimit),
+    offset: String(nextOffset),
+  });
+  if (q) params.set('q', q);
+  const seq = ++fileLibraryRequestSeq;
+  if (append) {
+    fileLibraryAppending = true;
+    renderFileLibrary();
+  } else {
+    fileLibraryLoading = true;
+    renderFileLibraryLoading(q ? '正在筛选文件库...' : '正在加载文件库...');
+  }
   try {
-    const res = await fetch('/api/downloads');
+    const res = await fetch(`/api/downloads?${params.toString()}`);
     const data = await readApiResponse(res);
     if (!res.ok) throw new Error(data.message || '加载失败');
-    fileLibraryItems = data.items || [];
+    if (seq !== fileLibraryRequestSeq) return;
+    const incoming = data.items || [];
+    if (append) {
+      const seen = new Set(fileLibraryItems.map(f => `${f.kind}:${f.fileId || f.fileName}`));
+      for (const item of incoming) {
+        const key = `${item.kind}:${item.fileId || item.fileName}`;
+        if (!seen.has(key)) { fileLibraryItems.push(item); seen.add(key); }
+      }
+    } else {
+      fileLibraryItems = incoming;
+    }
+    fileLibraryTotal = Number(data.total || fileLibraryItems.length);
+    fileLibraryLibraryTotal = Number(data.libraryTotal || fileLibraryItems.filter(f => f.kind === 'library').length);
+    fileLibraryLimit = Number(data.limit || fileLibraryLimit);
+    fileLibraryOffset = Number(data.offset || nextOffset);
+    fileLibraryLoading = false;
+    fileLibraryAppending = false;
     renderFileLibrary();
   } catch (e) {
-    list.innerHTML = `<div class="library-empty fail">文件库加载失败: ${escapeHtml(e.message)}</div>`;
+    if (seq !== fileLibraryRequestSeq) return;
+    fileLibraryLoading = false;
+    fileLibraryAppending = false;
+    list.innerHTML = `<tr><td colspan="7" class="local-empty fail">文件库加载失败: ${escapeHtml(e.message)}</td></tr>`;
+  } finally {
+    if (seq === fileLibraryRequestSeq) {
+      fileLibraryLoading = false;
+      fileLibraryAppending = false;
+    }
   }
+}
+
+function scheduleFileLibraryRefresh() {
+  clearTimeout(fileLibrarySearchTimer);
+  fileLibraryOffset = 0;
+  fileLibraryLoading = true;
+  renderFileLibraryLoading('正在筛选文件库...');
+  fileLibrarySearchTimer = setTimeout(refreshFileLibrary, 250);
+}
+
+function loadMoreFileLibrary() {
+  if (fileLibraryLoading || fileLibraryAppending) return;
+  refreshFileLibrary({ append: true });
+}
+
+function renderFileLibraryLoading(message) {
+  const list = document.getElementById('fileLibraryList');
+  const count = document.getElementById('fileLibraryCount');
+  if (count) count.textContent = fileLibraryItems.length ? `${fileLibraryItems.length}/${fileLibraryTotal || fileLibraryItems.length}` : '...';
+  if (list) list.innerHTML = `<tr><td colspan="7" class="local-empty">${escapeHtml(message || '正在加载...')}</td></tr>`;
+  updateLocalSelectionUi();
 }
 
 // 本地文件库：表格渲染 + 复选 + 5 个操作（预览/下载/打开路径/编辑/删除）+ 批量删
@@ -657,21 +727,21 @@ function renderFileLibrary() {
   const list = document.getElementById('fileLibraryList');
   const count = document.getElementById('fileLibraryCount');
   if (!list || !count) return;
-  const q = (document.getElementById('fileLibrarySearch')?.value || '').trim().toLowerCase();
-  // 搜索覆盖：fileName（用户记得原始物理名）+ standardNumber + title（标准中文名）
-  const items = fileLibraryItems.filter(f => !q || `${f.fileName} ${f.standardNumber} ${f.title || ''}`.toLowerCase().includes(q));
-  count.textContent = String(items.length);
+  const items = fileLibraryItems;
+  const q = (document.getElementById('fileLibrarySearch')?.value || '').trim();
+  count.textContent = fileLibraryTotal > items.length ? `${items.length}/${fileLibraryTotal}` : String(items.length);
   // 清理已不在当前过滤集合内的选中项
   const visibleIds = new Set(items.filter(f => f.kind === 'library').map(f => f.fileId));
   fileLibrarySelectedIds.forEach(id => { if (!visibleIds.has(id)) fileLibrarySelectedIds.delete(id); });
 
   if (!items.length) {
-    list.innerHTML = '<tr><td colspan="7" class="local-empty">暂无匹配文件</td></tr>';
+    const emptyText = q ? '暂无匹配文件' : '文件库为空，下载或重扫后会出现在这里';
+    list.innerHTML = `<tr><td colspan="7" class="local-empty">${emptyText}</td></tr>`;
     updateLocalSelectionUi();
     return;
   }
   const isElectron = !!(window.bzxz && window.bzxz.isElectron);
-  list.innerHTML = items.map(f => {
+  const rows = items.map(f => {
     const isLib = f.kind === 'library';
     const checked = isLib && fileLibrarySelectedIds.has(f.fileId) ? 'checked' : '';
     const previewBtn = isLib && f.previewUrl
@@ -704,6 +774,11 @@ function renderFileLibrary() {
       <td class="local-col-actions">${previewBtn}${downloadBtn}${openPathBtn}${editBtn}${delBtn}</td>
     </tr>`;
   }).join('');
+  const loadedLibrary = items.filter(f => f.kind === 'library').length;
+  const moreRow = loadedLibrary < fileLibraryLibraryTotal
+    ? `<tr><td colspan="7" class="local-empty"><button class="btn btn-sm btn-ghost" onclick="loadMoreFileLibrary()" ${fileLibraryAppending ? 'disabled' : ''}>${fileLibraryAppending ? '加载中...' : `加载更多（还剩 ${fileLibraryLibraryTotal - loadedLibrary} 项）`}</button></td></tr>`
+    : '';
+  list.innerHTML = rows + moreRow;
   updateLocalSelectionUi();
 }
 

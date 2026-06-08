@@ -98,7 +98,11 @@ export class GbwAdapter implements SourceAdapter {
     searchUrl.searchParams.set('page', '1');
     searchUrl.searchParams.set('pageSize', '20');
 
-    const response = await pooledFetch(searchUrl.toString());
+    const response = await pooledFetch(searchUrl.toString(), {
+      signal: input.signal,
+      timeoutMs: input.timeoutMs,
+      retries: input.signal ? 1 : undefined,
+    });
 
     if (!response.ok) {
       throw new UpstreamError('Failed to query gbw search endpoint', { status: response.status });

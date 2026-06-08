@@ -355,6 +355,7 @@ export class QualificationService {
    */
   searchByStandard(query: string, source?: 'CNAS' | 'CMA', limit = 100): StandardGroup[] {
     const ROWS_PER_GROUP = 500;   // 单标准行数上限，防极端产品标准（如 GB/T 17219 600+ 行）撑爆
+    const groupLimit = Math.max(1, Math.min(Math.floor(limit) || 100, 500));
     const q = `%${query}%`;
     const queryFull = extractFullCode(query);
     const queryBase = extractBaseCode(query);
@@ -367,32 +368,52 @@ export class QualificationService {
       labNo: string; labName: string; testObject: string; testParam: string;
       testStandard: string; effectiveDate: string; expiryDate: string; limitDesc: string;
     };
-    const flat: Flat[] = [];
+    type GroupMeta = {
+      source: 'CNAS' | 'CMA';
+      norm: string;
+      stdCode: string;
+      stdName: string;
+      category: string;
+      rowCount: number;
+      labCount: number;
+      comboCount: number;
+    };
+    const groupMetas: GroupMeta[] = [];
 
     if (!source || source === 'CNAS') {
       const baseClause = hasFullYear ? '' : 'OR q.std_code_base = ? OR q.std_code_base LIKE ?';
       const sql = `
-        SELECT q.std_code, q.std_code_norm, q.std_name, q.category, q.lab_no,
-               COALESCE(link.display_name, l.lab_name) AS lab_name,
-               q.test_object, q.test_param, q.test_standard, q.effective_date, q.expiry_date, q.limit_desc
+        SELECT COALESCE(NULLIF(q.std_code_norm, ''), q.std_code) AS norm,
+               MIN(q.std_code) AS std_code,
+               MIN(COALESCE(q.std_name, '')) AS std_name,
+               MIN(COALESCE(q.category, '')) AS category,
+               COUNT(*) AS row_count,
+               COUNT(DISTINCT q.lab_no) AS lab_count,
+               COUNT(DISTINCT COALESCE(q.test_object, '') || char(31) || COALESCE(q.test_param, '')) AS combo_count
         FROM cnas_qualifications q
-        LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
-        LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
         WHERE q.std_code_norm = ? OR q.std_code_norm LIKE ?
            ${baseClause}
            OR q.std_code LIKE ? OR q.std_name LIKE ?
            OR q.test_object LIKE ? OR q.test_param LIKE ? OR q.category LIKE ?
-        ORDER BY q.std_code, q.effective_date DESC
+        GROUP BY norm
+        ORDER BY (COUNT(DISTINCT COALESCE(q.test_object, '') || char(31) || COALESCE(q.test_param, '')) > 1) DESC,
+                 COUNT(*) DESC,
+                 MIN(q.std_code)
+        LIMIT ?
       `;
       const params = hasFullYear
-        ? [queryFull, qNorm, q, q, q, q, q]
-        : [queryFull, qNorm, queryBase, qBase, q, q, q, q, q];
+        ? [queryFull, qNorm, q, q, q, q, q, groupLimit]
+        : [queryFull, qNorm, queryBase, qBase, q, q, q, q, q, groupLimit];
       for (const r of this.db.prepare(sql).all(...params) as any[]) {
-        flat.push({
-          source: 'CNAS', norm: r.std_code_norm || r.std_code, stdCode: r.std_code, stdName: r.std_name || '',
-          category: r.category || '', labNo: r.lab_no || '', labName: r.lab_name || '',
-          testObject: r.test_object || '', testParam: r.test_param || '', testStandard: r.test_standard || '',
-          effectiveDate: r.effective_date || '', expiryDate: r.expiry_date || '', limitDesc: r.limit_desc || '',
+        groupMetas.push({
+          source: 'CNAS',
+          norm: r.norm || r.std_code,
+          stdCode: r.std_code || '',
+          stdName: r.std_name || '',
+          category: r.category || '',
+          rowCount: Number(r.row_count || 0),
+          labCount: Number(r.lab_count || 0),
+          comboCount: Number(r.combo_count || 0),
         });
       }
     }
@@ -400,54 +421,118 @@ export class QualificationService {
     if (!source || source === 'CMA') {
       const baseClause = hasFullYear ? '' : 'OR q.std_code_base = ? OR q.std_code_base LIKE ?';
       const sql = `
-        SELECT q.std_code, q.std_code_norm, q.std_name, q.category, q.cert_number,
-               COALESCE(link.display_name, l.lab_name) AS lab_name,
-               q.test_item, q.test_standard, q.effective_date, q.expiry_date, q.limit_desc
+        SELECT COALESCE(NULLIF(q.std_code_norm, ''), q.std_code) AS norm,
+               MIN(q.std_code) AS std_code,
+               MIN(COALESCE(q.std_name, '')) AS std_name,
+               MIN(COALESCE(q.category, '')) AS category,
+               COUNT(*) AS row_count,
+               COUNT(DISTINCT q.cert_number) AS lab_count,
+               COUNT(DISTINCT COALESCE(q.test_item, '')) AS combo_count
         FROM cma_qualifications q
-        LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
-        LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
         WHERE q.std_code_norm = ? OR q.std_code_norm LIKE ?
            ${baseClause}
            OR q.std_code LIKE ? OR q.std_name LIKE ?
            OR q.test_item LIKE ? OR q.category LIKE ?
-        ORDER BY q.std_code, q.effective_date DESC
+        GROUP BY norm
+        ORDER BY (COUNT(DISTINCT COALESCE(q.test_item, '')) > 1) DESC,
+                 COUNT(*) DESC,
+                 MIN(q.std_code)
+        LIMIT ?
       `;
       const params = hasFullYear
-        ? [queryFull, qNorm, q, q, q, q]
-        : [queryFull, qNorm, queryBase, qBase, q, q, q, q];
+        ? [queryFull, qNorm, q, q, q, q, groupLimit]
+        : [queryFull, qNorm, queryBase, qBase, q, q, q, q, groupLimit];
       for (const r of this.db.prepare(sql).all(...params) as any[]) {
-        flat.push({
-          source: 'CMA', norm: r.std_code_norm || r.std_code, stdCode: r.std_code, stdName: r.std_name || '',
-          category: r.category || '', labNo: r.cert_number || '', labName: r.lab_name || '',
-          testObject: '', testParam: r.test_item || '', testStandard: r.test_standard || '',
-          effectiveDate: r.effective_date || '', expiryDate: r.expiry_date || '', limitDesc: r.limit_desc || '',
+        groupMetas.push({
+          source: 'CMA',
+          norm: r.norm || r.std_code,
+          stdCode: r.std_code || '',
+          stdName: r.std_name || '',
+          category: r.category || '',
+          rowCount: Number(r.row_count || 0),
+          labCount: Number(r.lab_count || 0),
+          comboCount: Number(r.combo_count || 0),
         });
       }
     }
 
-    // 按 source + std_code_norm 分组（norm 跨写法归一；不同源不混组）
-    const groups = new Map<string, { meta: Flat; rows: Flat[] }>();
-    for (const f of flat) {
-      const key = f.source + '|' + f.norm;
-      let g = groups.get(key);
-      if (!g) { g = { meta: f, rows: [] }; groups.set(key, g); }
-      g.rows.push(f);
-    }
+    groupMetas.sort((a, b) => {
+      const aProduct = a.comboCount > 1;
+      const bProduct = b.comboCount > 1;
+      if (aProduct !== bProduct) return aProduct ? -1 : 1;
+      if (a.rowCount !== b.rowCount) return b.rowCount - a.rowCount;
+      return a.stdCode.localeCompare(b.stdCode);
+    });
 
     const out: StandardGroup[] = [];
-    for (const { meta, rows } of groups.values()) {
-      const comboSet = new Set(rows.map(r => r.testObject + '' + r.testParam));
-      const labSet = new Set(rows.map(r => r.labNo));
+    for (const meta of groupMetas.slice(0, groupLimit)) {
+      let rows: Flat[] = [];
+      if (meta.source === 'CNAS') {
+        rows = (this.db.prepare(`
+          SELECT q.std_code, COALESCE(NULLIF(q.std_code_norm, ''), q.std_code) AS norm,
+                 q.std_name, q.category, q.lab_no,
+                 COALESCE(link.display_name, l.lab_name) AS lab_name,
+                 q.test_object, q.test_param, q.test_standard, q.effective_date, q.expiry_date, q.limit_desc
+          FROM cnas_qualifications q
+          LEFT JOIN cnas_labs l ON q.lab_no = l.lab_no
+          LEFT JOIN qualification_lab_links link ON q.lab_no = link.cnas_lab_no
+          WHERE COALESCE(NULLIF(q.std_code_norm, ''), q.std_code) = ?
+          ORDER BY q.std_code, q.effective_date DESC
+          LIMIT ?
+        `).all(meta.norm, ROWS_PER_GROUP) as any[]).map((r) => ({
+          source: 'CNAS' as const,
+          norm: r.norm || r.std_code,
+          stdCode: r.std_code || '',
+          stdName: r.std_name || '',
+          category: r.category || '',
+          labNo: r.lab_no || '',
+          labName: r.lab_name || '',
+          testObject: r.test_object || '',
+          testParam: r.test_param || '',
+          testStandard: r.test_standard || '',
+          effectiveDate: r.effective_date || '',
+          expiryDate: r.expiry_date || '',
+          limitDesc: r.limit_desc || '',
+        }));
+      } else {
+        rows = (this.db.prepare(`
+          SELECT q.std_code, COALESCE(NULLIF(q.std_code_norm, ''), q.std_code) AS norm,
+                 q.std_name, q.category, q.cert_number,
+                 COALESCE(link.display_name, l.lab_name) AS lab_name,
+                 q.test_item, q.test_standard, q.effective_date, q.expiry_date, q.limit_desc
+          FROM cma_qualifications q
+          LEFT JOIN cma_labs l ON q.cert_number = l.cert_number
+          LEFT JOIN qualification_lab_links link ON q.cert_number = link.cma_cert_number
+          WHERE COALESCE(NULLIF(q.std_code_norm, ''), q.std_code) = ?
+          ORDER BY q.std_code, q.effective_date DESC
+          LIMIT ?
+        `).all(meta.norm, ROWS_PER_GROUP) as any[]).map((r) => ({
+          source: 'CMA' as const,
+          norm: r.norm || r.std_code,
+          stdCode: r.std_code || '',
+          stdName: r.std_name || '',
+          category: r.category || '',
+          labNo: r.cert_number || '',
+          labName: r.lab_name || '',
+          testObject: '',
+          testParam: r.test_item || '',
+          testStandard: r.test_standard || '',
+          effectiveDate: r.effective_date || '',
+          expiryDate: r.expiry_date || '',
+          limitDesc: r.limit_desc || '',
+        }));
+      }
+      const first = rows[0];
       out.push({
         source: meta.source,
-        stdCode: meta.stdCode,
-        stdName: meta.stdName,
-        category: meta.category,
-        isProduct: comboSet.size > 1,
-        rowCount: rows.length,
-        labCount: labSet.size,
-        truncated: rows.length > ROWS_PER_GROUP,
-        rows: rows.slice(0, ROWS_PER_GROUP).map(r => ({
+        stdCode: first?.stdCode || meta.stdCode,
+        stdName: first?.stdName || meta.stdName,
+        category: first?.category || meta.category,
+        isProduct: meta.comboCount > 1,
+        rowCount: meta.rowCount,
+        labCount: meta.labCount,
+        truncated: meta.rowCount > ROWS_PER_GROUP,
+        rows: rows.map(r => ({
           labNo: r.labNo, labName: r.labName, testObject: r.testObject, testParam: r.testParam,
           testStandard: r.testStandard, effectiveDate: r.effectiveDate, expiryDate: r.expiryDate, limitDesc: r.limitDesc,
         })),
@@ -459,7 +544,7 @@ export class QualificationService {
       if (a.rowCount !== b.rowCount) return b.rowCount - a.rowCount;
       return a.stdCode.localeCompare(b.stdCode);
     });
-    return out.slice(0, limit);
+    return out;
   }
 
   // ─── CNAS Lab Management ───

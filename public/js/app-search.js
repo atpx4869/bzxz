@@ -13,6 +13,27 @@ function hideSearchStatus() {
   setTimeout(() => { _searchStatusEl.style.display = 'none'; }, 300);
 }
 
+let _resultsRenderFrame = 0;
+let _scheduledFilterBar = false;
+let _scheduledToolbar = false;
+let _searchRankSeq = 0;
+let _searchRankByKey = new Map();
+function scheduleResultsRender(options = {}) {
+  _scheduledFilterBar = _scheduledFilterBar || !!options.filterBar;
+  _scheduledToolbar = _scheduledToolbar || !!options.toolbar;
+  if (_resultsRenderFrame) return;
+  _resultsRenderFrame = requestAnimationFrame(() => {
+    _resultsRenderFrame = 0;
+    const shouldRenderFilterBar = _scheduledFilterBar;
+    const shouldUpdateToolbar = _scheduledToolbar;
+    _scheduledFilterBar = false;
+    _scheduledToolbar = false;
+    if (shouldRenderFilterBar) renderFilterBar();
+    renderResults();
+    if (shouldUpdateToolbar) updateToolbar();
+  });
+}
+
 // ── Source tag init ──
 document.querySelectorAll('.source-tag').forEach(tag => {
   const src = tag.dataset.source;
@@ -59,7 +80,7 @@ function pollGbwTextAvailability() {
           }
         }
       }
-      if (updated) renderResults();
+      if (updated) scheduleResultsRender();
       const hasAnyData = Object.keys(data).length > 0;
       const allChecked = hasAnyData && gbwIds.every(id => data[id] !== undefined);
       if (allChecked) {
@@ -77,7 +98,7 @@ function pollGbwTextAvailability() {
             const gbwId = r._sourceIds?.gbw || (r._source === 'gbw' ? r.sourceId : null);
             if (gbwId && !r._gbwTextChecked) { r._gbwTextChecked = true; anyMark = true; }
           }
-          if (anyMark) renderResults();
+          if (anyMark) scheduleResultsRender();
           // 静默结束：未拿到结果的卡片已被标记为 _gbwTextChecked，徽章会落到「无文本」
           return;
         }
@@ -122,6 +143,7 @@ async function doSearch() {
   document.getElementById('searchBtn').innerHTML = '<span class="spinner"></span><span class="search-btn-label">取消</span>';
   document.getElementById('searchBtn').disabled = false;
   results = []; selectedIds.clear(); updateToolbar(); searchAborted = false; qualData = {};
+  _searchRankSeq = 0; _searchRankByKey = new Map();
   _libraryFileIds.clear();
   showSearchStatus('正在搜索...', true);
   // Initialize per-source progress chips
@@ -177,17 +199,16 @@ async function doSearch() {
     results = dedupeResults(receivedResults); results.sort(sortByStatus);
     document.getElementById('summary').innerHTML = `<span class="count-anim">找到 ${results.length} 条结果 (${receivedCount}/${sources.length} 源)</span>`;
     document.getElementById('toolbar').style.display = results.length > 0 ? 'flex' : 'none';
-    if (results.length > 0) renderResults();
-    updateToolbar();
+    if (results.length > 0) scheduleResultsRender({ toolbar: true });
+    else updateToolbar();
     // 每个源返回都增量拉徽章 —— fetchQualBadges 内部按 stdCode 去重,只查新增的。
     // 不能等"第一个源返回"就锁死(qualFetched 旧逻辑的坑):某些源返回慢、结果集差异大,
     // 后到的结果(如 BZ 截断 size=20 漏掉、但 GBW/BY 返回的 stdCode)会拿不到徽章。
     if (results.length > 0) {
       const stdNums = results.map(r => r.standardNumber).filter(Boolean);
-      // 徽章到达后:既 renderResults 重排(分组可能变化 → 资质·废止 组首次出现),
-      // 也 renderFilterBar 让 status chip count 反映分组迁移
+      // 徽章到达后只更新视觉与筛选计数，不改变默认排序/分组，避免卡片跳动。
       fetchQualBadges(stdNums).then(() => {
-        if (results.length > 0) { renderFilterBar(); renderResults(); }
+        if (results.length > 0) scheduleResultsRender({ filterBar: true });
       });
       // 同步触发一单一库徽章拉取（与 qual 徽章并行；occupant 已在 renderResults
       // 渲染时给出占位 .cap-lib-badge-pending，回调里 DOM 直接替换不重渲）
@@ -228,6 +249,7 @@ function dedupeResults(items) {
   const map = new Map();
   for (const item of items) {
     const key = item.standardNumber.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+    if (!_searchRankByKey.has(key)) _searchRankByKey.set(key, _searchRankSeq++);
     if (map.has(key)) {
       const existing = map.get(key);
       if (!existing.sources.includes(item._source)) { existing.sources.push(item._source); existing._multiSource = existing.sources.join('+'); }
@@ -242,6 +264,7 @@ function dedupeResults(items) {
     } else {
       map.set(key, {
         ...item,
+        _searchRank: _searchRankByKey.get(key),
         previewAvailable: Boolean(item.previewAvailable),
         sources: [item._source],
         _multiSource: item._source,
@@ -254,19 +277,16 @@ function dedupeResults(items) {
 }
 
 function sortByStatus(a, b) {
-  // 最高优先级:有 CMA/CNAS 资质徽章的条目排前 —— 用户用资质表判断"这标准我们能测吗",
-  // 排在最上面看着最直接。徽章异步增量到达(fetchQualBadges 完成后 renderResults 重渲),
-  // 排序时机不固定但每次重渲都按"当时已知"的 qualData 排,渐进收敛
-  const qa = hasQualificationBadge(a.standardNumber) ? 1 : 0;
-  const qb = hasQualificationBadge(b.standardNumber) ? 1 : 0;
-  if (qa !== qb) return qb - qa;
   const pa = statusPriority(a.status), pb = statusPriority(b.status);
   if (pa !== pb) return pa - pb;
   if (a.previewAvailable !== b.previewAvailable) return a.previewAvailable ? -1 : 1;
-  return 0;
+  return resultRank(a) - resultRank(b);
 }
 function statusPriority(s) {
   if (!s) return 3; if (s.includes('现行')) return 0; if (s.includes('即将实施')) return 1; if (s.includes('废止')) return 4; return 2;
+}
+function resultRank(r) {
+  return Number.isFinite(r?._searchRank) ? r._searchRank : 0;
 }
 
 document.getElementById('searchInput').addEventListener('keydown', e => {
@@ -292,19 +312,15 @@ document.getElementById('searchBtn').addEventListener('click', () => {
 });
 
 // ── Filter bar ──
-// 8 个分组 = 资质有无(2) × 状态(现行 / 即将实施 / 其它 / 废止)。
-// 用户诉求:看到的列表顺序按"资质优先 + 状态次优先"线性铺开 ——
-// 资质·现行 > 资质·即将 > 资质·其它 > 资质·废止 > 无资质·现行 > 无资质·即将 > 无资质·其它 > 无资质·废止。
-// 实际数据稀疏 → 大部分组为空,renderResults 已经在 `if (!total) continue` 跳过空组,
-// 用户看到只有 2-4 组非空。
+// 分组只按标准状态。资质 / 一单一库徽章是异步到达的，若参与分组，
+// 用户正在阅读的卡片会突然跳到别处；资质仍通过徽章和「有资质」筛选表达。
 function statusCategory(s, standardNumber) {
-  const hasQual = standardNumber && hasQualificationBadge(standardNumber);
-  const qualPrefix = hasQual ? '资质·' : '无资质·';
-  if (!s) return qualPrefix + '其它';
-  if (s.includes('现行') || s.includes('部分有效')) return qualPrefix + '现行';
-  if (s.includes('废止')) return qualPrefix + '废止';
-  if (s.includes('即将实施')) return qualPrefix + '即将实施';
-  return qualPrefix + '其它';
+  void standardNumber;
+  if (!s) return '其它';
+  if (s.includes('现行') || s.includes('部分有效')) return '现行';
+  if (s.includes('废止')) return '废止';
+  if (s.includes('即将实施')) return '即将实施';
+  return '其它';
 }
 
 function getFilteredResults() {
@@ -314,8 +330,7 @@ function getFilteredResults() {
       if (!rSources.some(s => filterState.sources.has(s))) return false;
     }
     if (filterState.statuses.size > 0) {
-      // chip 用基础状态(现行/废止/即将/其它),所以剥掉 statusCategory 返回的资质前缀再匹配
-      const baseCat = statusCategory(r.status, r.standardNumber).replace(/^(资质·|无资质·)/, '');
+      const baseCat = statusCategory(r.status, r.standardNumber);
       if (!filterState.statuses.has(baseCat)) return false;
     }
     if (filterState.onlyDownloadable && !r.previewAvailable) return false;
@@ -337,16 +352,12 @@ function sortFilteredResults(items) {
     const t = value ? new Date(value).getTime() : 0;
     return Number.isNaN(t) ? 0 : t;
   };
-  // 所有排序模式都以"资质徽章有无"作为最高优先级 —— 用户能测的标准永远在最上面,
-  // 模式选择(日期 / 可下载 / 源数)只是在"已资质过滤"内做次级排
-  const qualRank = (r) => hasQualificationBadge(r.standardNumber) ? 1 : 0;
-  const byQual = (a, b) => qualRank(b) - qualRank(a);
   if (filterState.sort === 'date') {
-    sorted.sort((a, b) => byQual(a, b) || (dateValue(b.implementDate || b.publishDate) - dateValue(a.implementDate || a.publishDate)));
+    sorted.sort((a, b) => (dateValue(b.implementDate || b.publishDate) - dateValue(a.implementDate || a.publishDate)) || (resultRank(a) - resultRank(b)));
   } else if (filterState.sort === 'downloadable') {
-    sorted.sort((a, b) => byQual(a, b) || (Number(Boolean(b.previewAvailable)) - Number(Boolean(a.previewAvailable))) || sortByStatus(a, b));
+    sorted.sort((a, b) => (Number(Boolean(b.previewAvailable)) - Number(Boolean(a.previewAvailable))) || sortByStatus(a, b));
   } else if (filterState.sort === 'sourceCount') {
-    sorted.sort((a, b) => byQual(a, b) || (((b.sources || [b._source]).length - (a.sources || [a._source]).length)) || sortByStatus(a, b));
+    sorted.sort((a, b) => (((b.sources || [b._source]).length - (a.sources || [a._source]).length)) || sortByStatus(a, b));
   } else {
     sorted.sort(sortByStatus);
   }
@@ -361,8 +372,7 @@ function renderFilterBar() {
   let downloadableCount = 0; let qualifiedCount = 0; let savedCount = 0;
   for (const r of results) {
     for (const s of (r.sources || [r._source])) { srcCounts[s] = (srcCounts[s] || 0) + 1; }
-    // statusCounts 用基础状态聚合(chip 不区分资质前缀),分组渲染另算 catCounts
-    const baseCat = statusCategory(r.status, r.standardNumber).replace(/^(资质·|无资质·)/, '');
+    const baseCat = statusCategory(r.status, r.standardNumber);
     statusCounts[baseCat] = (statusCounts[baseCat] || 0) + 1;
     if (r.previewAvailable) downloadableCount++;
     if (hasQualificationBadge(r.standardNumber)) qualifiedCount++;
@@ -634,18 +644,15 @@ function buildResultCardHtml(r, i) {
     </div>`;
 }
 
-// Status group collapse state — persisted
-// v2 key:之前的 v1 key 用 ['废止'] 作折叠值,现在分组拆成「资质·废止」/「无资质·废止」,
-// 改 key 避免老数据残留导致两个废止组都不折叠或全折叠
-const _collapsedGroupsKey = 'bzxz_collapsed_status_groups_v2';
-let _collapsedGroups = new Set(safeJsonParse(localStorage.getItem(_collapsedGroupsKey), ['无资质·废止']));
+// Status group collapse state — persisted. v3 回到纯状态分组，避免异步徽章回流触发跳组。
+const _collapsedGroupsKey = 'bzxz_collapsed_status_groups_v3';
+let _collapsedGroups = new Set(safeJsonParse(localStorage.getItem(_collapsedGroupsKey), ['废止']));
 function _persistCollapsedGroups() {
   try { localStorage.setItem(_collapsedGroupsKey, JSON.stringify([..._collapsedGroups])); } catch {}
 }
 
 const STATUS_GROUP_ORDER = [
-  '资质·现行', '资质·即将实施', '资质·其它', '资质·废止',
-  '无资质·现行', '无资质·即将实施', '无资质·其它', '无资质·废止',
+  '现行', '即将实施', '其它', '废止',
 ];
 
 function renderResults() {
@@ -687,7 +694,7 @@ function renderResults() {
       const collapsed = _collapsedGroups.has(cat);
       const rendered = rows ? rows.length : 0;
       // CSS class 按"基础状态"映射(忽略资质前缀),颜色按状态走,资质前缀通过组名表达
-      const baseStatus = cat.replace(/^(资质·|无资质·)/, '');
+      const baseStatus = cat;
       const statusCls = baseStatus === '现行' ? 'current'
         : baseStatus === '即将实施' ? 'upcoming'
         : baseStatus === '废止' ? 'expired'
@@ -1260,7 +1267,7 @@ async function loadPreviewSourcePicker(stdCode, year, activeFileId) {
     const res = await fetch(`${API}/api/preview/files?${params.toString()}`);
     const data = await readApiResponse(res);
     if (!res.ok) return; // 静默失败，picker 不显示
-    const items = (data && data.items) || [];
+    const items = (data && (data.items || data.files)) || [];
     if (items.length < 2) return; // 只有 1 个源不显示 picker
     const sourceLabel = { gbw: 'GBW', bz: 'BZ', by: 'BY', labr: 'Labr' };
     const html = items.map(it => {

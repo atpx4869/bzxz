@@ -17,15 +17,25 @@ import { searchCache } from '../../shared/cache';
 import { pooledFetch } from '../../shared/http';
 import { getSourceSemaphore } from '../../shared/source-semaphore';
 
-// BY 内网系统配置（仅在 172.16.0.0/12 内网可达；默认账号为部门共用账号，仅该账号有文本下载权限）
+// BY 内网系统配置（仅在 172.16.0.0/12 内网可达）。凭据必须从 .env.local
+// 或真实环境变量注入，避免把账号密码写入仓库。
 const BY_BASE = 'http://172.16.100.72:8080';
 const LOGIN_URL = `${BY_BASE}/login.aspx`;
-const DEPT_ID = process.env.BY_DEPT_ID || 'fc4186fba640402188b91e6bd0d491a6';
-const USERNAME = process.env.BY_USERNAME || 'leiming';
-const PASSWORD = process.env.BY_PASSWORD || '888888';
 const MAX_PAGES = 5;
 const TIMEOUT_MS = 10000;
 const TIMEOUT_FAST_MS = 5000;
+
+type ByRequestOptions = Pick<SearchStandardsInput, 'signal' | 'timeoutMs'>;
+
+function readCredentials(): { deptId: string; username: string; password: string } {
+  const deptId = process.env.BY_DEPT_ID?.trim();
+  const username = process.env.BY_USERNAME?.trim();
+  const password = process.env.BY_PASSWORD?.trim();
+  if (!deptId || !username || !password) {
+    throw new UpstreamError('BY 源凭据未配置：请在仓库根 .env.local 设置 BY_USERNAME / BY_PASSWORD / BY_DEPT_ID');
+  }
+  return { deptId, username, password };
+}
 
 interface BySearchItem {
   idx: number;
@@ -57,23 +67,23 @@ export class ByAdapter implements SourceAdapter {
     const cached = searchCache.get<StandardSummary[]>(cacheKey);
     if (cached) return cached;
 
-    if (!(await this.isAvailable())) {
+    if (!(await this.isAvailable(input))) {
       throw new UpstreamError('BY internal network is not accessible');
     }
 
-    if (!(await this.ensureLogin())) {
+    if (!(await this.ensureLogin(input))) {
       throw new UpstreamError('BY login failed');
     }
 
     const keyword = input.query;
-    let items = await this.searchInternal(keyword);
+    let items = await this.searchInternal(keyword, input);
 
     // If no results and session might have expired, re-login and retry once
     if (items.length === 0 && this.loggedIn) {
       this.loggedIn = false;
       this.sessionCookies = null;
-      if (await this.ensureLogin()) {
-        items = await this.searchInternal(keyword);
+      if (await this.ensureLogin(input)) {
+        items = await this.searchInternal(keyword, input);
       }
     }
 
@@ -187,13 +197,18 @@ export class ByAdapter implements SourceAdapter {
 
   // --- Internal Methods ---
 
-  private async isAvailable(): Promise<boolean> {
+  private async isAvailable(options: ByRequestOptions = {}): Promise<boolean> {
     const cached = this.availabilityCache;
     if (cached && Date.now() - cached.checkedAt < ByAdapter.AVAILABILITY_CACHE_TTL_MS) {
       return cached.value;
     }
     try {
-      const resp = await pooledFetch(BY_BASE, { method: 'HEAD', timeoutMs: 3000, retries: 1 });
+      const resp = await pooledFetch(BY_BASE, {
+        method: 'HEAD',
+        signal: options.signal,
+        timeoutMs: Math.min(options.timeoutMs ?? 3000, 3000),
+        retries: 1,
+      });
       this.availabilityCache = { value: resp.ok, checkedAt: Date.now() };
       return resp.ok;
     } catch (err) {
@@ -207,19 +222,21 @@ export class ByAdapter implements SourceAdapter {
     }
   }
 
-  private async ensureLogin(): Promise<boolean> {
+  private async ensureLogin(options: ByRequestOptions = {}): Promise<boolean> {
     if (this.loggedIn) return true;
     if (this.loginInFlight) return this.loginInFlight;
-    this.loginInFlight = this.performLogin().finally(() => {
+    this.loginInFlight = this.performLogin(options).finally(() => {
       this.loginInFlight = null;
     });
     return this.loginInFlight;
   }
 
-  private async performLogin(): Promise<boolean> {
+  private async performLogin(options: ByRequestOptions = {}): Promise<boolean> {
     try {
+      const credentials = readCredentials();
+      const timeoutMs = options.timeoutMs ?? TIMEOUT_MS;
       // Step 1: GET login page
-      const r1 = await pooledFetch(LOGIN_URL, { timeoutMs: TIMEOUT_MS, retries: 1 });
+      const r1 = await pooledFetch(LOGIN_URL, { signal: options.signal, timeoutMs, retries: 1 });
       if (!r1.ok) {
         console.warn(`[by-adapter] login step 1 (GET login page) returned HTTP ${r1.status}`);
         return false;
@@ -241,14 +258,15 @@ export class ByAdapter implements SourceAdapter {
         __EVENTARGUMENT: '',
         __VIEWSTATE: vs1,
         __EVENTVALIDATION: ev1,
-        ddlDept: DEPT_ID,
+        ddlDept: credentials.deptId,
       });
 
       const r2 = await pooledFetch(LOGIN_URL, {
         method: 'POST',
         headers: mergeHeaders(cookies1, { 'Content-Type': 'application/x-www-form-urlencoded' }),
         body: deptBody.toString(),
-        timeoutMs: TIMEOUT_MS,
+        signal: options.signal,
+        timeoutMs,
         retries: 1,
       });
       if (!r2.ok) {
@@ -272,9 +290,9 @@ export class ByAdapter implements SourceAdapter {
         __EVENTARGUMENT: '',
         __VIEWSTATE: vs2,
         __EVENTVALIDATION: ev2,
-        ddlDept: DEPT_ID,
-        ddlUserName: USERNAME,
-        txtLogidPwd: PASSWORD,
+        ddlDept: credentials.deptId,
+        ddlUserName: credentials.username,
+        txtLogidPwd: credentials.password,
         btnLogin: '登录',
       });
 
@@ -283,7 +301,8 @@ export class ByAdapter implements SourceAdapter {
         headers: mergeHeaders(cookies2, { 'Content-Type': 'application/x-www-form-urlencoded' }),
         body: loginBody.toString(),
         redirect: 'manual',
-        timeoutMs: TIMEOUT_MS,
+        signal: options.signal,
+        timeoutMs,
         retries: 1,
       });
 
@@ -300,7 +319,8 @@ export class ByAdapter implements SourceAdapter {
         const landingUrl = location.startsWith('http') ? location : `${BY_BASE}${location}`;
         const r4 = await pooledFetch(landingUrl, {
           headers: { Cookie: cookies3 },
-          timeoutMs: TIMEOUT_MS,
+          signal: options.signal,
+          timeoutMs,
           retries: 1,
         });
         this.sessionCookies = mergeCookies(cookies3, extractSetCookie(r4));
@@ -316,16 +336,18 @@ export class ByAdapter implements SourceAdapter {
     }
   }
 
-  private async searchInternal(keyword: string): Promise<BySearchItem[]> {
+  private async searchInternal(keyword: string, options: ByRequestOptions = {}): Promise<BySearchItem[]> {
     const searchUrl = `${BY_BASE}/Customer/StandSerarch/StandInfoList.aspx?A100=${encodeURIComponent(keyword)}&A298=`;
     const cookieHeader = this.sessionCookies ?? '';
     const results: BySearchItem[] = [];
+    const timeoutMs = options.timeoutMs ?? TIMEOUT_MS;
 
     try {
       const r1 = await pooledFetch(searchUrl, {
         headers: { Cookie: cookieHeader },
-        timeoutMs: TIMEOUT_MS,
-        retries: 2,
+        signal: options.signal,
+        timeoutMs,
+        retries: options.signal ? 1 : 2,
       });
       if (!r1.ok) return [];
 
@@ -356,7 +378,8 @@ export class ByAdapter implements SourceAdapter {
             'Content-Type': 'application/x-www-form-urlencoded',
           },
           body: body.toString(),
-          timeoutMs: TIMEOUT_MS,
+          signal: options.signal,
+          timeoutMs,
           retries: 1,
         });
 

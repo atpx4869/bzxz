@@ -223,10 +223,11 @@ export async function scanLibrary(
   }
 
   const upsert = db.prepare(`
-    INSERT INTO standard_files (std_code_norm, year, source, abs_path, size, mtime, mime)
-    VALUES (?, ?, ?, ?, ?, ?, 'application/pdf')
+    INSERT INTO standard_files (std_code_norm, year, source, abs_path, file_name, size, mtime, mime)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'application/pdf')
     ON CONFLICT(std_code_norm, year, source) DO UPDATE SET
       abs_path = excluded.abs_path,
+      file_name = excluded.file_name,
       size = excluded.size,
       mtime = excluded.mtime,
       indexed_at = datetime('now')
@@ -254,7 +255,7 @@ export async function scanLibrary(
     if (!parsed) { result.skipped++; continue; }
 
     try {
-      upsert.run(parsed.stdCodeNorm, parsed.year, parsed.source, absPath, stat.size, mtimeMs);
+      upsert.run(parsed.stdCodeNorm, parsed.year, parsed.source, absPath, name, stat.size, mtimeMs);
       existing ? result.updated++ : result.added++;
     } catch {
       // 唯一约束冲突：同 (norm, year, source) 已有另一个 abs_path
@@ -641,16 +642,17 @@ export async function addFileToLibrary(
 
   const mime = params.mime || (ext === 'pdf' ? 'application/pdf' : extToMime(ext));
   const result = db.prepare(`
-    INSERT INTO standard_files (std_code_norm, year, source, abs_path, size, mtime, mime)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO standard_files (std_code_norm, year, source, abs_path, file_name, size, mtime, mime)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(std_code_norm, year, source) DO UPDATE SET
       abs_path = excluded.abs_path,
+      file_name = excluded.file_name,
       size = excluded.size,
       mtime = excluded.mtime,
       mime = excluded.mime,
       indexed_at = datetime('now')
     RETURNING id
-  `).get(norm, year, params.source, finalPath, stat.size, mtimeMs, mime) as { id: number };
+  `).get(norm, year, params.source, finalPath, path.basename(finalPath), stat.size, mtimeMs, mime) as { id: number };
 
   return { fileId: result.id, absPath: finalPath, fileName: path.basename(finalPath), reused: false };
 }
@@ -742,14 +744,15 @@ async function onWatcherFile(absPath: string, _kind: 'add' | 'change'): Promise<
 
     const mtimeMs = Math.floor(stat.mtimeMs);
     _watcherDb.prepare(`
-      INSERT INTO standard_files (std_code_norm, year, source, abs_path, size, mtime, mime)
-      VALUES (?, ?, ?, ?, ?, ?, 'application/pdf')
+      INSERT INTO standard_files (std_code_norm, year, source, abs_path, file_name, size, mtime, mime)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'application/pdf')
       ON CONFLICT(std_code_norm, year, source) DO UPDATE SET
         abs_path = excluded.abs_path,
+        file_name = excluded.file_name,
         size = excluded.size,
         mtime = excluded.mtime,
         indexed_at = datetime('now')
-    `).run(parsed.stdCodeNorm, parsed.year, parsed.source, absPath, stat.size, mtimeMs);
+    `).run(parsed.stdCodeNorm, parsed.year, parsed.source, absPath, path.basename(absPath), stat.size, mtimeMs);
   } catch (e) {
     console.error('[library-watcher] add/change handler failed:', e);
   }

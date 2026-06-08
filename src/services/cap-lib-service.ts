@@ -122,6 +122,13 @@ export interface ExportFilter {
 /** exportDiff 返回的扁平行（每行带机构标识，供 Excel 单 sheet 渲染） */
 export type ExportRow = DiffRow & { certNumber: string; labName: string };
 
+interface DiffContext {
+  blackNorm: Set<string>;
+  blackRaw: Set<string>;
+  globalManualMap: Map<string, string>;
+  manualMapByCert: Map<string, Map<string, string>>;
+}
+
 /**
  * worst→best 严重度顺序，与前端 GROUP_ORDER 对应。导出排序用：最差状态在前，
  * 同状态按 labName + stdCode。抽成模块常量避免散落多份。
@@ -571,7 +578,7 @@ export class CapLibService {
    * 黑名单：命中 std_code_norm（或原始 std_code）的标准号直接剔除、不显示不计数。
    * 手动映射：src_norm 命中 manual_map 时，用 lib_norm 查库覆盖自动判定。
    */
-  diffByLab(certNumber: string): DiffRow[] {
+  diffByLab(certNumber: string, context?: DiffContext): DiffRow[] {
     const quals = this.db.prepare(`
       SELECT id, std_code, std_code_norm, std_code_base, std_name, category, test_item
       FROM cma_qualifications
@@ -583,10 +590,10 @@ export class CapLibService {
     }>;
     if (!quals.length) return [];
 
-    // 黑名单 / 手动映射加载一次
-    const blackNorm = this.blacklistNormSet();
-    const blackRaw = this.blacklistRawSet();
-    const manualMap = this.manualMapFor(certNumber);
+    const ctx = context || this.createDiffContext([certNumber]);
+    const blackNorm = ctx.blackNorm;
+    const blackRaw = ctx.blackRaw;
+    const manualMap = this.manualMapFor(certNumber, ctx);
 
     // 按 std_code_norm 去重（norm 为空回退 std_code 作 key），聚合同号检测项目
     type Group = {
@@ -691,6 +698,35 @@ export class CapLibService {
 
   // ── 黑名单 / 手动映射（diffByLab 依赖） ──
 
+  private createDiffContext(certNumbers?: string[]): DiffContext {
+    const blackNorm = this.blacklistNormSet();
+    const blackRaw = this.blacklistRawSet();
+    const globalManualMap = new Map<string, string>();
+    const manualMapByCert = new Map<string, Map<string, string>>();
+    const certs = [...new Set((certNumbers || []).filter(Boolean))];
+    const rows = certs.length
+      ? this.db.prepare(`
+          SELECT cert_number, src_norm, lib_norm FROM cma_diff_manual_map
+          WHERE cert_number = '' OR cert_number IN (${certs.map(() => '?').join(',')})
+          ORDER BY cert_number ASC
+        `).all(...certs) as Array<{ cert_number: string; src_norm: string; lib_norm: string }>
+      : this.db.prepare(`
+          SELECT cert_number, src_norm, lib_norm FROM cma_diff_manual_map
+          ORDER BY cert_number ASC
+        `).all() as Array<{ cert_number: string; src_norm: string; lib_norm: string }>;
+
+    for (const row of rows) {
+      if (!row.cert_number) {
+        globalManualMap.set(row.src_norm, row.lib_norm);
+        continue;
+      }
+      let scoped = manualMapByCert.get(row.cert_number);
+      if (!scoped) { scoped = new Map<string, string>(); manualMapByCert.set(row.cert_number, scoped); }
+      scoped.set(row.src_norm, row.lib_norm);
+    }
+    return { blackNorm, blackRaw, globalManualMap, manualMapByCert };
+  }
+
   private blacklistNormSet(): Set<string> {
     const rows = this.db.prepare(
       "SELECT std_code_norm FROM cma_diff_blacklist WHERE std_code_norm <> ''",
@@ -706,7 +742,15 @@ export class CapLibService {
   }
 
   /** 取该机构生效的 src_norm → lib_norm 映射（机构级优先于全局） */
-  private manualMapFor(certNumber: string): Map<string, string> {
+  private manualMapFor(certNumber: string, context?: DiffContext): Map<string, string> {
+    if (context) {
+      const m = new Map(context.globalManualMap);
+      const scoped = context.manualMapByCert.get(certNumber);
+      if (scoped) {
+        for (const [src, lib] of scoped) m.set(src, lib);
+      }
+      return m;
+    }
     const rows = this.db.prepare(`
       SELECT cert_number, src_norm, lib_norm FROM cma_diff_manual_map
       WHERE cert_number = ? OR cert_number = ''
@@ -802,8 +846,9 @@ export class CapLibService {
     const labs = this.db.prepare(`
       SELECT cert_number, lab_name FROM cma_labs WHERE subscribed_at IS NOT NULL ORDER BY lab_name
     `).all() as Array<{ cert_number: string; lab_name: string }>;
+    const context = this.createDiffContext(labs.map(lab => lab.cert_number));
     return labs.map(lab => {
-      const rows = this.diffByLab(lab.cert_number);
+      const rows = this.diffByLab(lab.cert_number, context);
       const byStatus: Record<DiffStatus, number> = {
         in_lib: 0, cite_only: 0, abolished: 0, series_only: 0, not_in_lib: 0,
       };
@@ -845,12 +890,13 @@ export class CapLibService {
 
     const statusSet = filter.statuses && filter.statuses.length ? new Set(filter.statuses) : null;
     const kw = (filter.keyword || '').trim().toLowerCase();
+    const context = this.createDiffContext(certNumbers);
 
     // 2) 逐机构 diff + 过滤 + 摊平
     const out: ExportRow[] = [];
     for (const cert of certNumbers) {
       const labName = nameMap.get(cert) || cert;
-      let rows = this.diffByLab(cert);
+      let rows = this.diffByLab(cert, context);
       if (statusSet) rows = rows.filter(r => statusSet.has(r.diffStatus));
       if (kw) rows = rows.filter(r =>
         r.stdCode.toLowerCase().includes(kw) ||

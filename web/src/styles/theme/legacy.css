@@ -538,3 +538,64 @@
 :root[data-theme="legacy"] .auth-logo-img {
   filter: none;
 }
+
+/* ─────────── 公告弹窗 / normalize 预览区主题兜底 ─────────── */
+:root[data-theme="legacy"] .ann-modal-mask {
+  background: rgba(0, 0, 0, 0.78);
+}
+:root[data-theme="legacy"] .ann-modal-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+}
+:root[data-theme="legacy"] .ann-modal-header,
+:root[data-theme="legacy"] .ann-modal-footer {
+  border-color: var(--border);
+}
+:root[data-theme="legacy"] .ann-modal-title,
+:root[data-theme="legacy"] .ann-modal-body {
+  color: var(--text);
+}
+:root[data-theme="legacy"] .ann-modal-close {
+  color: var(--text-3);
+}
+:root[data-theme="legacy"] .ann-modal-close:hover {
+  color: var(--text);
+}
+:root[data-theme="legacy"] .ann-modal-body code,
+:root[data-theme="legacy"] .ann-modal-body pre {
+  background: var(--surface-h);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+:root[data-theme="legacy"] .ann-modal-body pre code {
+  background: transparent;
+  border: 0;
+}
+:root[data-theme="legacy"] .ann-modal-body a {
+  color: var(--accent-h);
+}
+
+:root[data-theme="legacy"] .normalize-chip {
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="legacy"] .normalize-chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+:root[data-theme="legacy"] .normalize-chip.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-h);
+}
+:root[data-theme="legacy"] .normalize-list {
+  background: var(--surface-h);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+:root[data-theme="legacy"] .normalize-to {
+  color: var(--text);
+}

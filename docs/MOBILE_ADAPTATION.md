@@ -635,9 +635,8 @@ export function installMobileTabbar(): void {
 ### 9.5 GitHub Actions 验证
 
 不本地跑构建。改完 push 后看 Actions：
-- `web:typecheck` 必须过（新建 TS 文件类型正确）
-- `web:test` 不受影响
-- `web:build` 必须过（manifest.webmanifest 被 vite 复制到 dist 根）
+- 当前 PR Check 必须过：`npm run build`、`npm test`、`npm run oklch:check`
+- `web/` 仍是规划骨架，未接入独立 `web:*` CI；未来补齐 Vite/TS 后再恢复对应卡口
 - backend 不动，应原样通过
 
 ---

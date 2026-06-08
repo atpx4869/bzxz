@@ -38,14 +38,14 @@ Add-Content $PROFILE 'fnm env --use-on-cd | Out-String | Invoke-Expression'
 
 ## 本地调试 / 测试入口
 
-> 构建只在 GitHub Actions 上做（`web:typecheck → web:test → web:build → backend build → backend test`），本机一般不跑打包验证。下面几条是**交互调试**用的，按要验证的东西挑。
+> 构建 / 打包以 GitHub Actions 为准。PR Check 跑 `npm run build → npm test → npm run oklch:check`；`main` 打包 workflow 在同样检查通过后再跑 Electron portable + NSIS。下面几条是**交互调试**用的，按要验证的东西挑。
 
 迁移期有 **两个前端入口**，验证设置面板等改动时要分清在哪个入口看：
 
 | 入口 | 启动 | 看什么 | 说明 |
 |------|------|--------|------|
 | **legacy（Express 直供 public/）** | `npm run dev` | `http://localhost:3000` | 无构建步骤，改完 `public/**` 刷新即见。覆盖绝大多数设置页交互（源优先级拖拽、资质订阅、网页版/端口卡片的浏览器态） |
-| **Vite（web/）** | `cd web; npm run dev` | Vite dev server 地址 | 验证 `web/index.html` + `web/src/**` 这条新链路；脚本精确名以 `web/package.json` 为准（约定 `dev` / `typecheck` / `build`） |
+| **web 镜像（迁移脚手架）** | 暂无独立 dev server | `web/index.html` / `web/src/**` | 计划态镜像；当前仓库没有 `web/package.json`，改 `public/index.html` 的入口结构时同步检查 `web/index.html`，迁移路线见 `docs/MIGRATION.md` |
 | **桌面端（Electron）** | `npm run electron:dev` | Electron 窗口 | 只有这里 `hasDesktopXApi()` 为真，**桌面专属卡片**（网页服务开关 / 端口设置 / 开机自启 / 应用更新）才会点亮；浏览器入口里它们显示「仅桌面端」 |
 
 改了 CSS / oklch 后必跑：
@@ -189,7 +189,7 @@ interface SourceAdapter {
 
 ```bash
 npm run dev              # 开发启动（tsx 热更新）
-npm run build            # 编译
+npm run build            # TypeScript 编译（CI 同款；本机按需跑，不代替 Actions）
 npm test                 # 运行测试
 npm run inspect:gbw:source   # gbw源搜索勘察
 npm run inspect:gbw:detail   # gbw源详情勘察

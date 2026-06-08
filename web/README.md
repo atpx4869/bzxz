@@ -1,30 +1,25 @@
-# web/ — 前端 Vite + TypeScript 源码（迁移脚手架，未上线）
+# web/ — 前端迁移镜像（计划态，未上线）
 
 > ⚠️ **当前运行时仍是 `../public/`**（原生 ESM + `public/styles.css`，由 `express.static('public/')` 直出）。
 > 包括手机适配（Phase 0–4：URL 路由、响应式断点、资质可视化、PWA manifest、设置页徽章）全部落在 `public/` 下，**不在 `web/` 里**。
-> 这个目录是 Vite + TS 重写的"计划态"，CI 跑 typecheck 但不打入产物。下一步路线参见 [`../docs/MIGRATION.md`](../docs/MIGRATION.md)。
+> 这个目录目前是迁移计划态：保留 `web/index.html` 与 `web/src/styles/*` 作为未来接 Vite/TS 的镜像材料，当前 CI 不运行独立 `web:*` 脚本。下一步路线参见 [`../docs/MIGRATION.md`](../docs/MIGRATION.md)。
 
 ## 快速开始
 
 ```powershell
 npm install
-npm run web:typecheck    # 仅检查类型
-npm run web:dev          # 开发模式，proxy /api → BZXZ_API_PORT (默认 18301)
-npm run web:build        # 构建到 ../public/dist/
+npm run dev              # 当前真实入口：Express 直供 ../public/
+npm run build            # CI 同款 TypeScript 编译
+npm test                 # CI 同款后端/API/服务测试
+npm run oklch:check      # CI 同款 OKLCh fallback 守门
 ```
 
 ## 目录速览
 
 | 路径 | 作用 |
 |------|------|
-| `vite.config.ts` | 构建配置，dev server + 反代 + 输出到 `public/dist/` |
-| `tsconfig.json`  | 前端 TS 配置（strict、ES2022、bundler 解析） |
-| `index.html`     | 入口 HTML 骨架（待补全完整 page-* 内容） |
-| `src/main.ts`    | 装配模块 + 挂 window 兼容 legacy 脚本 |
-| `src/lib/`       | api 客户端、storage、state |
-| `src/modules/`   | tabs / auth / admin / detail / result / ui（toast/confirm） |
-| `src/styles/`    | 全量模块化 CSS（详见下文） |
-| `src/types/`     | 全局类型声明 |
+| `index.html`     | legacy `public/index.html` 的迁移镜像；入口结构改动要两边同步核对 |
+| `src/styles/`    | 全量模块化 CSS（详见下文），由 `src/styles/index.css` 汇总 |
 
 ## CSS 结构（P1 已完成）
 
@@ -48,16 +43,19 @@ src/styles/
 "重复加载、cascade 等价"。待 legacy `public/index.html` 入口废弃时执行两步切换：
 ①删 `public/styles.css` 对应段落 ②删 `index.css` 里对 `public/styles.css` 的 `@import`。
 
+主题补丁约定：公告弹窗的基础样式仍在 `pages/announcement.css`，但 dark/light/paper 的
+实际弹窗底色由 `theme/glass.css` 末尾 Phase 6 覆盖；legacy 主题在 `theme/legacy.css`
+兜底。改公告 popup 时三处要一起核对。
+
 跨文件 `@keyframes` 依赖：`btn-spin` 定义于 buttons.css、`panelIn` 定义于 modal.css、
 `toastIn` 定义于 toast.css，对应消费者文件必须排在它们之后。`index.css` 顶部注释已锁顺序。
 
 ## 设计原则
 
-1. **零回归优先**：`public/` 完整保留。Vite 产物落到 `public/dist/`
-   作为新构建产物，老路径继续可用。
-2. **渐进迁移**：新 TS 模块通过 `window.xxx` 暴露，未迁的 `public/js/*`
-   一行不改照旧工作。
-3. **单一状态源**：`lib/state.ts` 管 settings + uiState + currentUser$。
-   旧 `let downloadSources` 通过 `Object.defineProperty` 重定向到 state。
-4. **类型契约**：前后端共享类型留口子（`web/src/types/api.d.ts` 后续
-   再 link 后端 `src/shared/types/`）。
+1. **零回归优先**：`public/` 是当前真实入口，任何迁移都不能破坏 legacy 直出。
+2. **双入口镜像**：改页面骨架（sidebar / page 容器 / 全局控件）时，同时核对
+   `public/index.html` 与 `web/index.html`，直到 legacy 入口正式废弃。
+3. **样式过渡**：`web/src/styles/index.css` 仍导入 `public/styles.css`；未执行两步切换前，
+   不单独删除 legacy CSS 段落。
+4. **脚本接通后再启用 CI**：只有补齐 `web/package.json` / Vite 配置 / TS 模块后，才把
+   独立 `web:*` 脚本加回 CI。

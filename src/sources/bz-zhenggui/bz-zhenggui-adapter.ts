@@ -69,7 +69,11 @@ export class BzZhengguiAdapter implements SourceAdapter {
     url.searchParams.set('size', '20');
     url.searchParams.set('keywords', input.query);
 
-    const response = await pooledFetch(url.toString());
+    const response = await pooledFetch(url.toString(), {
+      signal: input.signal,
+      timeoutMs: input.timeoutMs,
+      retries: input.signal ? 1 : undefined,
+    });
     if (!response.ok) {
       throw new UpstreamError('bz search API failed', { status: response.status });
     }

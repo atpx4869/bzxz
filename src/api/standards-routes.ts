@@ -81,12 +81,15 @@ export function createStandardsRoutes({ db, sourceRegistry, exportTaskStore, req
       try {
         const adapter = sourceRegistry.get(src);
         const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 5000);
-        await adapter.searchStandards({ query: 'GB/T 1.1' });
-        clearTimeout(timer);
+        const timer = setTimeout(() => ctrl.abort(new Error('source detection timeout')), 5000);
+        try {
+          await adapter.searchStandards({ query: 'GB/T 1.1', signal: ctrl.signal, timeoutMs: 5000 });
+        } finally {
+          clearTimeout(timer);
+        }
         results[src] = { status: 'ok', ms: Date.now() - start };
       } catch (e: any) {
-        results[src] = { status: 'error', ms: Date.now() - start, error: e.name === 'AbortError' ? '超时' : (e.message || '连接失败') };
+        results[src] = { status: 'error', ms: Date.now() - start, error: e.name === 'AbortError' || e.message === 'source detection timeout' ? '超时' : (e.message || '连接失败') };
       }
     }));
     respond(res, { results });

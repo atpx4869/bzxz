@@ -224,6 +224,7 @@ function migrate(db: Database.Database): void {
       year           TEXT NOT NULL DEFAULT '',-- 单独存便于版本区分；空串表示文件名未带年份
       source         TEXT NOT NULL,           -- gbw / by / bz
       abs_path       TEXT NOT NULL,           -- 绝对路径（库根目录之内）
+      file_name      TEXT NOT NULL DEFAULT '',-- path.basename(abs_path)，供下载/列表按文件名走索引
       size           INTEGER NOT NULL DEFAULT 0,
       mtime          INTEGER NOT NULL DEFAULT 0, -- 增量扫描比对依据
       mime           TEXT NOT NULL DEFAULT 'application/pdf',
@@ -232,6 +233,7 @@ function migrate(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_standard_files_lookup ON standard_files(std_code_norm, year);
     CREATE INDEX IF NOT EXISTS idx_standard_files_source ON standard_files(source);
+    CREATE INDEX IF NOT EXISTS idx_standard_files_indexed_at ON standard_files(indexed_at);
 
     -- labr 临时 URL 缓存：preview2 API 返回的 PDF/图片 URL 自带短期签名（~分钟级），但
     -- temp/<md5>.pdf 哈希跨 token 轮换稳定。把 (did, url, fetched_at) 落库后，下次同 did
@@ -368,6 +370,7 @@ function migrate(db: Database.Database): void {
   addColumnIfMissing(db, 'check_watchlists', 'auto_interval_days', 'INTEGER NOT NULL DEFAULT 15');
   addColumnIfMissing(db, 'check_watchlists', 'next_run_at',        'TEXT DEFAULT NULL');
   addColumnIfMissing(db, 'check_watchlists', 'is_saved',           'INTEGER NOT NULL DEFAULT 0'); // 我的收藏内置清单
+  addColumnIfMissing(db, 'standard_files', 'file_name', "TEXT NOT NULL DEFAULT ''");
 
   // 资质标准号归一化列（Step 2-3）：把脏空格/全角/无空格/ISO 冒号变体在写入时落成统一形态，
   // 让 queryByStdCodes / searchQualifications 用索引等值查询，不再需要 LIKE + LIMIT 兜底。
@@ -391,7 +394,10 @@ function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_cnas_qual_base ON cnas_qualifications(std_code_base);
     CREATE INDEX IF NOT EXISTS idx_cma_qual_norm  ON cma_qualifications(std_code_norm);
     CREATE INDEX IF NOT EXISTS idx_cma_qual_base  ON cma_qualifications(std_code_base);
+    CREATE INDEX IF NOT EXISTS idx_standard_files_file_name ON standard_files(file_name);
+    CREATE INDEX IF NOT EXISTS idx_standard_files_indexed_at ON standard_files(indexed_at);
   `);
+  backfillStandardFileNames(db);
   backfillNormalizedStdCodes(db);
   fixupDirtyStdCodes(db);
   renormalizeOnAlgoBump(db);
@@ -461,6 +467,31 @@ function addColumnIfMissing(db: Database.Database, table: string, column: string
   const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
   if (columns.some((c) => c.name === column)) return;
   db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+/**
+ * standard_files.file_name 是从 abs_path 派生出来的索引列。旧库升级或早期版本
+ * rename 只改 abs_path 时，都用这个轻量回填修正，避免 /api/downloads/:filename
+ * 退回全表 LIKE。
+ */
+function backfillStandardFileNames(db: Database.Database): void {
+  const rows = db.prepare(`
+    SELECT id, abs_path, file_name
+    FROM standard_files
+  `).all() as Array<{ id: number; abs_path: string; file_name: string }>;
+  const dirty = rows
+    .map((row) => ({ id: row.id, fileName: path.basename(row.abs_path || '') }))
+    .filter((row, idx) => row.fileName && row.fileName !== rows[idx].file_name);
+  if (dirty.length === 0) return;
+
+  const update = db.prepare('UPDATE standard_files SET file_name = ? WHERE id = ?');
+  const txn = db.transaction((chunk: typeof dirty) => {
+    for (const row of chunk) update.run(row.fileName, row.id);
+  });
+  const CHUNK = 1000;
+  for (let i = 0; i < dirty.length; i += CHUNK) {
+    txn(dirty.slice(i, i + CHUNK));
+  }
 }
 
 /**

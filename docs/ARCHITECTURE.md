@@ -308,11 +308,13 @@ standard_files
 ├── year           (从文件名末尾抽出，可空)
 ├── source         ('gbw' | 'bz' | 'by')
 ├── abs_path       (含 SOURCE 后缀的绝对路径)
+├── file_name      (path.basename(abs_path)，下载兜底和本地库搜索走索引)
 ├── size / mtime   (扫描时的 stat 快照，增量比对用)
 └── UNIQUE (std_code_norm, year, source)
 ```
 
 唯一约束的形状决定了"多源同号"的存储方式：**永远带源后缀**（`GB_T 3324-2024 - BW.pdf`），不靠 rename 策略，让两源能并存在同一目录而不互相覆盖。
+`file_name` 是派生索引列，旧库启动迁移会从 `abs_path` 回填；所有 scan / addFileToLibrary / watcher / rename 写入点都必须同步维护，避免下载兜底退回全表后缀匹配。
 
 ### 路径解析（src/shared/library-paths.ts）
 
@@ -357,7 +359,7 @@ standard_files
 - `DELETE /api/preview/file/:id`：物理 `fs.unlink` + 删 `standard_files` 行。`ENOENT` 静默吞掉（DB 行已脏，仍然清行）。库根外的 `abs_path` → 拒绝物理删但清行 + 410 GONE，避免索引脏行长期残留。
 - `POST /api/preview/files/batch-delete`：body `{ ids: number[] }`，单循环复用 DELETE 路径，返回 `{ deleted, failed: [{id, message}] }` 让前端展示部分成功。
 - `POST /api/preview/file/:id/reveal`：用 `process.env.BZXZ_ELECTRON` 区分桌面端 / Web；桌面端 `process.emit('bzxz:reveal-in-folder', absPath)` 把 absPath 喂给 Electron 主进程的 listener，后者调 `shell.showItemInFolder`。Web 浏览器侧返 501，前端 fallback 到「复制路径」按钮。
-- `PATCH /api/preview/file/:id`：rename，body `{ fileName }`。校验 `/[\/\\:*?"<>|\x00-\x1F]/` 非法字符 + 200 字符长度上限；用户没带扩展名时自动接旧扩展；新路径走 `isInsideLibrary` 防越界；目标文件已存在 → 409 拒绝覆盖。**关键**：只改 `abs_path`，不动 `std_code_norm` / `year` / `source` —— 这三个是搜索/绿点的索引键，改了会破坏库匹配。
+- `PATCH /api/preview/file/:id`：rename，body `{ fileName }`。校验 `/[\/\\:*?"<>|\x00-\x1F]/` 非法字符 + 200 字符长度上限；用户没带扩展名时自动接旧扩展；新路径走 `isInsideLibrary` 防越界；目标文件已存在 → 409 拒绝覆盖。**关键**：只改 `abs_path` + 派生 `file_name`，不动 `std_code_norm` / `year` / `source` —— 这三个是搜索/绿点的索引键，改了会破坏库匹配。
 
 **Electron IPC 桥**（`electron/main.ts`）：
 
@@ -365,7 +367,7 @@ standard_files
 
 **前端表格**（`public/js/app-detail-utils.js` `renderFileLibrary`）：
 
-`fileLibrarySelectedIds: Set<number>` 跨筛选词保留选中状态，但 `renderFileLibrary` 每次执行时按 `visibleIds` 清理掉已不在过滤集合内的 id（防"看不见的勾选"溜到批量删除里）。每行 5 个动作按 `kind === 'library'` 区分：库内文件全功能，`exports/` xlsx 只有「下载 / 删除」（走原 `/api/downloads/:filename` 路径）。删除 / 批量删除 / rename 全部走 `showConfirm` 二次确认。
+`refreshFileLibrary` 调 `/api/downloads?q=&limit=&offset=`，搜索框 250ms 防抖走服务端筛选，默认只取 200 条并显示「已加载/总数」；库内结果超过当前页时渲染「加载更多」，继续按 library offset 取下一页。`fileLibrarySelectedIds: Set<number>` 跨当前页保留选中状态，但 `renderFileLibrary` 每次执行时按 `visibleIds` 清理掉已不在当前结果集合内的 id（防"看不见的勾选"溜到批量删除里）。每行 5 个动作按 `kind === 'library'` 区分：库内文件全功能，`exports/` xlsx 只有「下载 / 删除」（走原 `/api/downloads/:filename` 路径）。删除 / 批量删除 / rename 全部走 `showConfirm` 二次确认。
 
 ## 十二、CMA 一单一库比对（cma-diff）
 

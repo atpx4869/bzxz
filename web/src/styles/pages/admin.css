@@ -1,5 +1,5 @@
 /* Admin announcement manager —— 原 public/styles.css 行 1151–1161。
- * 与 pages/announcement.css 同样采用亮色配色（管理界面位于亮色公告 modal 内）。 */
+ * 仍保留亮色管理表单基线；公告 popup 本体的主题覆盖见 theme/glass.css Phase 6。 */
 
 .ann-admin-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
 .ann-admin-item {

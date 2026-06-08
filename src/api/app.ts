@@ -97,6 +97,16 @@ export function createApp() {
     return base;
   }
 
+  function parseBoundedInt(value: unknown, fallback: number, min: number, max: number): number {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(max, Math.max(min, Math.floor(n)));
+  }
+
+  function escapeLike(value: string): string {
+    return value.replace(/[\\%_]/g, (m) => '\\' + m);
+  }
+
   /**
    * 文件下载兜底（Phase 2 改造）：
    * 1. 先看 exports/（xlsx 报表、旧 PDF 残留）
@@ -118,12 +128,9 @@ export function createApp() {
       else res.download(exportsPath);
       return;
     }
-    // Fallback：从 library 索引按 basename 找。SQL 用 LIKE 锚定 basename 防止
-    // 不同库根之间误命中（标准化以 path.sep 为界）。
-    const candidates = db.prepare(
-      `SELECT id, abs_path FROM standard_files WHERE abs_path LIKE ? ESCAPE '\\'`
-    ).all('%' + filename.replace(/[\\%_]/g, m => '\\' + m)) as Array<{ id: number; abs_path: string }>;
-    const match = candidates.find(r => path.basename(r.abs_path) === filename);
+    const match = db.prepare(
+      `SELECT id, abs_path FROM standard_files WHERE file_name = ? ORDER BY indexed_at DESC LIMIT 1`
+    ).get(filename) as { id: number; abs_path: string } | undefined;
     if (match) {
       if (req.query.inline === '1') res.sendFile(match.abs_path);
       else res.download(match.abs_path);
@@ -137,8 +144,12 @@ export function createApp() {
    * PDF 标准走 fileId 作为 downloadUrl —— 命中预览端点既能内联看，也能 attachment=1 另存。
    * xlsx 报表 originatingExports，仍走 /api/downloads/:filename。
    */
-  app.get('/api/downloads', requireAuth, async (_req, res, next) => {
+  app.get('/api/downloads', requireAuth, async (req, res, next) => {
     try {
+      const q = String(req.query.q || '').trim();
+      const limit = parseBoundedInt(req.query.limit, 200, 1, 500);
+      const offset = parseBoundedInt(req.query.offset, 0, 0, 100_000_000);
+      const like = `%${escapeLike(q)}%`;
       const exportsDir = path.resolve(baseDir, 'data', 'exports');
       const exportItems: any[] = [];
       if (existsSync(exportsDir)) {
@@ -163,15 +174,34 @@ export function createApp() {
               kind: 'export' as const,
             };
           }));
-        for (const it of fromExports) if (it) exportItems.push(it);
+        for (const it of fromExports) {
+          if (!it) continue;
+          if (!q || `${it.fileName} ${it.standardNumber} ${it.source}`.toLowerCase().includes(q.toLowerCase())) {
+            exportItems.push(it);
+          }
+        }
       }
       // Library PDF 索引
+      const whereSql = q
+        ? `WHERE file_name LIKE ? ESCAPE '\\'
+            OR std_code_norm LIKE ? ESCAPE '\\'
+            OR source LIKE ? ESCAPE '\\'`
+        : '';
+      const whereArgs = q ? [like, like, like] : [];
+      const libraryTotal = (db.prepare(
+        `SELECT COUNT(*) AS total FROM standard_files ${whereSql}`
+      ).get(...whereArgs) as { total: number }).total;
       const libraryRows = db.prepare(
-        `SELECT id, std_code_norm, year, source, abs_path, size, mtime, indexed_at
-         FROM standard_files ORDER BY indexed_at DESC`
-      ).all() as Array<{ id: number; std_code_norm: string; year: string; source: string; abs_path: string; size: number; mtime: number; indexed_at: string }>;
+        `SELECT id, std_code_norm, year, source, abs_path, file_name, size, mtime, indexed_at
+         FROM standard_files ${whereSql}
+         ORDER BY indexed_at DESC
+         LIMIT ? OFFSET ?`
+      ).all(...whereArgs, limit, offset) as Array<{
+        id: number; std_code_norm: string; year: string; source: string;
+        abs_path: string; file_name: string; size: number; mtime: number; indexed_at: string;
+      }>;
       const libraryItems = libraryRows.map(r => {
-        const fileName = path.basename(r.abs_path);
+        const fileName = r.file_name || path.basename(r.abs_path);
         // 反解 fileName 拿真正的 stdCode 形态（带 /T、大小写正确）和 title。
         // std_code_norm 经过 extractBaseCode 剥前缀大写化、不适合直接展示给用户。
         // 兜底：parse 失败（用户手放进库的不规范命名）退回归一化拼装。
@@ -197,7 +227,14 @@ export function createApp() {
       });
       const items = [...libraryItems, ...exportItems].sort((a, b) =>
         String(b.mtime).localeCompare(String(a.mtime)));
-      respond(res, { items });
+      respond(res, {
+        items,
+        total: libraryTotal + exportItems.length,
+        libraryTotal,
+        exportTotal: exportItems.length,
+        limit,
+        offset,
+      });
     } catch (error) {
       next(error);
     }

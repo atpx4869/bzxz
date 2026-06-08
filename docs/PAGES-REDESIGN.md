@@ -12,7 +12,7 @@
 >   （Win7 Chrome ≤109 不支持）。`.set-*` 系统天生满足，所以**零 glass.css override、零 oklch fallback**。
 > - `public/styles.css`（legacy 入口）与 `web/src/styles/*`（Vite 入口）**双写镜像**，
 >   cascade 等价。每次改一处必须镜像另一处。
-> - 构建只在 GitHub Actions 跑（`web:typecheck → web:test → web:build → backend build → test`），
+> - 构建只在 GitHub Actions 跑（当前 PR Check 为 `npm run build → npm test → npm run oklch:check`），
 >   本机不验证；Claude 侧只做静态核查。
 > - `announcement.css` / `admin.css` 的**亮色调色板**（`#fff/#333/#eee/#2563eb`）是有意为之，不动。
 > - 分期落地、零构建风险优先：先建组件（纯新增 CSS，不破坏现状），再逐页替换。
@@ -549,7 +549,7 @@ Phase F 与移动选择器同改；本页 Phase B 无独立可做项（无内联
 
 - 全站三主题（dark / light=极地蓝 / paper=Claude Linen）逐页过一遍，重点核对
   原"裸 oklch + fallback"迁 token 后是否还有遗漏的硬编码色。
-- `oklch:check` / `web:typecheck` / `web:test` 全绿（CI 卡口）。
+- `npm run build` / `npm test` / `npm run oklch:check` 全绿（CI 卡口）。
 - 更新 `README.md`（功能清单/近期重点）、`docs/MIGRATION.md`、`SECTIONS.md`、`CHANGELOG.md`。
 - 旧 class（`.batch-card` / `.local-toolbar` / `.users-table` 等）确认已无引用后，
   按 CSS 迁移期两步契约决定是否删除（见 §六）。
@@ -600,7 +600,7 @@ Phase F 与移动选择器同改；本页 Phase B 无独立可做项（无内联
 
 本机不跑 build（`HYPERVISOR_VIRT_DISABLED`）。每期靠静态核查（import 路径 / class 引用 /
 文件存在性）列"需盯的失败点"，push 后看 GitHub Actions
-（`web:typecheck → web:test → web:build → backend build → test` + `oklch:check`）结果。
+（`npm run build → npm test → npm run oklch:check`，main 打包还会跑 Electron build）结果。
 
 ---
 

@@ -50,6 +50,7 @@
 .local-col-actions .btn:last-child { margin-right: 0; }
 .local-col-name { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .local-table .local-empty { padding: 36px; text-align: center; color: var(--text-3); }
+.local-table .local-empty.fail { color: var(--danger); }
 
 .btn.btn-xs { padding: 3px 8px; font-size: 11px; line-height: 1.4; border-radius: 6px; }
 .btn.btn-xs.danger {

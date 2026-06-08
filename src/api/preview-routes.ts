@@ -192,7 +192,7 @@ export function createPreviewRoutes(
       const { stdCode, year } = schema.parse(req.query);
       const norm = extractBaseCode(stdCode);
       if (!norm) {
-        respond(res, { files: [] });
+        respond(res, { files: [], items: [] });
         return;
       }
       const priority = getConfiguredSourcePriority(db);
@@ -231,7 +231,7 @@ export function createPreviewRoutes(
           if (yearDiff !== 0) return yearDiff;
           return ordered.indexOf(a.source) - ordered.indexOf(b.source);
         });
-      respond(res, { files });
+      respond(res, { files, items: files });
     } catch (error) {
       next(normalizeError(error));
     }
@@ -556,7 +556,7 @@ export function createPreviewRoutes(
       return { ok: false, code: 'CONFLICT', message: '目标文件名已存在' };
     } catch { /* not exists → ok */ }
     await fs.rename(file.absPath, newPath);
-    db.prepare('UPDATE standard_files SET abs_path = ? WHERE id = ?').run(newPath, file.id);
+    db.prepare('UPDATE standard_files SET abs_path = ?, file_name = ? WHERE id = ?').run(newPath, path.basename(newPath), file.id);
     return { ok: true, abs_path: newPath, changed: true };
   }
 

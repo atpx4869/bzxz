@@ -74,6 +74,9 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Check OKLCh fallbacks
+        run: npm run oklch:check
+
       - name: Package Electron (portable + nsis)
         run: npm run electron:build:all
 

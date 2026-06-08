@@ -18,7 +18,7 @@ describe('ByAdapter basics', () => {
       }
       expect(results[0]?.id.startsWith('by:')).toBe(true);
     } catch (e: any) {
-      if (e.message?.includes('not accessible') || e.message?.includes('login failed')) {
+      if (e.message?.includes('not accessible') || e.message?.includes('login failed') || e.message?.includes('凭据未配置')) {
         return; // intranet unavailable, skip
       }
       throw e;

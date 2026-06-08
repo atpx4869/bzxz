@@ -1,8 +1,8 @@
 /* Announcement modal —— 原 public/styles.css 行 1114–1150。
  *
- * 注意：这一段是**亮色调色板**，独立于全站暗色玻璃主题。
- * 使用 #fff / #333 / #eee / #2563eb 等具体色值而非 var(--*)，
- * 是产品自带的"公告 popup"风格，与 ann-admin.css 配套。 */
+ * 这里保留基础亮色调色板，作为公告 popup 的默认/迁移期基线。
+ * 现代主题的实际弹窗底色由 theme/glass.css 末尾 Phase 6 覆盖；
+ * legacy 主题由 theme/legacy.css 覆盖，避免深色/纸张主题下继续露出灰白块。 */
 
 .ann-modal-mask {
   position: fixed; inset: 0; background: rgba(0,0,0,0.45);

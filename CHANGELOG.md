@@ -3,6 +3,33 @@
 ## [Unreleased]
 
 ### Added / Changed
+- **fix(theme): 弹窗灰底残留继续收口** — 公告弹窗不再固定使用 `#fff/#eee/#f4f4f5`
+  亮色 popup，dark/light/paper/legacy 主题下卡片、页眉/页脚边线、正文、代码块、链接和关闭按钮都走对应
+  theme token；本地文件统一命名/批量补全里的 normalize 预览区补齐 chip/list 边框和 active 态主题色。
+  `public/styles.css` 与 `web/src/styles/theme/*` 双轨同步，`pages/announcement.css` 保留基础亮色基线。
+- **polish(ui): 本地文件库加载态 + 搜索结果防跳动 + 源检测分层提示** —
+  本地文件库刷新/筛选/加载更多加入 loading 状态、重复点击防护和请求序号保护，旧请求晚回来不会覆盖新关键词结果；
+  空态区分「文件库为空」与「暂无匹配」。搜索结果默认分组从「资质×状态」8 组收敛为纯状态 4 组，
+  默认智能排序不再把异步资质徽章作为最高优先级，徽章回来只更新视觉和筛选计数，避免用户阅读时卡片跳动。
+  数据源状态胶囊与设置页检测结果区分「未配置」「超时」「异常」，BY 缺 `.env.local` 时更直观。
+- **perf(local-library): 本地文件库改 indexed basename + 服务端分页筛选** —
+  `standard_files` 新增 `file_name` 列与索引，启动迁移自动从 `abs_path` 回填；扫描、下载入库、
+  watcher、重命名都会同步维护。`GET /api/downloads/:filename` 从 `abs_path LIKE '%name'`
+  改为 `file_name = ?`，避免库文件多时全表后缀扫描；`GET /api/downloads` 新增
+  `q/limit/offset`（默认 200）并返回 `total/libraryTotal/exportTotal`。本地文件库前端搜索改为
+  250ms 防抖请求服务端，计数显示「已加载/总数」，大库可继续「加载更多」。
+- **perf(qual/cma-diff/search): 收敛高频查询与渲染** — 「按标准查」资质搜索改为两阶段：
+  SQL 先按标准号分组计数并限制分组数，再只为入围组取最多 500 行明细，避免关键词命中大表时先全量拉平。
+  CMA 一单一库 `labsCounts()` / `exportDiff()` 复用同一个黑名单与手动映射 context，减少多机构统计/导出时的重复 SQL。
+  搜索结果页把源返回、资质徽章、GBW 文本状态轮询触发的 `renderResults()` 合并到下一帧，降低渐进加载抖动。
+- **fix(sources/ci/docs): 源检测取消链路、BY 凭据与 CI 卡口补齐** —
+  `SearchStandardsInput` 增加 `signal/timeoutMs`，BZ/GBW/BY 搜索把 AbortController 传到 `pooledFetch`；
+  `/api/standards/check-sources` 的 5 秒超时现在会真实取消请求并在 `finally` 清 timer。BY 源凭据不再写死，
+  必须通过 `.env.local` 的 `BY_USERNAME/BY_PASSWORD/BY_DEPT_ID` 注入，缺失时报明确错误。新增
+  `.github/workflows/pr-check.yml`，打包 workflow 也加入 `npm run oklch:check`；补 `docs/MIGRATION.md`
+  并校正 web 迁移文档中不存在的 `web:*` 脚本。
+- **fix(preview): `/api/preview/files` 兼容 `items` 响应字段** — 本地预览源选择器读取
+  `data.items || data.files`；后端返回 `{ files, items: files }`，没有标准号归一化结果时也返回空数组别名。
 - **feat(deeplink): `bzxz://` 自定义协议 — Listary 等启动器快捷唤起标准搜索 / 资质查询** —
   注册 `bzxz://` 协议，外部工具构造 `bzxz://search?q={query}`（标准搜索）/
   `bzxz://qual?q={query}`（资质查询）即可唤起桌面端并直达对应结果页。资质查询合并为单一关键词
