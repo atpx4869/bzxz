@@ -244,7 +244,7 @@ cp .env.example .env.local
 | POST | `/api/standards/:id/download-session` | 创建下载会话 |
 | POST | `/api/download-sessions/:id/verify` | 提交验证码 |
 | GET | `/api/download-sessions/:id` | 查询下载会话 |
-| POST | `/api/standards/resolve` | 批量解析标准号；返回 `sourceIds/sources` 供批量下载真实切源 |
+| POST | `/api/standards/resolve` | 批量解析标准号（支持 `3324-2024` / `3325` 裸号）；返回 `sourceIds/sources` 供批量下载真实切源 |
 | POST | `/api/standards/complete/preview` | Excel/CSV 补全前预览：校验输入/输出列、表头、重复数和前 8 条 |
 | POST | `/api/standards/complete` | Excel/CSV 批量导入+解析；摘要返回唯一数、重复数、跳过表头和列信息 |
 | GET | `/api/tasks/:taskId` | 查询导出任务状态 |
@@ -562,6 +562,7 @@ npx tsc -p tsconfig.electron.json --noEmit
 完整变更记录见 [CHANGELOG.md](./CHANGELOG.md)。近期重点：
 
 - **feat(complete/batch): 标准补全预览 + 批量下载真实多源回退** — 标准补全选择文件后先走 `POST /api/standards/complete/preview` 解析首个 sheet，校验输入/输出列（A-ZZZ 或 1-16384）、展示表头跳过、唯一/重复统计和前 8 条预览；正式补全摘要同步返回 `unique/duplicates/skippedHeader/inputColumn/outputColumn/sheetName`。批量解析 `POST /api/standards/resolve` 现在可收集各来源 `sourceIds`，批量下载卡片显示可用来源链并在下载中/成功/失败间回写状态，失败项可直接重试。
+- **fix(batch): 批量解析支持裸数字标准号** — `StandardResolver` 现在接受 `3324-2024`、`3325`、`18584`、`17657` 这类不带 `GB/T` 前缀的输入；带年份时按年份精确命中，不带年份时优先取现行最新版本。批量下载与标准补全共用该 resolver，二者都会受益。
 - **perf(cma-diff): CMA 一单一库同步提速** — 产品质量检验等大领域改为 `pageSize=2000` 分页后限流并发拉取（同领域最多 4 页、全进程最多 4 个远端请求），SQLite 入库仍用 `dbWriteChain` 串行分块事务防假死；「更新勾选」一次启动所有勾选领域，订阅勾选短防抖批量保存。
 - **fix(theme): 弹窗灰底残留收口** — 公告弹窗、公告 Markdown 代码块、normalize 预览区 chip/list 继续补齐主题覆盖，dark/light/paper/legacy 下不再露固定灰白底；`public/styles.css` 与 `web/src/styles/theme/*` 已双轨同步。
 - **perf/ci: 本地文件库索引与关键路径优化** — `standard_files` 新增 `file_name` 索引列并自动回填，`/api/downloads/:filename` 从 `abs_path LIKE` 改为 `file_name = ?`，本地文件库列表支持 `q/limit/offset` 服务端筛选（前端防抖请求、计数显示已加载/总数，并支持加载更多）。同时优化「按标准查」资质聚合、CMA 一单一库批量统计/导出上下文复用、源检测 AbortController 传递、搜索结果渲染批处理，并补上 PR Check + OKLCh CI 守门。

@@ -247,10 +247,10 @@
           <span class="set-badge is-muted" id="batchSourceHint">级联顺序：BW → BY → BZ（超时 15s）</span>
         </div>
         <div class="set-card-body">
-          <textarea class="batch-textarea" id="batchInput" placeholder="粘贴标准号，每行一个&#10;例如：&#10;GB/T 1.1&#10;GB/T 12345-2020&#10;YY/T 0287&#10;DB44/T 1234"></textarea>
+          <textarea class="batch-textarea" id="batchInput" placeholder="粘贴标准号，每行一个；可带前缀，也可直接填数字号&#10;例如：&#10;3324-2024&#10;3325&#10;GB/T 18584&#10;YY/T 0287&#10;DB44/T 1234"></textarea>
           <div class="batch-actions">
             <button class="btn btn-primary btn-sm" id="batchResolveBtn" onclick="doBatchResolve()">解析标准号</button>
-            <span class="batch-action-hint">解析会按当前来源优先级逐源匹配。</span>
+            <span class="batch-action-hint">解析支持 3324-2024 这类裸号，会按当前来源优先级逐源匹配。</span>
           </div>
         </div>
       </section>

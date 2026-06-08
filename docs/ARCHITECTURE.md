@@ -137,6 +137,8 @@ type ApiResult<T> =
 
 批量下载的跨源回退依赖 `/api/standards/resolve` 带回的 `sourceIds/sources`。解析阶段启用 `StandardResolver.resolve(..., { collectSourceIds: true })` 时会继续查完用户启用的来源，保留同一标准在各源的 source-specific id；`/api/standards/multi-download` 只按这些真实 id 逐源尝试，不能用首个命中 id 伪装其它来源。标准补全默认不启用 `collectSourceIds`，避免为了报表补全额外打所有来源。
 
+`StandardResolver` 接受两类输入：① 带前缀标准号（`GB/T 3324-2024` / `YY/T 0287`）；② 裸数字号（`3324-2024` / `3325` / `18584`）。裸号不自动补 `GB/T`，而是按数字原文查询各源，再用同基础号过滤；带年份必须精确年版，不带年份优先现行最新版本。这样批量下载/标准补全可直接粘用户手头的简写清单，同时避免把非国标强行误补前缀。
+
 标准补全分两步：`POST /api/standards/complete/preview` 只解析 Excel/CSV 首个 sheet，返回列校验、表头跳过、唯一/重复统计和前 8 条预览；`POST /api/standards/complete` 复用同一套解析 helper 后再调用 resolver 并写回 workbook。新增列规则或表头识别规则时，两条端点必须同步走共享 helper，避免预览通过但正式补全失败。
 
 ### 六-A. labr：第 4 源，**独立 service，不挂 SourceRegistry**

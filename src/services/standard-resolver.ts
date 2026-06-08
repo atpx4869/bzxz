@@ -35,25 +35,36 @@ export interface ResolveOptions {
 }
 
 interface ParsedNumber {
-  prefix: string;
+  prefix: string | null;
   number: string;
   yearCode: string | null;
   raw: string;
 }
 
-const STD_REGEX = /^\s*([A-Z]{2,4}(?:\d{2})?(?:\/[TZQ])?)\s*(\d+(?:\.\d+)*)\s*(?:[–\-—]?\s*(?:(\d{4}))?)\s*$/i;
+const PREFIXED_STD_REGEX = /^\s*([A-Z]{2,4}(?:\d{2})?(?:\/[TZQ])?)\s*(\d+(?:\.\d+)*)\s*(?:[–\-—]?\s*(?:(\d{4}))?)\s*$/i;
+const BARE_STD_REGEX = /^\s*(\d+(?:\.\d+)*)\s*(?:[–\-—]\s*(\d{4}))?\s*$/;
 
 function parseStandardNumber(line: string): ParsedNumber | null {
   const trimmed = line.trim();
   if (!trimmed) return null;
 
-  const m = trimmed.match(STD_REGEX);
-  if (!m) return null;
+  const prefixed = trimmed.match(PREFIXED_STD_REGEX);
+  if (prefixed) {
+    return {
+      prefix: prefixed[1].toUpperCase(),
+      number: prefixed[2],
+      yearCode: prefixed[3] || null,
+      raw: trimmed,
+    };
+  }
+
+  const bare = trimmed.match(BARE_STD_REGEX);
+  if (!bare) return null;
 
   return {
-    prefix: m[1].toUpperCase(),
-    number: m[2],
-    yearCode: m[3] || null,
+    prefix: null,
+    number: bare[1],
+    yearCode: bare[2] || null,
     raw: trimmed,
   };
 }
@@ -110,7 +121,7 @@ export class StandardResolver {
 
   private resolveCacheKey(parsed: ParsedNumber, sources: SourceName[]): string {
     return [
-      parsed.prefix,
+      parsed.prefix ?? '',
       parsed.number,
       parsed.yearCode ?? '',
       sources.join(','),
@@ -124,8 +135,8 @@ export class StandardResolver {
     options: ResolveOptions,
   ): Promise<ResolvedItem | null> {
     const query = parsed.yearCode
-      ? `${parsed.prefix} ${parsed.number}-${parsed.yearCode}`
-      : `${parsed.prefix} ${parsed.number}`;
+      ? `${parsed.prefix ? `${parsed.prefix} ` : ''}${parsed.number}-${parsed.yearCode}`
+      : `${parsed.prefix ? `${parsed.prefix} ` : ''}${parsed.number}`;
 
     let winner: ResolvedItem | null = null;
     const sourceIds: Partial<Record<SourceName, string>> = {};
@@ -174,7 +185,7 @@ export class StandardResolver {
     const numPattern = new RegExp(`\\b${escNum}\\b`);
     const sameBase = results.filter((r) => {
       const sn = r.standardNumber.toUpperCase();
-      return sn.includes(prefix) && numPattern.test(sn);
+      return (!prefix || sn.includes(prefix)) && numPattern.test(sn);
     });
 
     const pool = sameBase.length > 0 ? sameBase : results;
