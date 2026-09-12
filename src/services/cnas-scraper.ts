@@ -239,44 +239,40 @@ export class CnasScraper {
     }
   }
 
-  /** Fetch a single page of capabilities, returns null if anti-bot triggered */
+  /** Fetch a single page of capabilities, returns null if anti-bot triggered.
+   *  Uses page.request.post() instead of page.evaluate(fetch) to avoid
+   *  "Execution context was destroyed" when CNAS navigates the page mid-request. */
   private async fetchPage(
     page: Page,
     baseinfoId: string,
     start: number,
     pageSize: number,
   ): Promise<CnasApiResponse | null> {
-    const result = await page.evaluate(async (params: { baseinfoId: string; start: number; pageSize: number }) => {
-      try {
-        const body = new URLSearchParams({
-          baseinfoId: params.baseinfoId,
-          type: 'L1',
-          enstart: '0',
-          startIndex: String(params.start),
-          sizePerPage: String(params.pageSize),
-        });
-        const resp = await fetch('/LAS/publish/queryPublishLCheckObj.action?', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: body.toString(),
-        });
-        const text = await resp.text();
-        if (text.startsWith('{') || text.startsWith('[')) {
-          return { ok: true, text };
-        }
-        return { ok: false, error: `Non-JSON response (${resp.status}): ${text.substring(0, 100)}` };
-      } catch (e) {
-        return { ok: false, error: String(e) };
-      }
-    }, { baseinfoId, start, pageSize });
-
-    if (!result.ok) {
-      console.log(`fetchPage failed: ${result.error}`);
-      return null;
-    }
+    if (page.isClosed()) return null;
     try {
-      return JSON.parse(result.text!) as CnasApiResponse;
-    } catch {
+      const body = new URLSearchParams({
+        baseinfoId,
+        type: 'L1',
+        enstart: '0',
+        startIndex: String(start),
+        sizePerPage: String(pageSize),
+      });
+      const response = await page.request.post(`${CNAS_BASE}/queryPublishLCheckObj.action?`, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Referer: page.url(),
+        },
+        data: body.toString(),
+        timeout: 30000,
+      });
+      const text = await response.text();
+      if (!response.ok() || (!text.startsWith('{') && !text.startsWith('['))) {
+        console.log(`fetchPage failed: Non-JSON response (${response.status()}): ${text.substring(0, 100)}`);
+        return null;
+      }
+      return JSON.parse(text) as CnasApiResponse;
+    } catch (err) {
+      console.log(`fetchPage failed: ${err instanceof Error ? err.message : String(err)}`);
       return null;
     }
   }
@@ -370,38 +366,18 @@ export class CnasScraper {
     }
   }
 
-  /** Fetch lab info (lightweight check) */
+  /** Fetch lab info (lightweight check) — delegates to fetchPage to avoid
+   *  "Execution context was destroyed" from page.evaluate(fetch). */
   async fetchLabInfo(baseInfoId: string, urlParams: Record<string, string> = {}): Promise<{ certDate: string; totalSize: number }> {
     const { page, release } = await this.openPage();
     try {
       const labInfo: CnasLabInfo = { baseInfoId, labNo: '', labName: '', certUpdateTs: '', validate: '', urlParams };
       await this.navigateToLab(page, labInfo);
-      const result = await page.evaluate(async (baseinfoId: string) => {
-        try {
-          const body = new URLSearchParams({
-            baseinfoId, type: 'L1', enstart: '0', startIndex: '0', sizePerPage: '1',
-          });
-          const resp = await fetch('/LAS/publish/queryPublishLCheckObj.action?', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: body.toString(),
-          });
-          return { ok: resp.status === 200, text: await resp.text() };
-        } catch (e) {
-          return { ok: false, error: String(e) };
-        }
-      }, baseInfoId);
-
-      if (!result.ok) throw new Error(`CNAS check failed: ${result.error}`);
-      let json: CnasApiResponse;
-      try {
-        json = JSON.parse(result.text!) as CnasApiResponse;
-      } catch {
-        throw new Error('CNAS check returned HTML instead of JSON (anti-bot triggered)');
-      }
+      const result = await this.fetchPage(page, baseInfoId, 0, 1);
+      if (!result) throw new Error('CNAS check could not read capability data');
       return {
-        certDate: json.data?.[0]?.startDate ?? '',
-        totalSize: json.totalSize,
+        certDate: result.data?.[0]?.startDate ?? '',
+        totalSize: result.totalSize,
       };
     } finally {
       await release();
